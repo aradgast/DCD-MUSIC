@@ -101,10 +101,9 @@ class Samples(SystemModel):
 
         """
 
-        def choose_distances(distance_min_gap: float=0.5,
-                             distance_max_gap: int=100,
-                             min_val: float=0.5,
-                             max_val: int=50) -> np.ndarray:
+        def choose_distances(
+                distance_min_gap: float = 0.5, distance_max_gap: int = 100, min_val: float = 0.5, max_val: int = 50
+        ) -> np.ndarray:
 
 
             distances = []

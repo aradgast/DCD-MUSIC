@@ -45,8 +45,9 @@ import warnings
 from src.utils import gram_diagonal_overload, device
 from src.utils import sum_of_diags_torch, find_roots_torch
 
-
 warnings.simplefilter("ignore")
+
+
 # Constants
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -244,7 +245,7 @@ class DeepRootMUSIC(nn.Module):
         Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
         Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N :, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
         Rz = gram_diagonal_overload(Kx_tag, eps=1)  # Shape: [Batch size, N, N]
@@ -381,7 +382,7 @@ class SubspaceNet(nn.Module):
         Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
         Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N :, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
         Rz = gram_diagonal_overload(
@@ -459,7 +460,7 @@ class SubspaceNetEsprit(SubspaceNet):
         Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
         Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N :, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
         Rz = gram_diagonal_overload(
@@ -468,6 +469,157 @@ class SubspaceNetEsprit(SubspaceNet):
         # Feed surrogate covariance to Esprit algorithm
         doa_prediction = esprit(Rz, self.M, self.batch_size)
         return doa_prediction, Rz
+
+
+class SubspaceNetMUSIC2D(SubspaceNet):
+    """
+
+    """
+
+    def __init__(self, tau: int, M: int):
+        super().__init__(tau, M)
+        self.grid = self.compute_steering_vector(self.thera_range, self.distance_range)
+
+    def forward(self, Rx_tau: torch.Tensor):
+        """
+        Performs the forward pass of the SubspaceNet.
+
+        Args:
+        -----
+            Rx_tau (torch.Tensor): Input tensor of shape [Batch size, tau, 2N, N].
+
+        Returns:
+        --------
+            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
+            Rz (torch.Tensor): Surrogate covariance matrix.
+
+        """
+        # Rx_tau shape: [Batch size, tau, 2N, N]
+        self.N = Rx_tau.shape[-1]
+        self.batch_size = Rx_tau.shape[0]
+        ## Architecture flow ##
+        # CNN block #1
+        x = self.conv1(Rx_tau)
+        x = self.anti_rectifier(x)
+        # CNN block #2
+        x = self.conv2(x)
+        x = self.anti_rectifier(x)
+        # CNN block #3
+        x = self.conv3(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #1
+        x = self.deconv2(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #2
+        x = self.deconv3(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #3
+        x = self.DropOut(x)
+        Rx = self.deconv4(x)
+        # Reshape Output shape: [Batch size, 2N, N]
+        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
+        # Real and Imaginary Reconstruction
+        Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
+        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
+        # Apply Gram operation diagonal loading
+        Rz = gram_diagonal_overload(
+            Kx=Kx_tag, eps=1, batch_size=self.batch_size
+        )  # Shape: [Batch size, N, N]
+        # Feed surrogate covariance to Esprit algorithm
+        doa_prediction, distance_prediction = self.music_2d(Rz, self.M, batch_size=self.batch_size)
+        return doa_prediction, distance_prediction, Rz
+
+    def music_2d(self, Rz: torch.Tensor, number_of_sources: int, batch_size: int):
+        """
+
+        Args:
+            Rz:
+            number_of_sources:
+            batch_size:
+
+        Returns:
+
+        """
+
+        # Extract eigenvalues and eigenvectors using EVD
+        eigenvalues, eigenvectors = torch.linalg.eig(Rz)
+        # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
+        Un = eigenvectors[:, :, torch.argsort(torch.abs(eigenvalues)).flip(0)][:, :, number_of_sources:]
+
+        var_1 = torch.einsum("ijk, nkl -> nijl", torch.transpose(self.grid.conj(), 0, 2), Un)
+        var_2 = torch.permute(var_1.conj(), (0, 3, 2, 1))
+        inverse_spectrum = torch.real(torch.einsum("nijk, nkji -> nji", var_1, var_2))
+        music_spectrum = 1 / inverse_spectrum
+        doa_prediction, distance_prediction = self.maskpeaks(music_spectrum, number_of_sources, batch_size)
+
+        return doa_prediction, distance_prediction
+
+    def maskpeaks(self, spectrum: torch.Tensor, number_of_sources: int, batch_size: int) -> tuple:
+        """
+
+        Args:
+            batch_size:
+            spectrum:
+            number_of_sources:
+
+        Returns:
+
+        """
+        top_indxs = torch.topk(spectrum.view(batch_size, -1), number_of_sources, dim=1)
+        max_row = torch.div(top_indxs, spectrum.shape[2], rounding_mode="floor")
+        max_col = (top_indxs % spectrum.shape[2]).astype(int)
+
+        soft_row = []
+        soft_col = []
+        cell_size = 20
+        for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
+            max_row_cell_idx = max_r - cell_size + \
+                               torch.arange(2 * cell_size + 1, dtype=torch.int32, device=device).reshape(-1, 1)
+            max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0]
+            max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[0]].reshape(-1, 1)
+
+            max_col_cell_idx = max_c \
+                               - cell_size \
+                               + torch.arange(2 * cell_size + 1, dtype=torch.int32, device=device).reshape(1, -1)
+            max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
+            max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[1]].reshape(1, -1)
+
+            metrix_thr = spectrum[max_row_cell_idx, max_col_cell_idx]
+            # metrix_thr /= torch.max(metrix_thr)
+            soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
+
+            soft_row.append(self._angels[max_row_cell_idx].T @ torch.sum(soft_max, dim=2))
+            soft_col.append(self._distances[max_col_cell_idx] @ torch.sum(soft_max, dim=1))
+
+        return soft_row, soft_col
+
+    def compute_steering_vector(self, theta: torch.Tensor, distances: torch.Tensor) -> torch.Tensor:
+        """
+
+        Args:
+            theta:
+            distances:
+
+        Returns:
+
+        """
+        theta = torch.atleast_1d(theta).unsqueeze(1)
+        distances = torch.atleast_1d(distances).unsqueeze(1)
+
+        array = torch.tile(self.array.unsqueeze(1), (1, self.params.N))
+        array_square = array.pow(2)
+
+        first_order = array @ torch.tile(torch.sin(theta), (1, self.params.N)).t()
+        first_order = first_order.unsqueeze(2).expand(-1, -1, len(distances))
+
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta), 2), distances.t())
+        second_order = second_order.unsqueeze(2).expand(-1, -1, self.params.N)
+        second_order = torch.einsum("ij, jkl -> ilk", array_square, second_order.permute(2, 1, 0))
+
+        time_delay = first_order + second_order
+
+        return torch.exp(2 * -1j * np.pi * time_delay)
 
 
 class DeepAugmentedMUSIC(nn.Module):
@@ -571,7 +723,7 @@ class DeepAugmentedMUSIC(nn.Module):
             # Extract eigenvalues and eigenvectors using EVD
             _, eigenvectors = torch.linalg.eig(R)
             # Noise subspace as the eigenvectors which associated with the M first eigenvalues
-            Un = eigenvectors[:, self.M :]
+            Un = eigenvectors[:, self.M:]
             # Calculate MUSIC spectrum
             spectrum.append(self.spectrum_calculation(Un)[0])
         return torch.stack(spectrum, dim=0)
@@ -609,7 +761,7 @@ class DeepAugmentedMUSIC(nn.Module):
         # Reshape Output shape: [Batch size, 2N, N]
         Rx_view = Rx.view(self.BATCH_SIZE, 2 * self.N, self.N)
         Rx_real = Rx_view[:, : self.N, :]  # Shape [Batch size, N, N])
-        Rx_imag = Rx_view[:, self.N :, :]  # Shape [Batch size, N, N])
+        Rx_imag = Rx_view[:, self.N:, :]  # Shape [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape [Batch size, N, N])
         # Build MUSIC spectrum
         spectrum = self.pre_MUSIC(Kx_tag)  # Shape [Batch size, 361(grid_size)])
@@ -780,8 +932,8 @@ def esprit(Rz: torch.Tensor, M: int, batch_size: int):
         Us = eigenvectors[:, torch.argsort(torch.abs(eigenvalues)).flip(0)][:, :M]
         # Separate the signal subspace into 2 overlapping subspaces
         Us_upper, Us_lower = (
-            Us[0 : R.shape[0] - 1],
-            Us[1 : R.shape[0]],
+            Us[0: R.shape[0] - 1],
+            Us[1: R.shape[0]],
         )
         # Generate Phi matrix
         phi = torch.linalg.pinv(Us_upper) @ Us_lower
