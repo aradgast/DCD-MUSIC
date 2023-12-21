@@ -131,7 +131,7 @@ class SystemModel(object):
         self.dist = {
             "NarrowBand": 1 / 2,
             "Broadband": 1
-            / (2 * (self.max_freq["Broadband"] - self.min_freq["Broadband"])),
+                         / (2 * (self.max_freq["Broadband"] - self.min_freq["Broadband"])),
         }
 
     def create_array(self):
@@ -139,7 +139,32 @@ class SystemModel(object):
         self.array = np.linspace(0, self.params.N, self.params.N, endpoint=False)
 
     def steering_vec(
-        self, theta: np.ndarray, f: float = 1, array_form="ULA", nominal=False
+            self, theta: np.ndarray, distance: np.darray = None, f: float = 1, array_form="ULA", nominal=False
+    ) -> np.ndarray:
+        """
+        Computes the steering vector based on the specified parameters.
+        Args:
+            theta:
+            distance:
+            f:
+            array_form:
+            nominal:
+
+        Returns:
+
+        """
+        if array_form.startswith("ULA"):
+            if distance is None:
+                return self.steering_vec_far_field(theta, f=f, array_form=array_form, nominal=nominal)
+            else:
+                return self.steering_vec_near_field(theta, distance=distance, f=f, array_form=array_form, nominal=nominal)
+        else:
+            raise Exception(
+                f"SystemModel.steering_vec: array form {array_form} is not defined"
+            )
+
+    def steering_vec_far_field(
+            self, theta: np.ndarray, f: float = 1, array_form="ULA", nominal=False
     ):
         """Computes the steering vector based on the specified parameters.
 
@@ -156,26 +181,25 @@ class SystemModel(object):
 
         """
         f_sv = {"NarrowBand": 1, "Broadband": f}
-        if array_form.startswith("ULA"):
-            # define uniform deviation in spacing (for each sensor)
-            if not nominal:
-                # Calculate uniform bias for sensors locations
-                uniform_bias = np.random.uniform(
-                    low=-1 * self.params.bias, high=self.params.bias, size=1
-                )
-                # Calculate non-uniform bias for each pair of sensors
-                mis_distance = np.random.uniform(
-                    low=-1 * self.params.eta, high=self.params.eta, size=self.params.N
-                )
-                # Calculate additional steering vector noise
-                mis_geometry_noise = np.sqrt(self.params.sv_noise_var) * (
-                    np.random.randn(self.params.N)
-                )
-            # If calculation is applied through method (array mismatches are not known).
-            else:
-                mis_distance, mis_geometry_noise = 0, 0
+        # define uniform deviation in spacing (for each sensor)
+        if not nominal:
+            # Calculate uniform bias for sensors locations
+            uniform_bias = np.random.uniform(
+                low=-1 * self.params.bias, high=self.params.bias, size=1
+            )
+            # Calculate non-uniform bias for each pair of sensors
+            mis_distance = np.random.uniform(
+                low=-1 * self.params.eta, high=self.params.eta, size=self.params.N
+            )
+            # Calculate additional steering vector noise
+            mis_geometry_noise = np.sqrt(self.params.sv_noise_var) * (
+                np.random.randn(self.params.N)
+            )
+        # If calculation is applied through method (array mismatches are not known).
+        else:
+            mis_distance, mis_geometry_noise = 0, 0
 
-            return (
+        return (
                 np.exp(
                     -2
                     * 1j
@@ -186,11 +210,52 @@ class SystemModel(object):
                     * np.sin(theta)
                 )
                 + mis_geometry_noise
-            )
-        else:
-            raise Exception(
-                f"SystemModel.steering_vec: array form {array_form} is not defined"
-            )
+        )
+
+    def steering_vec_near_field(
+            self, theta: np.ndarray, distance: np.darray, f: float = 1, array_form="ULA", nominal=False
+    ) -> np.ndarray:
+        """
+
+        Args:
+            theta:
+            distance:
+            f:
+            array_form:
+            nominal:
+
+        Returns:
+
+        """
+        f_sv = {"NarrowBand": 1, "Broadband": f}
+        # define uniform deviation in spacing (for each sensor)
+        if not nominal:
+            raise Exception("Currently support only nominal sensor array")
+
+        theta = np.atleast_1d(theta)[:, np.newaxis]
+        distance = np.atleast_1d(distance)[:, np.newaxis]
+        array = np.tile(self.array[:, np.newaxis], (1, self.params.N))
+        array_square = np.power(array, 2)
+
+        first_order = array @ np.tile(np.sin(theta), (1, self.params.N)).T
+        first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
+
+        second_order = -0.5 * np.divide(np.power(np.cos(theta), 2), distance.T)
+        second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
+        second_order = np.einsum("ij, jkl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
+
+        time_delay = first_order + second_order
+
+        return np.exp(2
+                      * -1j
+                      * np.pi
+                      * time_delay
+                      # need to divide here by the wavelength, seems that for the narrowband scenrio, wavelength = 1 here.
+        )
+
+
+
+
 
     def __str__(self):
         """Returns a string representation of the SystemModel object.

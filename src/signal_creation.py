@@ -91,6 +91,39 @@ class Samples(SystemModel):
             # Generate
             self.doa = np.array(doa) * D2R
 
+    def set_range(self, distance: list | np.ndarray = None) -> np.ndarray:
+        """
+
+        Args:
+            distance:
+
+        Returns:
+
+        """
+
+        def choose_distances(distance_min_gap: float=0.5,
+                             distance_max_gap: int=100,
+                             min_val: float=0.5,
+                             max_val: int=50) -> np.ndarray:
+
+
+            distances = []
+            while len(distances) < self.params.M:
+                distance = np.random.randint(min_val, max_val)
+                if len(distances) == 0:
+                    distances.append(distance)
+                else:
+                    if np.min(np.abs(np.array(distances) - distance)) >= distance_min_gap and \
+                            np.max(np.abs(np.array(distances) - distance)) <= distance_max_gap:
+                        distances.append(distance)
+
+            return np.array(distances)
+
+        if distance is None:
+            self.distances = choose_distances()
+        else:
+            self.distances = distance
+
     def samples_creation(
         self,
         noise_mean: float = 0,
@@ -122,8 +155,13 @@ class Samples(SystemModel):
         noise = self.noise_creation(noise_mean, noise_variance)
         # Generate Narrowband samples
         if self.params.signal_type.startswith("NarrowBand"):
-            A = np.array([self.steering_vec(theta) for theta in self.doa]).T
-            samples = (A @ signal) + noise
+            if self.distances is None:
+                A = np.array([self.steering_vec(theta) for theta in self.doa]).T
+                samples = (A @ signal) + noise
+            else:
+                A = self.steering_vec(theta=self.doa, distance=self.distances)
+                A = A[:, np.arange(A.shape[1]), np.arange(A.shape[1])]
+                samples = (A @ signal.T) + noise.T
             return samples, signal, A, noise
         # Generate Broadband samples
         elif self.params.signal_type.startswith("Broadband"):
