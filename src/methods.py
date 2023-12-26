@@ -405,12 +405,10 @@ class MUSIC(SubspaceMethod):
 
 class MUSIC_2D(MUSIC):
     """
-
     """
     def __init__(self, system_model: SystemModel):
         super(MUSIC, self).__init__(system_model)
         self._distances = np.arange(1, 30, 0.01)
-        # TODO: Check if this condition is hold after the change
         # Assign the frequency for steering vector calculation (multiplied in self.dist to get dist = 1/2)
         f = self.system_model.max_freq[self.system_model.params.signal_type]
         # Generate the GRID for the MUSIC spectrum
@@ -495,7 +493,7 @@ class MUSIC_2D(MUSIC):
         covariance_mat = self.calculate_covariance(X=X, mode=mode, model=model)
         # Get noise subspace
         Un, _ = self.subspace_separation(covariance_mat=covariance_mat, M=M)
-        spectrum = self.spectrum_calculation(noise_eig_vecs=Un)
+        spectrum, _ = self.spectrum_calculation(noise_eig_vecs=Un)
         # Find spectrum peaks
         doa_predictions, distance_predictions = self.get_predictions(spectrum, number_of_sources=M, is_soft=True)
         return doa_predictions, distance_predictions, spectrum, M

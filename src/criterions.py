@@ -32,7 +32,9 @@ import numpy as np
 import torch.nn as nn
 import torch
 from itertools import permutations
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu");
+
 
 def permute_prediction(prediction: torch.Tensor):
     """
@@ -56,10 +58,11 @@ def permute_prediction(prediction: torch.Tensor):
         
     """
     torch_perm_list = []
-    for p in list(permutations(range(prediction.shape[0]),prediction.shape[0])):
-        torch_perm_list.append(prediction.index_select( 0, torch.tensor(list(p), dtype = torch.int64).to(device)))
-    predictions = torch.stack(torch_perm_list, dim = 0)
+    for p in list(permutations(range(prediction.shape[0]), prediction.shape[0])):
+        torch_perm_list.append(prediction.index_select(0, torch.tensor(list(p), dtype=torch.int64).to(device)))
+    predictions = torch.stack(torch_perm_list, dim=0)
     return predictions
+
 
 class RMSPELoss(nn.Module):
     """Root Mean Square Periodic Error (RMSPE) loss function.
@@ -82,9 +85,12 @@ class RMSPELoss(nn.Module):
         targets = torch.tensor([0.8, 1.5, 1.9])
         loss = criterion(predictions, targets)
     """
+
     def __init__(self):
         super(RMSPELoss, self).__init__()
-    def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor):
+
+    def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
+                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None):
         """Compute the RMSPE loss between the predictions and target values.
         The forward method takes two input tensors: doa_predictions and doa.
         The predicted values and target values are expected to be in radians.
@@ -98,6 +104,10 @@ class RMSPELoss(nn.Module):
         Args:
             doa_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
             doa (torch.Tensor): Target values tensor of shape (batch_size, num_targets).
+            distance_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
+            The default value is None.
+            distance (torch.Tensor): Target values tensor of shape (batch_size, num_targets).The default value is None.
+
 
         Returns:
             torch.Tensor: The computed RMSPE loss.
@@ -117,12 +127,20 @@ class RMSPELoss(nn.Module):
                 # Calculate RMSE over all permutations
                 rmspe_val = (1 / np.sqrt(len(targets))) * torch.linalg.norm(error)
                 rmspe_list.append(rmspe_val)
-            rmspe_tensor = torch.stack(rmspe_list, dim = 0)
+            rmspe_tensor = torch.stack(rmspe_list, dim=0)
             # Choose minimal error from all permutations
             rmspe_min = torch.min(rmspe_tensor)
             rmspe.append(rmspe_min)
-        result = torch.sum(torch.stack(rmspe, dim = 0))
+        result = torch.sum(torch.stack(rmspe, dim=0))
+
+        if distance_predictions is not None:
+            if distance is None:
+                raise Exception("Target distances values are missing!")
+            mse_loss = nn.MSELoss()
+            distance_loss = torch.sqrt(mse_loss(distance_predictions, distance))
+            result += distance_loss
         return result
+
 
 class MSPELoss(nn.Module):
     """Mean Square Periodic Error (MSPE) loss function.
@@ -145,9 +163,12 @@ class MSPELoss(nn.Module):
         targets = torch.tensor([0.8, 1.5, 1.9])
         loss = criterion(predictions, targets)
     """
+
     def __init__(self):
         super(MSPELoss, self).__init__()
-    def forward(self, doa_predictions: torch.Tensor, doa):
+
+    def forward(self, doa_predictions: torch.Tensor, doa,
+                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None):
         """Compute the RMSPE loss between the predictions and target values.
         The forward method takes two input tensors: doa_predictions and doa.
         The predicted values and target values are expected to be in radians.
@@ -161,6 +182,9 @@ class MSPELoss(nn.Module):
         Args:
             doa_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
             doa (torch.Tensor): Target values tensor of shape (batch_size, num_targets).
+            distance_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
+            The default value is None.
+            distance (torch.Tensor): Target values tensor of shape (batch_size, num_targets).The default value is None.
 
         Returns:
             torch.Tensor: The computed MSPE loss.
@@ -180,12 +204,20 @@ class MSPELoss(nn.Module):
                 # Calculate MSE over all permutations
                 rmspe_val = (1 / len(targets)) * (torch.linalg.norm(error) ** 2)
                 rmspe_list.append(rmspe_val)
-            rmspe_tensor = torch.stack(rmspe_list, dim = 0)
+            rmspe_tensor = torch.stack(rmspe_list, dim=0)
             rmspe_min = torch.min(rmspe_tensor)
             # Choose minimal error from all permutations
             rmspe.append(rmspe_min)
-        result = torch.sum(torch.stack(rmspe, dim = 0))
+        result = torch.sum(torch.stack(rmspe, dim=0))
+
+        if distance_predictions is not None:
+            if distance is None:
+                raise Exception("Target distances values are missing!")
+            mse_loss = nn.MSELoss()
+            distance_loss = mse_loss(distance_predictions, distance)
+            result += distance_loss
         return result
+
 
 def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray):
     """
@@ -213,6 +245,7 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray):
     # Choose minimal error from all permutations
     return np.min(rmspe_list)
 
+
 def MSPE(doa_predictions: np.ndarray, doa: np.ndarray):
     """Calculate the Mean Square Percentage Error (RMSPE) between the DOA predictions and target DOA values.
 
@@ -238,7 +271,8 @@ def MSPE(doa_predictions: np.ndarray, doa: np.ndarray):
     # Choose minimal error from all permutations
     return np.min(rmspe_list)
 
-def set_criterions(criterion_name:str):
+
+def set_criterions(criterion_name: str):
     """
     Set the loss criteria based on the criterion name.
 
@@ -262,6 +296,7 @@ def set_criterions(criterion_name:str):
         raise Exception(f"criterions.set_criterions: Criterion {criterion_name} is not defined")
     print(f"Loss measure = {criterion_name}")
     return criterion, subspace_criterion
+
 
 if __name__ == "__main__":
     prediction = torch.tensor([1, 2, 3])

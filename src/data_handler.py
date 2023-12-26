@@ -48,6 +48,7 @@ def create_dataset(
     save_datasets: bool = False,
     datasets_path: Path = None,
     true_doa: list = None,
+    true_range: list = None,
     phase: str = None,
 ):
     """
@@ -62,6 +63,7 @@ def create_dataset(
         save_datasets (bool, optional): Specifies whether to save the dataset. Defaults to False.
         datasets_path (Path, optional): The path for saving the dataset. Defaults to None.
         true_doa (list, optional): Predefined angles. Defaults to None.
+        true_range (list, optional): Predefined ranges. Defaults to None.
         phase (str, optional): The phase of the dataset (test or training phase for CNN model). Defaults to None.
 
     Returns:
@@ -83,6 +85,7 @@ def create_dataset(
         for i, doa in tqdm(enumerate(doa_permutations)):
             # Samples model creation
             samples_model.set_doa(doa)
+
             # Observations matrix creation
             X = torch.tensor(
                 samples_model.samples_creation(
@@ -101,6 +104,8 @@ def create_dataset(
         for i in tqdm(range(samples_size)):
             # Samples model creation
             samples_model.set_doa(true_doa)
+            if model_type.endswith("MUSIC2D"):
+                samples_model.set_range(true_range)
             # Observations matrix creation
             X = torch.tensor(
                 samples_model.samples_creation(
@@ -118,6 +123,9 @@ def create_dataset(
                 X_model = X
             # Ground-truth creation
             Y = torch.tensor(samples_model.doa, dtype=torch.float64)
+            if model_type.endswith("MUSIC2D"):
+                y1 = torch.tensor(samples_model.distances, dtype=torch.float64)
+                Y = torch.cat((Y, y1), dim=0)
             generic_dataset.append((X, Y))
             model_dataset.append((X_model, Y))
 

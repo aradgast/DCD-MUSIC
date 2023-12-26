@@ -48,6 +48,7 @@ class Samples(SystemModel):
 
         """
         super().__init__(system_model_params)
+        self.distances = None
 
     def set_doa(self, doa):
         """
@@ -102,7 +103,7 @@ class Samples(SystemModel):
         """
 
         def choose_distances(
-                distance_min_gap: float = 0.5, distance_max_gap: int = 100, min_val: float = 0.5, max_val: int = 50
+                distance_min_gap: float = 0.5, distance_max_gap: int = 100, min_val: float = 10, max_val: int = 20
         ) -> np.ndarray:
 
 
@@ -158,9 +159,9 @@ class Samples(SystemModel):
                 A = np.array([self.steering_vec(theta) for theta in self.doa]).T
                 samples = (A @ signal) + noise
             else:
-                A = self.steering_vec(theta=self.doa, distance=self.distances)
+                A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=True)
                 A = A[:, np.arange(A.shape[1]), np.arange(A.shape[1])]
-                samples = (A @ signal.T) + noise.T
+                samples = (A @ signal) + noise
             return samples, signal, A, noise
         # Generate Broadband samples
         elif self.params.signal_type.startswith("Broadband"):

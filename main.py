@@ -60,12 +60,12 @@ if __name__ == "__main__":
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
     # Operations commands
     commands = {
-        "SAVE_TO_FILE": True,  # Saving results to file or present them over CMD
-        "CREATE_DATA": False,  # Creating new dataset
-        "LOAD_DATA": True,  # Loading data from exist dataset
-        "LOAD_MODEL": True,  # Load specific model for training
+        "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
+        "CREATE_DATA": True,  # Creating new dataset
+        "LOAD_DATA": False,  # Loading data from exist dataset
+        "LOAD_MODEL": False,  # Load specific model for training
         "TRAIN_MODEL": True,  # Applying training operation
-        "SAVE_MODEL": False,  # Saving tuned model
+        "SAVE_MODEL": True,  # Saving tuned model
         "EVALUATE_MODE": True,  # Evaluating desired algorithms
     }
     # Saving simulation scores to external file
@@ -77,26 +77,26 @@ if __name__ == "__main__":
     # Define system model parameters
     system_model_params = (
         SystemModelParams()
-        .set_parameter("N", 8)
-        .set_parameter("M", 3)
-        .set_parameter("T", 200)
+        .set_parameter("N", 5)
+        .set_parameter("M", 2)
+        .set_parameter("T", 10)
         .set_parameter("snr", 10)
         .set_parameter("signal_type", "NarrowBand")
         .set_parameter("signal_nature", "non-coherent")
         .set_parameter("eta", 0)
-        .set_parameter("bias", 0.05)
+        .set_parameter("bias", 0)
         .set_parameter("sv_noise_var", 0)
     )
     # Generate model configuration
     model_config = (
         ModelGenerator()
-        .set_model_type("SubspaceNet")
+        .set_model_type("SubspaceNetMUSIC2D")
         .set_diff_method("esprit")
-        .set_tau(8)
+        .set_tau(2)
         .set_model(system_model_params)
     )
     # Define samples size
-    samples_size = 100000  # Overall dateset size
+    samples_size = 100  # Overall dateset size
     train_test_ratio = 0.05  # training and testing datasets ratio
     # Sets simulation filename
     simulation_filename = get_simulation_filename(
@@ -160,8 +160,8 @@ if __name__ == "__main__":
         # Assign the training parameters object
         simulation_parameters = (
             TrainingParams()
-            .set_batch_size(2048)
-            .set_epochs(80)
+            .set_batch_size(10)
+            .set_epochs(5)
             .set_model(model=model_config)
             .set_optimizer(optimizer="Adam", learning_rate=0.00001, weight_decay=1e-9)
             .set_training_dataset(train_dataset)

@@ -370,7 +370,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model.train()
         model = model.to(device)
         for data in tqdm(training_params.train_dataset):
-            Rx, DOA = data
+            Rx, true_label = data
+            if training_params.model_type.endswith("MUSIC2D"):
+                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                RANGE = Variable(RANGE, requires_grad=True).to(device)
+            else:
+                DOA = true_label
+
             train_length += DOA.shape[0]
             # Cast observations and DoA to Variables
             Rx = Variable(Rx, requires_grad=True).to(device)
@@ -380,6 +386,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             if training_params.model_type.startswith("SubspaceNet"):
                 # Default - SubSpaceNet
                 DOA_predictions = model_output[0]
+                if training_params.model_type.endswith("MUSIC2D"):
+                    RANGE_predictions = model_output[1]
             else:
                 # Deep Augmented MUSIC or DeepCNN
                 DOA_predictions = model_output
@@ -388,6 +396,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 train_loss = training_params.criterion(
                     DOA_predictions.float(), DOA.float()
                 )
+            elif training_params.model_type.endswith("MUSIC2D"):
+                train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
             else:
                 train_loss = training_params.criterion(DOA_predictions, DOA)
             # Back-propagation stage

@@ -139,7 +139,7 @@ class SystemModel(object):
         self.array = np.linspace(0, self.params.N, self.params.N, endpoint=False)
 
     def steering_vec(
-            self, theta: np.ndarray, distance: np.darray = None, f: float = 1, array_form="ULA", nominal=False
+            self, theta: np.ndarray, distance: np.ndarray = None, f: float = 1, array_form="ULA", nominal=False
     ) -> np.ndarray:
         """
         Computes the steering vector based on the specified parameters.
@@ -213,7 +213,7 @@ class SystemModel(object):
         )
 
     def steering_vec_near_field(
-            self, theta: np.ndarray, distance: np.darray, f: float = 1, array_form="ULA", nominal=False
+            self, theta: np.ndarray, distance: np.ndarray, f: float = 1, array_form="ULA", nominal=False
     ) -> np.ndarray:
         """
 

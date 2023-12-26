@@ -74,7 +74,12 @@ def evaluate_dnn_model(
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for data in dataset:
-            X, DOA = data
+            X, true_label = data
+            if model_type.endswith("MUSIC2D"):
+                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                RANGE.to(device)
+            else:
+                DOA = true_label
             test_length += DOA.shape[0]
             # Convert observations and DoA to device
             X = X.to(device)
@@ -102,6 +107,8 @@ def evaluate_dnn_model(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
                     )
             elif model_type.startswith("SubspaceNet"):
+                if model_type.endswith("MUSIC2D"):
+                    RANGE_predictions = model_output[1]
                 # Default - SubSpaceNet
                 DOA_predictions = model_output[0]
             else:
@@ -112,12 +119,15 @@ def evaluate_dnn_model(
             if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
-                eval_loss = criterion(DOA_predictions, DOA)
+                if model_type.endswith("MUSIC2D"):
+                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
+                else:
+                    eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item()
         overall_loss = overall_loss / test_length
     # Plot spectrum for SubspaceNet model
-    if plot_spec and model_type.startswith("SubspaceNet"):
+    if plot_spec and model_type.startswith("SubspaceNet") and not model_type.endswith("MUSIC2D"):
         DOA_all = model_output[1]
         roots = model_output[2]
         plot_spectrum(
