@@ -408,16 +408,18 @@ class MUSIC_2D(MUSIC):
     """
     def __init__(self, system_model: SystemModel):
         super(MUSIC, self).__init__(system_model)
-        self._distances = np.arange(1, 30, 0.01)
+        self._distances = np.arange(1, 10, 0.01)
+        self._angels = np.linspace(-1 * np.pi / 2, np.pi / 2, 18000, endpoint=False)
         # Assign the frequency for steering vector calculation (multiplied in self.dist to get dist = 1/2)
         f = self.system_model.max_freq[self.system_model.params.signal_type]
         # Generate the GRID for the MUSIC spectrum
-        self.grid = self.system_model.steering_vec(self._angels, self._distances, f=f)
+        self.grid = self.system_model.steering_vec(self._angels, self._distances, f=f, nominal=True)
 
     def spectrum_calculation(self, noise_eig_vecs: np.ndarray, f: float = 1, array_form: str = "ULA"):
         """
 
         """
+
         var_1 = np.einsum("ijk,kl->ijl", np.transpose(self.grid.conj(), (2, 1, 0)), noise_eig_vecs)
         var_2 = np.transpose(var_1.conj(), (2, 1, 0))
         inverse_spectrum = np.real(np.einsum("ijk,kji->ji", var_1, var_2))

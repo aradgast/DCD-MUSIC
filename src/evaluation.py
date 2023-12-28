@@ -33,7 +33,7 @@ from matplotlib import pyplot as plt
 from src.utils import device
 from src.criterions import RMSPELoss, MSPELoss
 from src.criterions import RMSPE, MSPE
-from src.methods import MUSIC, RootMUSIC, Esprit, MVDR
+from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
 from src.models import SubspaceNet
 from src.plotting import plot_spectrum
@@ -257,7 +257,7 @@ def evaluate_model_based(
         X, doa = data
         X = X[0]
         # Root-MUSIC algorithms
-        if "r-music" in algorithm:
+        if algorithm.endswith("r-music"):
             root_music = RootMUSIC(system_model)
             if algorithm.startswith("sps"):
                 # Spatial smoothing
@@ -284,7 +284,7 @@ def evaluate_model_based(
                     figures=figures,
                 )
         # MUSIC algorithms
-        elif "music" in algorithm:
+        elif algorithm.endswith("music"):
             music = MUSIC(system_model)
             if algorithm.startswith("bb"):
                 # Broadband MUSIC
@@ -343,6 +343,15 @@ def evaluate_model_based(
                     algorithm=algorithm.upper(),
                     figures=figures,
                 )
+        elif algorithm.endswith("2D"):
+            y = doa[0]
+            doa, distances = y[:len(y)//2], y[len(y)//2:]
+
+            music_2d = MUSIC_2D(system_model)
+            doa_prediction, distance_prediction, _, _ = music_2d.narrowband(X)
+            loss = criterion(doa_prediction, doa, distance_prediction, distances)
+            loss_list.append(loss)
+
         else:
             raise Exception(
                 f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
@@ -412,32 +421,33 @@ def evaluate(
     if not isinstance(augmented_methods, list) and model_type.startswith("SubspaceNet"):
         augmented_methods = [
             # "mvdr",
-            "r-music",
-            "esprit",
+            # "r-music",
+            # "esprit",
             # "music",
         ]
     # Set default model-based subspace methods
     if not isinstance(subspace_methods, list):
         subspace_methods = [
-            "esprit",
+            # "esprit",
             # "music",
-            "r-music",
+            # "r-music",
             # "mvdr",
             # "sps-r-music",
             # "sps-esprit",
             # "sps-music"
             # "bb-music",
+            "music_2D"
         ]
     # Evaluate SubspaceNet + differentiable algorithm performances
-    model_test_loss = evaluate_dnn_model(
-        model=model,
-        dataset=model_test_dataset,
-        criterion=criterion,
-        plot_spec=plot_spec,
-        figures=figures,
-        model_type=model_type,
-    )
-    print(f"{model_type} Test loss = {model_test_loss}")
+    # model_test_loss = evaluate_dnn_model(
+    #     model=model,
+    #     dataset=model_test_dataset,
+    #     criterion=criterion,
+    #     plot_spec=plot_spec,
+    #     figures=figures,
+    #     model_type=model_type,
+    # )
+    # print(f"{model_type} Test loss = {model_test_loss}")
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(

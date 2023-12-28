@@ -118,27 +118,35 @@ class RMSPELoss(nn.Module):
         rmspe = []
         for iter in range(doa_predictions.shape[0]):
             rmspe_list = []
-            batch_predictions = doa_predictions[iter].to(device)
-            targets = doa[iter].to(device)
-            prediction_perm = permute_prediction(batch_predictions).to(device)
-            for prediction in prediction_perm:
-                # Calculate error with modulo pi
-                error = (((prediction - targets) + (np.pi / 2)) % np.pi) - np.pi / 2
-                # Calculate RMSE over all permutations
-                rmspe_val = (1 / np.sqrt(len(targets))) * torch.linalg.norm(error)
-                rmspe_list.append(rmspe_val)
+            batch_predictions_doa = doa_predictions[iter].to(device)
+            targets_doa = doa[iter].to(device)
+            prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
+
+            if distance is not None:
+                batch_predictions_distance = distance_predictions[iter].to(device)
+                targets_distance = distance[iter].to(device)
+                prediction_perm_distance = permute_prediction(batch_predictions_distance).to(device)
+
+                for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
+                    # Calculate error with modulo pi
+                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
+                    error += (prediction_distance - targets_distance)/10
+                    # Calculate RMSE over all permutations
+                    rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
+                    rmspe_list.append(rmspe_val)
+            else:
+                for prediction_doa in prediction_perm_doa:
+                    # Calculate error with modulo pi
+                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
+                    # Calculate RMSE over all permutations
+                    rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
+                    rmspe_list.append(rmspe_val)
             rmspe_tensor = torch.stack(rmspe_list, dim=0)
             # Choose minimal error from all permutations
             rmspe_min = torch.min(rmspe_tensor)
             rmspe.append(rmspe_min)
         result = torch.sum(torch.stack(rmspe, dim=0))
 
-        if distance_predictions is not None:
-            if distance is None:
-                raise Exception("Target distances values are missing!")
-            mse_loss = nn.MSELoss()
-            distance_loss = torch.sqrt(mse_loss(distance_predictions, distance))
-            result += distance_loss
         return result
 
 
@@ -219,13 +227,16 @@ class MSPELoss(nn.Module):
         return result
 
 
-def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray):
+def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
+          distance_predictions: np.ndarray = None, distance: np.ndarray = None):
     """
     Calculate the Root Mean Square Periodic Error (RMSPE) between the DOA predictions and target DOA values.
 
     Args:
         doa_predictions (np.ndarray): Array of DOA predictions.
         doa (np.ndarray): Array of target DOA values.
+        distance_predictions (np.ndarray):
+        distance (distance):
 
     Returns:
         float: The computed RMSPE value.
@@ -234,13 +245,13 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray):
         None
     """
     rmspe_list = []
-    for p in list(permutations(doa_predictions, len(doa_predictions))):
-        p = np.array(p)
-        doa = np.array(doa)
+    for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))), list(permutations(distance_predictions, len(distance_predictions)))):
+        p_doa, p_distance = np.array(p_doa, dtype=np.float32).squeeze(1), np.array(p_distance, dtype=np.float32).squeeze(1)
+        doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error = (((p - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / 2
+        error = ((((p_doa - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / 2) + (p_distance - distance)/10
         # Calculate RMSE over all permutations
-        rmspe_val = (1 / np.sqrt(len(p))) * np.linalg.norm(error)
+        rmspe_val = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error)
         rmspe_list.append(rmspe_val)
     # Choose minimal error from all permutations
     return np.min(rmspe_list)
