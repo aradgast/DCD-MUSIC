@@ -63,7 +63,7 @@ if __name__ == "__main__":
         "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
         "CREATE_DATA": True,  # Creating new dataset
         "LOAD_DATA": False,  # Loading data from exist dataset
-        "LOAD_MODEL": False,  # Load specific model for training
+        "LOAD_MODEL": True,  # Load specific model for training
         "TRAIN_MODEL": True,  # Applying training operation
         "SAVE_MODEL": True,  # Saving tuned model
         "EVALUATE_MODE": False,  # Evaluating desired algorithms
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     # Generate model configuration
     model_config = (
         ModelGenerator()
-        .set_model_type("SubspaceNet")
+        .set_model_type("SubspaceNetMUSIC2D")
         .set_diff_method("esprit")
         .set_tau(3)
         .set_model(system_model_params)

@@ -270,7 +270,7 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
     for iter in range(batch_size):
         K = bs_kx[iter]
         # Hermitian conjecture
-        Kx_garm = torch.matmul(torch.t(torch.conj(K)), K).to(device)
+        Kx_garm = torch.real(torch.matmul(torch.transpose(K.conj(), 0, 1), K)).to(device)
         # Diagonal loading
         eps_addition = (eps * torch.diag(torch.ones(Kx_garm.shape[0]))).to(device)
         Rz = Kx_garm + eps_addition
