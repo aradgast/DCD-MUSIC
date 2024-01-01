@@ -63,7 +63,7 @@ if __name__ == "__main__":
         "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
         "CREATE_DATA": True,  # Creating new dataset
         "LOAD_DATA": False,  # Loading data from exist dataset
-        "LOAD_MODEL": True,  # Load specific model for training
+        "LOAD_MODEL": False,  # Load specific model for training
         "TRAIN_MODEL": True,  # Applying training operation
         "SAVE_MODEL": True,  # Saving tuned model
         "EVALUATE_MODE": False,  # Evaluating desired algorithms
