@@ -136,7 +136,8 @@ class SystemModel(object):
 
     def create_array(self):
         """create an array of sensors locations"""
-        self.array = np.linspace(0, self.params.N, self.params.N, endpoint=False)
+        limit = self.params.N // 2
+        self.array = np.linspace(-limit, limit, self.params.N)
 
     def steering_vec(
             self, theta: np.ndarray, distance: np.ndarray = None, f: float = 1, array_form="ULA", nominal=False

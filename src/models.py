@@ -484,11 +484,11 @@ class SubspaceNetMUSIC2D(SubspaceNet):
     def __init__(self, tau: int, M: int, N: int):
         super().__init__(tau, M)
         self.N = N
-        self.array = torch.linspace(0, N, N)
+        limit = N // 2
+        self.array = torch.linspace(-limit, limit, N)
         self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 360, dtype=torch.float, device=device)
         self.distance_range = torch.arange(1, 10, 0.1, dtype=torch.float, device=device)
-        self.grid = self.compute_steering_vector(self.theta_range, self.distance_range)
-
+        self.grid = self.compute_steering_vector(self.theta_range, self.distance_range).type(torch.complex64)
 
     def forward(self, Rx_tau: torch.Tensor):
         """
@@ -533,8 +533,9 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(Kx=Kx_tag, eps=10, batch_size=self.batch_size)  # Shape: [Batch size, N, N]
-        # Feed surrogate covariance to Esprit algorithm
+        Rz = gram_diagonal_overload(
+            Kx=Kx_tag, eps=1, batch_size=self.batch_size
+        )  # Shape: [Batch size, N, N]
         doa_prediction, distance_prediction = self.music_2d(Rz, self.M)
         return doa_prediction, distance_prediction, Rz
 
@@ -563,13 +564,22 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         #             core_equiation = A.conj().T @ Un @ Un.conj().T @ A
         #             music_spectrum[batch, t, d] = 1 / core_equiation
 
-
         # using einsum
+        # rotation_matrix = torch.linalg.svd(torch.randn(Rz.shape[1], Rz.shape[2]))[0].type(torch.complex64)
+        # rotated_Rz = torch.zeros_like(Rz)
+        # for batch in range(Rz.shape[0]):
+        #     rotated_Rz[batch] = rotation_matrix @ Rz[batch] @ rotation_matrix.T
         # Extract eigenvalues and eigenvectors using EVD
         eigenvalues, eigenvectors = torch.linalg.eig(Rz)
+        # eigenvectors = torch.zeros_like(rotated_eigenvectors)
+        # for batch in range(Rz.shape[0]):
+        #     eigenvectors[batch] = rotation_matrix.T @ rotated_eigenvectors[batch]
         # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
         sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
-        Un = torch.gather(eigenvectors, -1, sorted_indxs.unsqueeze(-1).expand_as(eigenvectors))[:, :, number_of_sources:]
+        Un = torch.zeros(Rz.shape[0], Rz.shape[1], Rz.shape[2] - number_of_sources).type(torch.complex64)
+        for batch in range(Rz.shape[0]):
+            Un[batch] = eigenvectors[batch][sorted_indxs[batch]][:, number_of_sources:]
+
         var_1 = torch.einsum("dtn, bnm -> bdtm", torch.transpose(self.grid.conj(), 0, 2), Un)
         var_2 = torch.transpose(var_1.conj(), -3, -1)
         inverse_spectrum = torch.einsum("bijk, bkji -> bji", var_1, var_2)
@@ -599,25 +609,27 @@ class SubspaceNetMUSIC2D(SubspaceNet):
 
         soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
         soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-        cell_size = 2
+        cell_size = 20
         for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
             max_row_cell_idx = (max_r \
-                               - cell_size\
-                               + torch.arange(2 * cell_size + 1, dtype=torch.int32, device=device).unsqueeze(1).expand(-1, max_r.shape[0])).to(device)
+                                - cell_size \
+                                + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
+                        -1, max_r.shape[0])).to(device)
             # max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0, :]
             # max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[1]]
 
             max_col_cell_idx = (max_c \
-                               - cell_size \
-                               + torch.arange(2 * cell_size + 1, dtype=torch.int32, device=device).unsqueeze(1).expand(-1, max_c.shape[0])).to(device)
+                                - cell_size \
+                                + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
+                        -1, max_c.shape[0])).to(device)
             # max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
             # max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[2]]
             for k in range(number_of_sources):
                 max_row_cell_idx_k = torch.fmod(max_row_cell_idx[:, k].view(-1, 1), spectrum.shape[1])
                 max_col_cell_idx_k = torch.fmod(max_col_cell_idx[:, k].view(1, -1), spectrum.shape[2])
 
-                metrix_thr = spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k]
-                # metrix_thr /= torch.max(metrix_thr)
+                metrix_thr = spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k] / torch.max(
+                    spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k])
                 soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
 
                 soft_row[i, k] = self.theta_range[max_row_cell_idx_k].T @ torch.sum(soft_max, dim=1)

@@ -404,7 +404,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             try:
                 train_loss.backward()
             except RuntimeError as r:
-                print(r)
+                print(f"linalg error: \n{r}")
             # optimizer update
             optimizer.step()
             # reset gradients
