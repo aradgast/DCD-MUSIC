@@ -484,6 +484,12 @@ class SubspaceNetMUSIC2D(SubspaceNet):
     def __init__(self, tau: int, M: int, N: int):
         super().__init__(tau, M)
         self.N = N
+        wavelength = 1
+        spacing = wavelength / 2
+        diemeter = (N-1) * spacing
+        franhofer = 2 * diemeter ** 2 / wavelength
+        fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+        print(f"the near field region for this case: [{fersnel}, {franhofer}]")
         limit = N // 2
         self.array = torch.linspace(-limit, limit, N)
         self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 360, dtype=torch.float, device=device)
