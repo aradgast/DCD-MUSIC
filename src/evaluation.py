@@ -183,6 +183,7 @@ def evaluate_augmented_model(
         "music": MUSIC(system_model),
         "esprit": Esprit(system_model),
         "r-music": RootMUSIC(system_model),
+        "music_2D": MUSIC_2D(system_model)
     }
     # If algorithm is not in methods
     if methods.get(algorithm) is None:
@@ -192,7 +193,13 @@ def evaluate_augmented_model(
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for i, data in enumerate(dataset):
-            X, DOA = data
+            X, true_label = data
+            if algorithm.endswith("2D"):
+                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                RANGE.to(device)
+            else:
+                DOA = true_label
+
             # Convert observations and DoA to device
             X = X.to(device)
             DOA = DOA.to(device)
@@ -202,11 +209,15 @@ def evaluate_augmented_model(
             )
             # Calculate loss, if algorithm is "music" or "esprit"
             if not algorithm.startswith("mvdr"):
-                predictions, M = method_output[0], method_output[-1]
-                # If the amount of predictions is less than the amount of sources
-                predictions = add_random_predictions(M, predictions, algorithm)
-                # Calculate loss criterion
-                loss = criterion(predictions, DOA * R2D)
+                if algorithm.endswith("2D"):
+                    predictions_doa, predictions_distance = method_output[0], method_output[1]
+                    loss = criterion(predictions_doa, DOA * R2D, predictions_distance, RANGE)
+                else:
+                    predictions, M = method_output[0], method_output[-1]
+                    # If the amount of predictions is less than the amount of sources
+                    predictions = add_random_predictions(M, predictions, algorithm)
+                    # Calculate loss criterion
+                    loss = criterion(predictions, DOA * R2D)
                 hybrid_loss.append(loss)
             else:
                 hybrid_loss.append(0)
@@ -253,6 +264,8 @@ def evaluate_model_based(
     """
     # Initialize parameters for evaluation
     loss_list = []
+    if algorithm.endswith("2D"):
+        music_2d = MUSIC_2D(system_model)
     for i, data in enumerate(dataset):
         X, doa = data
         X = X[0]
@@ -347,7 +360,7 @@ def evaluate_model_based(
             y = doa[0]
             doa, distances = y[:len(y)//2], y[len(y)//2:]
 
-            music_2d = MUSIC_2D(system_model)
+
             doa_prediction, distance_prediction, _, _ = music_2d.narrowband(X)
             loss = criterion(doa_prediction, doa, distance_prediction, distances)
             loss_list.append(loss)
@@ -424,7 +437,7 @@ def evaluate(
             # "r-music",
             # "esprit",
             # "music",
-            # "music_2D",
+            "music_2D",
         ]
     # Set default model-based subspace methods
     if not isinstance(subspace_methods, list):
@@ -440,15 +453,15 @@ def evaluate(
             "music_2D"
         ]
     # Evaluate SubspaceNet + differentiable algorithm performances
-    # model_test_loss = evaluate_dnn_model(
-    #     model=model,
-    #     dataset=model_test_dataset,
-    #     criterion=criterion,
-    #     plot_spec=plot_spec,
-    #     figures=figures,
-    #     model_type=model_type,
-    # )
-    # print(f"{model_type} Test loss = {model_test_loss}")
+    model_test_loss = evaluate_dnn_model(
+        model=model,
+        dataset=model_test_dataset,
+        criterion=criterion,
+        plot_spec=plot_spec,
+        figures=figures,
+        model_type=model_type,
+    )
+    print(f"{model_type} Test loss = {model_test_loss}")
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(

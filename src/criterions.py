@@ -35,6 +35,21 @@ from itertools import permutations
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu");
 
+def add_line_to_file(file_name, line_to_add):
+    try:
+        with open(file_name, 'r+') as file:
+            lines = file.readlines()
+            if not lines or lines[-1].strip() != line_to_add:
+                file.write('\n' + line_to_add)
+                # print(f"Added line '{line_to_add}' to the file.")
+            else:
+                pass
+                # print(f"Line '{line_to_add}' already exists in the file.")
+    except FileNotFoundError:
+        with open(file_name, 'w') as file:
+            file.write(line_to_add)
+            # print(f"Created file '{file_name}' with line '{line_to_add}'.")
+
 
 def permute_prediction(prediction: torch.Tensor):
     """
@@ -130,7 +145,9 @@ class RMSPELoss(nn.Module):
                 for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
                     # Calculate error with modulo pi
                     error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
-                    error += (prediction_distance - targets_distance)/10
+                    distance_err = (prediction_distance - targets_distance) * (np.pi) / (10)
+                    add_line_to_file("output.txt", f"{error.item()}\t{distance_err.item()}\n")
+                    error += distance_err
                     # Calculate RMSE over all permutations
                     rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
                     rmspe_list.append(rmspe_val)
@@ -249,7 +266,7 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
         p_doa, p_distance = np.array(p_doa, dtype=np.float32).squeeze(1), np.array(p_distance, dtype=np.float32).squeeze(1)
         doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error = ((((p_doa - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / 2) + (p_distance - distance)/10
+        error = ((((p_doa - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / 2) + (p_distance - distance) * np.pi / 10
         # Calculate RMSE over all permutations
         rmspe_val = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error)
         rmspe_list.append(rmspe_val)

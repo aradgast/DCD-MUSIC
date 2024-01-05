@@ -103,21 +103,23 @@ class Samples(SystemModel):
         """
 
         def choose_distances(
-                distance_min_gap: float = 0.5, distance_max_gap: int = 100, min_val: float = 10, max_val: int = 20
+                distance_min_gap: float = 0.5, distance_max_gap: int = 10, min_val: float = 1.7, max_val: int = 10
         ) -> np.ndarray:
 
 
-            distances = []
-            while len(distances) < self.params.M:
-                distance = np.random.randint(min_val, max_val)
+            distances = np.zeros(self.params.M)
+            idx = 0
+            while idx < self.params.M:
+                distance = np.clip(np.round(np.random.rand(1) * max_val, decimals=2), a_min=min_val, a_max=max_val, out=None)
                 if len(distances) == 0:
-                    distances.append(distance)
+                    distances[idx] = distance
+                    idx += 1
                 else:
                     if np.min(np.abs(np.array(distances) - distance)) >= distance_min_gap and \
                             np.max(np.abs(np.array(distances) - distance)) <= distance_max_gap:
-                        distances.append(distance)
-
-            return np.array(distances)
+                        distances[idx] = distance
+                        idx += 1
+            return distances
 
         if distance is None:
             self.distances = choose_distances()
