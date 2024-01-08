@@ -494,7 +494,7 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         limit = N // 2
         self.array = torch.linspace(-limit, limit, N)
         self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 360, dtype=torch.float, device=device)
-        self.distance_range = torch.arange(1, 10, 0.1, dtype=torch.float, device=device)
+        self.distance_range = torch.arange(fersnel, franhofer, 0.1, dtype=torch.float, device=device)
         self.grid = self.compute_steering_vector(self.theta_range, self.distance_range).type(torch.complex64).detach()
 
     def forward(self, Rx_tau: torch.Tensor):

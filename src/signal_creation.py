@@ -103,14 +103,14 @@ class Samples(SystemModel):
         """
 
         def choose_distances(
-                distance_min_gap: float = 0.5, distance_max_gap: int = 10, min_val: float = 1.7, max_val: int = 10
+                distance_min_gap: float = 0.5, distance_max_gap: int = 10, min_val: float = 1.7536248173426379, max_val: int = 8
         ) -> np.ndarray:
 
 
             distances = np.zeros(self.params.M)
             idx = 0
             while idx < self.params.M:
-                distance = np.clip(np.round(np.random.rand(1) * max_val, decimals=2), a_min=min_val, a_max=max_val, out=None)
+                distance = np.round(np.random.uniform(min_val, max_val), decimals=2)
                 if len(distances) == 0:
                     distances[idx] = distance
                     idx += 1
