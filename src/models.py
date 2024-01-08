@@ -84,6 +84,7 @@ class ModelGenerator(object):
         else:
             raise Exception(f"ModelParams.set_field_type:"
                             f" unrecognized {field_type} as field type, available options are Near or Far.")
+        return self
 
     def set_tau(self, tau: int = None):
         """
@@ -130,7 +131,7 @@ class ModelGenerator(object):
                 if diff_method not in ["music_2D"]:
                     raise ValueError(f"ModelParams.set_diff_method: "
                                      f"{diff_method} is not defined for SubspaceNet model on {self.field_type} scenario")
-                    self.diff_method = diff_method
+                self.diff_method = diff_method
         return self
 
     def set_model_type(self, model_type: str):
@@ -175,16 +176,11 @@ class ModelGenerator(object):
         elif self.model_type.startswith("DeepCNN"):
             self.model = DeepCNN(N=system_model_params.N, grid_size=361)
         elif self.model_type.startswith("SubspaceNet"):
-            if self.field_type.endswith("Near"):
-                self.model = SubspaceNetMUSIC2D(tau=self.tau,
-                                                M=system_model_params.M,
-                                                N=system_model_params.N)
-            elif self.field_type.endswith("Far"):
-                self.model = SubspaceNet(tau=self.tau,
-                                         M=system_model_params.M,
-                                         diff_method=self.diff_method)
-            else:
-                raise Exception(f"ModelGenerator.field_type: Field type {self.field_type} is not defined")
+            self.model = SubspaceNet(tau=self.tau,
+                                     M=system_model_params.M,
+                                     N=system_model_params.N,
+                                     diff_method=self.diff_method,
+                                     field_type=self.field_type)
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
 
@@ -591,7 +587,7 @@ class SubspaceNetMUSIC2D(SubspaceNet):
     """
 
     def __init__(self, tau: int, M: int, N: int):
-        super().__init__(tau, M)
+        super().__init__(tau, M, N: int)
         self.N = N
         wavelength = 1
         spacing = wavelength / 2

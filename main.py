@@ -91,15 +91,15 @@ if __name__ == "__main__":
     # Generate model configuration
     model_config = (
         ModelGenerator()
-        .set_field_type(system_model_params.field_type)
         .set_model_type("SubspaceNet")
+        .set_field_type(system_model_params.field_type)
         .set_diff_method("music_2D")
         .set_tau(3)
         .set_model(system_model_params)
     )
     # Define samples size
-    samples_size = 50000  # Overall dateset size
-    train_test_ratio = 0.01  # training and testing datasets ratio
+    samples_size = 100  # Overall dateset size
+    train_test_ratio = 0.1  # training and testing datasets ratio
     # Sets simulation filename
     simulation_filename = get_simulation_filename(
         system_model_params=system_model_params, model_config=model_config
@@ -164,8 +164,8 @@ if __name__ == "__main__":
         # Assign the training parameters object
         simulation_parameters = (
             TrainingParams()
-            .set_batch_size(512)
-            .set_epochs(50)
+            .set_batch_size(10)
+            .set_epochs(1)
             .set_model(model=model_config)
             .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
             .set_training_dataset(train_dataset)
