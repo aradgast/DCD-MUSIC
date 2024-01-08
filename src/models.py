@@ -58,13 +58,15 @@ class ModelGenerator(object):
     Generates an instance of the desired model, according to model configuration parameters.
     """
 
-    def __init__(self):
+    def __init__(self, field_type: str = "Far"):
         """
         Initialize ModelParams object.
         """
         self.model_type = None
+        self.field_type = field_type
         self.diff_method = None
         self.tau = None
+        self.model = None
 
     def set_tau(self, tau: int = None):
         """
@@ -101,11 +103,17 @@ class ModelGenerator(object):
             ValueError: If the diff_method is not defined for SubspaceNet model.
         """
         if self.model_type.startswith("SubspaceNet"):
-            if diff_method not in ["esprit", "root_music"]:
-                raise ValueError(
-                    f"ModelParams.set_diff_method: {diff_method} is not defined for SubspaceNet model"
-                )
-            self.diff_method = diff_method
+            if self.field_type.startswith("Far"):
+                if diff_method not in ["esprit", "root_music"]:
+                    raise ValueError(
+                        f"ModelParams.set_diff_method:"
+                        f" {diff_method} is not defined for SubspaceNet model on {self.field_type} scenario")
+                self.diff_method = diff_method
+            elif self.field_type.startswith("Near"):
+                if diff_method not in ["music_2D"]:
+                    raise ValueError(f"ModelParams.set_diff_method: "
+                                     f"{diff_method} is not defined for SubspaceNet model on {self.field_type} scenario")
+                    self.diff_method = diff_method
         return self
 
     def set_model_type(self, model_type: str):
@@ -150,18 +158,19 @@ class ModelGenerator(object):
         elif self.model_type.startswith("DeepCNN"):
             self.model = DeepCNN(N=system_model_params.N, grid_size=361)
         elif self.model_type.startswith("SubspaceNet"):
-            if self.model_type.endswith("MUSIC2D"):
-                self.model = SubspaceNetMUSIC2D(
-                    tau=self.tau, M=system_model_params.M, N=system_model_params.N
-                )
+            if self.field_type.endswith("Near"):
+                self.model = SubspaceNetMUSIC2D(tau=self.tau,
+                                                M=system_model_params.M,
+                                                N=system_model_params.N)
+            elif self.field_type.endswith("Far"):
+                self.model = SubspaceNet(tau=self.tau,
+                                         M=system_model_params.M,
+                                         diff_method=self.diff_method)
             else:
-                self.model = SubspaceNet(
-                    tau=self.tau, M=system_model_params.M, diff_method=self.diff_method
-                )
+                raise Exception(f"ModelGenerator.field_type: Field type {self.field_type} is not defined")
         else:
-            raise Exception(
-                f"ModelGenerator.set_model: Model type {self.model_type} is not defined"
-            )
+            raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
+
         return self
 
 
@@ -487,7 +496,7 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         self.N = N
         wavelength = 1
         spacing = wavelength / 2
-        diemeter = (N-1) * spacing
+        diemeter = (N - 1) * spacing
         franhofer = 2 * diemeter ** 2 / wavelength
         fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
         print(f"the near field region for this case: [{fersnel}, {franhofer}]")

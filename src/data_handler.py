@@ -104,7 +104,7 @@ def create_dataset(
         for i in tqdm(range(samples_size)):
             # Samples model creation
             samples_model.set_doa(true_doa)
-            if model_type.endswith("MUSIC2D"):
+            if system_model_params.field_type.endswith("Near"):
                 samples_model.set_range(true_range)
             # Observations matrix creation
             X = torch.tensor(
@@ -123,7 +123,7 @@ def create_dataset(
                 X_model = X
             # Ground-truth creation
             Y = torch.tensor(samples_model.doa, dtype=torch.float64)
-            if model_type.endswith("MUSIC2D"):
+            if system_model_params.field_type.endswith("Near"):
                 y1 = torch.tensor(samples_model.distances, dtype=torch.float64)
                 Y = torch.cat((Y, y1), dim=0)
             generic_dataset.append((X, Y))

@@ -40,16 +40,17 @@ class SystemModelParams:
         None
     """
 
-    M = None  # Number of sources
-    N = None  # Number of sensors
-    T = None  # Number of observations
-    signal_type = "NarrowBand"  # Signal type ("NarrowBand" or "Broadband")
-    freq_values = [0, 500]  # Frequency values for Broadband signal
-    signal_nature = "non-coherent"  # Signal nature ("non-coherent" or "coherent")
-    snr = 10  # Signal-to-noise ratio
-    eta = 0  # Sensor location deviation
-    bias = 0  # Sensor bias deviation
-    sv_noise_var = 0  # Steering vector added noise variance
+    M = None                            # Number of sources
+    N = None                            # Number of sensors
+    T = None                            # Number of observations
+    field_type = "Far"                  # field type ("Far" or "Near")
+    signal_type = "NarrowBand"          # Signal type ("NarrowBand" or "Broadband")
+    freq_values = [0, 500]              # Frequency values for Broadband signal
+    signal_nature = "non-coherent"      # Signal nature ("non-coherent" or "coherent")
+    snr = 10                            # Signal-to-noise ratio
+    eta = 0                             # Sensor location deviation
+    bias = 0                            # Sensor bias deviation
+    sv_noise_var = 0                    # Steering vector added noise variance
 
     def set_parameter(self, name: str, value):
         """
@@ -72,6 +73,7 @@ class SystemModel(object):
 
         Attributes:
         -----------
+            field_type (str): Field environment approximation type. Options: "Far", "Near".
             signal_type (str): Signals type. Options: "NarrowBand", "Broadband".
             N (int): Number of sensors.
             M (int): Number of sources.
@@ -97,6 +99,8 @@ class SystemModel(object):
         self.define_scenario_params()
         # Define array indices
         self.create_array()
+        # Calculation for the Fraunhofer and Fresnel
+        self.fraunhofer, self.fresnel = self.calc_fresnel_fraunhofer_distance()
 
     def define_scenario_params(self):
         """Defines the signal type parameters based on the specified frequency values."""
@@ -135,9 +139,28 @@ class SystemModel(object):
         }
 
     def create_array(self):
-        """create an array of sensors locations"""
+        """create an array of sensors locations, around to origin."""
         limit = self.params.N // 2
         self.array = np.linspace(-limit, limit, self.params.N)
+
+    def calc_fresnel_fraunhofer_distance(self) -> tuple:
+        """
+        In the Far and Near field scenrios, those distances are relevant for the distance grid creation.
+        wavelength = 1
+        spacing = wavelength / 2
+        diemeter = (N-1) * spacing
+        Fraunhofer  = 2 * diemeter ** 2 / wavelength
+        Fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+        Returns:
+            tuple: fraunhofer(float), fresnel(float)
+        """
+        wavelength = 1
+        spacing = wavelength / 2
+        diemeter = (self.params.N - 1) * spacing
+        fraunhofer = 2 * diemeter ** 2 / wavelength
+        fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+
+        return fraunhofer, fresnel
 
     def steering_vec(
             self, theta: np.ndarray, distance: np.ndarray = None, f: float = 1, array_form="ULA", nominal=False
@@ -155,14 +178,16 @@ class SystemModel(object):
 
         """
         if array_form.startswith("ULA"):
-            if distance is None:
+            if self.params.field_type.startswith("Far"):
                 return self.steering_vec_far_field(theta, f=f, array_form=array_form, nominal=nominal)
+            elif self.params.field_type.startswith("Near"):
+                return self.steering_vec_near_field(theta, distance=distance, f=f,
+                                                    array_form=array_form, nominal=nominal)
             else:
-                return self.steering_vec_near_field(theta, distance=distance, f=f, array_form=array_form, nominal=nominal)
+                raise Exception(f"SystemModel.field_type:"
+                                f" field type of approximation {self.params.field_type} is not defined")
         else:
-            raise Exception(
-                f"SystemModel.steering_vec: array form {array_form} is not defined"
-            )
+            raise Exception(f"SystemModel.steering_vec: array form {array_form} is not defined")
 
     def steering_vec_far_field(
             self, theta: np.ndarray, f: float = 1, array_form="ULA", nominal=False

@@ -102,10 +102,8 @@ class Samples(SystemModel):
 
         """
 
-        def choose_distances(
-                distance_min_gap: float = 0.5, distance_max_gap: int = 10, min_val: float = 1.7536248173426379, max_val: int = 8
-        ) -> np.ndarray:
-
+        def choose_distances(distance_min_gap: float = 0.5, distance_max_gap: int = 10,
+                             min_val: float = self.fresnel, max_val: int = self.fraunhofer) -> np.ndarray:
 
             distances = np.zeros(self.params.M)
             idx = 0
@@ -157,13 +155,15 @@ class Samples(SystemModel):
         noise = self.noise_creation(noise_mean, noise_variance)
         # Generate Narrowband samples
         if self.params.signal_type.startswith("NarrowBand"):
-            if self.distances is None:
+            if self.params.field_type.startswith("Far"):
                 A = np.array([self.steering_vec(theta) for theta in self.doa]).T
                 samples = (A @ signal) + noise
-            else:
+            elif self.params.field_type.startswith("Near"):
                 A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=True)
                 A = A[:, np.arange(A.shape[1]), np.arange(A.shape[1])]
                 samples = (A @ signal) + noise
+            else:
+                raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")
             return samples, signal, A, noise
         # Generate Broadband samples
         elif self.params.signal_type.startswith("Broadband"):

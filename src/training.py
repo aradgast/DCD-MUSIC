@@ -516,6 +516,7 @@ def simulation_summary(
     print("System model parameters:")
     print(f"Number of sources = {system_model_params.M}")
     print(f"Number of sensors = {system_model_params.N}")
+    print(f"field_type = {system_model_params.field_type}")
     print(f"signal_type = {system_model_params.signal_type}")
     print(f"Observations = {system_model_params.T}")
     print(
@@ -548,6 +549,7 @@ def get_simulation_filename(
         + f"T={system_model_params.T}_SNR_{system_model_params.snr}_"
         + f"tau={model_config.tau}_{system_model_params.signal_type}_"
         + f"diff_method={model_config.diff_method}_"
+        + f"{system_model_params.field_type}_field_"
         + f"{system_model_params.signal_nature}_eta={system_model_params.eta}_"
         + f"bias={system_model_params.bias}_"
         + f"sv_noise={system_model_params.sv_noise_var}"
