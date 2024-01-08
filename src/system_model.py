@@ -258,29 +258,37 @@ class SystemModel(object):
         if not nominal:
             raise Exception("Currently support only nominal sensor array")
 
-        theta = np.atleast_1d(theta)[:, np.newaxis]
-        distance = np.atleast_1d(distance)[:, np.newaxis]
-        array = np.tile(self.array[:, np.newaxis], (1, self.params.N))
-        array_square = np.power(array, 2)
+        time_delay = np.zeros((len(self.array), len(theta)))
+        for idx, doa, dist in enumerate(zip(theta, distance)):
+            first_order = self.array @ np.sin(doa)
+            second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array, 2), dist)
+            time_delay[:, idx] = first_order + second_order
 
-        first_order = array @ np.tile(np.sin(theta), (1, self.params.N)).T
-        first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
-
-        second_order = -0.5 * np.divide(np.power(np.cos(theta), 2), distance.T)
-        second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
-        second_order = np.einsum("ij, jkl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
-
-        time_delay = first_order + second_order
-
-        return np.exp(2
-                      * -1j
+        return np.exp(-1j
+                      * 2
                       * np.pi
-                      * time_delay
-                      # need to divide here by the wavelength, seems that for the narrowband scenrio, wavelength = 1 here.
-        )
+                      * time_delay)
 
-
-
+        # theta = np.atleast_1d(theta)[:, np.newaxis]
+        # distance = np.atleast_1d(distance)[:, np.newaxis]
+        # array = np.tile(self.array[:, np.newaxis], (1, self.params.N))
+        # array_square = np.power(array, 2)
+        #
+        # first_order = array @ np.tile(np.sin(theta), (1, self.params.N)).T
+        # first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
+        #
+        # second_order = -0.5 * np.divide(np.power(np.cos(theta), 2), distance.T)
+        # second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
+        # second_order = np.einsum("ij, jkl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
+        #
+        # time_delay = first_order + second_order
+        #
+        # return np.exp(2
+        #               * -1j
+        #               * np.pi
+        #               * time_delay
+        #               # need to divide here by the wavelength, seems that for the narrowband scenrio, wavelength = 1 here.
+        # )
 
 
     def __str__(self):

@@ -160,7 +160,6 @@ class Samples(SystemModel):
                 samples = (A @ signal) + noise
             elif self.params.field_type.startswith("Near"):
                 A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=True)
-                A = A[:, np.arange(A.shape[1]), np.arange(A.shape[1])]
                 samples = (A @ signal) + noise
             else:
                 raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")

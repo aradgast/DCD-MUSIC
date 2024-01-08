@@ -58,15 +58,32 @@ class ModelGenerator(object):
     Generates an instance of the desired model, according to model configuration parameters.
     """
 
-    def __init__(self, field_type: str = "Far"):
+    def __init__(self):
         """
         Initialize ModelParams object.
         """
         self.model_type = None
-        self.field_type = field_type
+        self.field_type = None
         self.diff_method = None
         self.tau = None
         self.model = None
+
+    def set_field_type(self, field_type: str = None):
+        """
+
+        Args:
+            field_type:
+
+        Returns:
+
+        """
+        if field_type.lower() == "near":
+            self.field_type = "Near"
+        elif field_type.lower() == "far":
+            self.field_type = "Far"
+        else:
+            raise Exception(f"ModelParams.set_field_type:"
+                            f" unrecognized {field_type} as field type, available options are Near or Far.")
 
     def set_tau(self, tau: int = None):
         """
@@ -280,6 +297,9 @@ class SubspaceNet(nn.Module):
     -----------
         M (int): Number of sources.
         tau (int): Number of auto-correlation lags.
+        N (int):
+        diff_method (str):
+        field_type (str):
         conv1 (nn.Conv2d): Convolution layer 1.
         conv2 (nn.Conv2d): Convolution layer 2.
         conv3 (nn.Conv2d): Convolution layer 3.
@@ -297,7 +317,7 @@ class SubspaceNet(nn.Module):
 
     """
 
-    def __init__(self, tau: int, M: int, diff_method: str = "root_music"):
+    def __init__(self, tau: int, M: int, N: int, diff_method: str = "root_music", field_type: str = "Far"):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -309,6 +329,9 @@ class SubspaceNet(nn.Module):
         super(SubspaceNet, self).__init__()
         self.M = M
         self.tau = tau
+        self.N = N
+        self.diff_method = None
+        self.field_type = None
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
@@ -317,8 +340,41 @@ class SubspaceNet(nn.Module):
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
         self.DropOut = nn.Dropout(0.2)
         self.ReLU = nn.ReLU()
+        # Set the field type scenario: Far or Near.
+        self.set_field_type(field_type)
         # Set the subspace method for training
         self.set_diff_method(diff_method)
+        self.search_grid = None
+        self.theta_range = None
+        self.distance_range = None
+        if diff_method.startswith("music_2d"):
+            wavelength = 1
+            spacing = wavelength / 2
+            diemeter = (N - 1) * spacing
+            franhofer = 2 * diemeter ** 2 / wavelength
+            fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+            limit = N // 2
+            self.array = torch.linspace(-limit, limit, N)
+            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 3600, dtype=torch.float, device=device)
+            self.distance_range = torch.arange(fersnel, franhofer, 0.01, dtype=torch.float, device=device)
+            self.search_grid = self.set_search_grid(self.theta_range, self.distance_range).type(
+                torch.complex64).detach()
+
+    def set_field_type(self, field_type: str):
+        """
+
+        Args:
+            field_type:
+
+        Returns:
+
+        """
+        if field_type.lower() == "far":
+            self.field_type = "Far"
+        elif field_type.lower() == "near":
+            self.field_type = "Near"
+        else:
+            raise Exception(f"Unrecognized field type {field_type}, possible options are Far or Near.")
 
     def set_diff_method(self, diff_method: str):
         """Sets the differentiable subspace method for training subspaceNet.
@@ -332,14 +388,20 @@ class SubspaceNet(nn.Module):
         -------
             Exception: Method diff_method is not defined for SubspaceNet
         """
-        if diff_method.startswith("root_music"):
-            self.diff_method = root_music
-        elif diff_method.startswith("esprit"):
-            self.diff_method = esprit
-        else:
-            raise Exception(
-                f"SubspaceNet.set_diff_method: Method {diff_method} is not defined for SubspaceNet"
-            )
+        if self.field_type == "Far":
+            if diff_method.startswith("root_music"):
+                self.diff_method = root_music
+            elif diff_method.startswith("esprit"):
+                self.diff_method = esprit
+            else:
+                raise Exception(f"SubspaceNet.set_diff_method:"
+                                f" Method {diff_method} is not defined for SubspaceNet in {self.field_type} scenario")
+        elif self.field_type == "Near":
+            if diff_method.startswith("music_2D"):
+                self.diff_method = music_2d
+            else:
+                raise Exception(f"SubspaceNet.set_diff_method:"
+                                f" Method {diff_method} is not defined for SubspaceNet in {self.field_type} scenario")
 
     def anti_rectifier(self, X):
         """Applies the anti-rectifier operation to the input tensor.
@@ -354,6 +416,33 @@ class SubspaceNet(nn.Module):
 
         """
         return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
+
+    def set_search_grid(self, theta: torch.Tensor, distances: torch.Tensor) -> torch.Tensor:
+        """
+
+        Args:
+            theta:
+            distances:
+
+        Returns:
+
+        """
+        theta = torch.atleast_1d(theta).unsqueeze(1)
+        distances = torch.atleast_1d(distances).unsqueeze(1)
+
+        array = torch.tile(self.array.unsqueeze(1), (1, self.N))
+        array_square = array.pow(2)
+
+        first_order = array @ torch.tile(torch.sin(theta), (1, self.N)).t()
+        first_order = first_order.unsqueeze(2).expand(-1, -1, len(distances))
+
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta), 2), distances.t())
+        second_order = second_order.unsqueeze(2).expand(-1, -1, self.N)
+        second_order = torch.einsum("ij, jkl -> ilk", array_square, second_order.permute(2, 1, 0))
+
+        time_delay = first_order + second_order
+
+        return torch.exp(2 * -1j * np.pi * time_delay)
 
     def forward(self, Rx_tau: torch.Tensor):
         """
@@ -404,15 +493,25 @@ class SubspaceNet(nn.Module):
             Kx=Kx_tag, eps=1, batch_size=self.batch_size
         )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
-        method_output = self.diff_method(Rz, self.M, self.batch_size)
-        if isinstance(method_output, tuple):
-            # Root MUSIC output
-            doa_prediction, doa_all_predictions, roots = method_output
-        else:
-            # Esprit output
-            doa_prediction = method_output
-            doa_all_predictions, roots = None, None
-        return doa_prediction, doa_all_predictions, roots, Rz
+
+        if self.field_type == "Far":
+            method_output = self.diff_method(Rz, self.M, self.batch_size)
+            if isinstance(method_output, tuple):
+                # Root MUSIC output
+                doa_prediction, doa_all_predictions, roots = method_output
+            else:
+                # Esprit output
+                doa_prediction = method_output
+                doa_all_predictions, roots = None, None
+            return doa_prediction, doa_all_predictions, roots, Rz
+
+        elif self.field_type == "Near":
+            doa_prediction, distance_prediction = self.diff_method(Rz,
+                                                                   self.M,
+                                                                   self.search_grid,
+                                                                   self.theta_range,
+                                                                   self.distance_range)
+            return doa_prediction, distance_prediction, Rz
 
 
 class SubspaceNetEsprit(SubspaceNet):
@@ -997,3 +1096,96 @@ def esprit(Rz: torch.Tensor, M: int, batch_size: int):
         doa_batches.append(doa_predictions)
 
     return torch.stack(doa_batches, dim=0)
+
+
+def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, theta_range, distance_range) -> tuple:
+    """
+
+        Args:
+            Rz:
+            number_of_sources:
+
+        Returns:
+
+        """
+    torch.autograd.set_detect_anomaly(True)
+
+    # using for loops
+    # music_spectrum = torch.zeros((Rz.shape[0], len(self.theta_range), len(self.distance_range)), dtype=torch.float)
+    # for batch in range(Rz.shape[0]):
+    #     R = Rz[batch]
+    #     eigenvalues, eigenvectors = torch.linalg.eig(R)
+    #     sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
+    #     Un = eigenvectors[sorted_indxs][:, number_of_sources].unsqueeze(1)
+    #     for t, theta in enumerate(self.theta_range):
+    #         for d, distance in enumerate(self.distance_range):
+    #             A = self.compute_steering_vector(theta, distance).squeeze(1)
+    #             core_equiation = A.conj().T @ Un @ Un.conj().T @ A
+    #             music_spectrum[batch, t, d] = 1 / core_equiation
+    start = time.time()
+    # using einsum
+    # Extract eigenvalues and eigenvectors using EVD
+    eigenvalues, eigenvectors = torch.linalg.eig(Rz)
+    # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
+    sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
+    Un = torch.zeros(Rz.shape[0], Rz.shape[1], Rz.shape[2] - number_of_sources).type(torch.complex64)
+    for batch in range(Rz.shape[0]):
+        Un[batch] = eigenvectors[batch][sorted_indxs[batch]][:, number_of_sources:]
+    var_1 = torch.einsum("dtn, bnm -> bdtm", torch.transpose(search_grid.conj(), 0, 2), Un)
+    var_2 = torch.transpose(var_1.conj(), -3, -1)
+    inverse_spectrum = torch.einsum("bijk, bkji -> bji", var_1, var_2)
+    if not inverse_spectrum.isreal().all():
+        raise ValueError("Music spectrum must to be real!")
+    music_spectrum = 1 / torch.real(inverse_spectrum)
+
+    doa, distance = maskpeaks(music_spectrum, number_of_sources, theta_range, distance_range)
+    torch.autograd.set_detect_anomaly(False)
+
+    return torch.Tensor(doa), torch.Tensor(distance)
+
+
+def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch.Tensor,
+              distance_range: torch.Tensor) -> tuple:
+    """
+
+        Args:
+            batch_size:
+            spectrum:
+            number_of_sources:
+
+        Returns:
+
+        """
+    _, top_indxs = torch.topk(spectrum.view(spectrum.shape[0], -1), number_of_sources, dim=1)
+    max_row = torch.div(top_indxs, spectrum.shape[2], rounding_mode="floor")
+    max_col = torch.fmod(top_indxs, spectrum.shape[2]).int()
+
+    soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
+    soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
+    cell_size = 20
+    for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
+        max_row_cell_idx = (max_r \
+                            - cell_size \
+                            + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
+                    -1, max_r.shape[0])).to(device)
+        # max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0, :]
+        # max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[1]]
+
+        max_col_cell_idx = (max_c \
+                            - cell_size \
+                            + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
+                    -1, max_c.shape[0])).to(device)
+        # max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
+        # max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[2]]
+        for k in range(number_of_sources):
+            max_row_cell_idx_k = torch.fmod(max_row_cell_idx[:, k].view(-1, 1), spectrum.shape[1])
+            max_col_cell_idx_k = torch.fmod(max_col_cell_idx[:, k].view(1, -1), spectrum.shape[2])
+
+            metrix_thr = spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k] / torch.max(
+                spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k])
+            soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
+
+            soft_row[i, k] = theta_range[max_row_cell_idx_k].T @ torch.sum(soft_max, dim=1)
+            soft_col[i, k] = distance_range[max_col_cell_idx_k] @ torch.sum(soft_max, dim=0)
+
+    return soft_row, soft_col
