@@ -275,9 +275,8 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
         eps_addition = (eps * torch.diag(torch.ones(Kx_garm.shape[0]))).to(device)
         Rz = Kx_garm + eps_addition
         # eigvals = torch.linalg.eigvals(Rz)
-        # if torch.min(eigvals.real / eigvals.imag) < 10 ** (3):
+        # if torch.min(eigvals.real / eigvals.imag) < 10 ** 6:
         #     print("Rz doesn't have semi real eigenvalues")
-
         Kx_list.append(Rz)
     Kx_Out = torch.stack(Kx_list, dim=0)
     return Kx_Out

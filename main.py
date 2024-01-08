@@ -96,8 +96,8 @@ if __name__ == "__main__":
         .set_model(system_model_params)
     )
     # Define samples size
-    samples_size = 100000  # Overall dateset size
-    train_test_ratio = 0.05  # training and testing datasets ratio
+    samples_size = 10000  # Overall dateset size
+    train_test_ratio = 0.01  # training and testing datasets ratio
     # Sets simulation filename
     simulation_filename = get_simulation_filename(
         system_model_params=system_model_params, model_config=model_config
@@ -162,12 +162,12 @@ if __name__ == "__main__":
         # Assign the training parameters object
         simulation_parameters = (
             TrainingParams()
-            .set_batch_size(1024)
-            .set_epochs(80)
+            .set_batch_size(256)
+            .set_epochs(10)
             .set_model(model=model_config)
-            .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
+            .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
             .set_training_dataset(train_dataset)
-            .set_schedular(step_size=5, gamma=0.2)
+            .set_schedular(step_size=25, gamma=0.2)
             .set_criterion()
         )
         if commands["LOAD_MODEL"]:

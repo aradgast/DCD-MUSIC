@@ -44,6 +44,7 @@ import numpy as np
 import warnings
 from src.utils import gram_diagonal_overload, device
 from src.utils import sum_of_diags_torch, find_roots_torch
+import time
 
 warnings.simplefilter("ignore")
 
@@ -494,7 +495,7 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         self.array = torch.linspace(-limit, limit, N)
         self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 360, dtype=torch.float, device=device)
         self.distance_range = torch.arange(1, 10, 0.1, dtype=torch.float, device=device)
-        self.grid = self.compute_steering_vector(self.theta_range, self.distance_range).type(torch.complex64)
+        self.grid = self.compute_steering_vector(self.theta_range, self.distance_range).type(torch.complex64).detach()
 
     def forward(self, Rx_tau: torch.Tensor):
         """
@@ -569,23 +570,15 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         #             A = self.compute_steering_vector(theta, distance).squeeze(1)
         #             core_equiation = A.conj().T @ Un @ Un.conj().T @ A
         #             music_spectrum[batch, t, d] = 1 / core_equiation
-
+        start = time.time()
         # using einsum
-        # rotation_matrix = torch.linalg.svd(torch.randn(Rz.shape[1], Rz.shape[2]))[0].type(torch.complex64)
-        # rotated_Rz = torch.zeros_like(Rz)
-        # for batch in range(Rz.shape[0]):
-        #     rotated_Rz[batch] = rotation_matrix @ Rz[batch] @ rotation_matrix.T
         # Extract eigenvalues and eigenvectors using EVD
         eigenvalues, eigenvectors = torch.linalg.eig(Rz)
-        # eigenvectors = torch.zeros_like(rotated_eigenvectors)
-        # for batch in range(Rz.shape[0]):
-        #     eigenvectors[batch] = rotation_matrix.T @ rotated_eigenvectors[batch]
         # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
         sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
         Un = torch.zeros(Rz.shape[0], Rz.shape[1], Rz.shape[2] - number_of_sources).type(torch.complex64)
         for batch in range(Rz.shape[0]):
             Un[batch] = eigenvectors[batch][sorted_indxs[batch]][:, number_of_sources:]
-
         var_1 = torch.einsum("dtn, bnm -> bdtm", torch.transpose(self.grid.conj(), 0, 2), Un)
         var_2 = torch.transpose(var_1.conj(), -3, -1)
         inverse_spectrum = torch.einsum("bijk, bkji -> bji", var_1, var_2)

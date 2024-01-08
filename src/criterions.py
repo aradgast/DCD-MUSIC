@@ -146,7 +146,7 @@ class RMSPELoss(nn.Module):
                     # Calculate error with modulo pi
                     error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
                     distance_err = (prediction_distance - targets_distance) * (np.pi) / (10)
-                    add_line_to_file("output.txt", f"{error.item()}\t{distance_err.item()}\n")
+                    # add_line_to_file("output.txt", f"{error.item()}\t{distance_err.item()}\n")
                     error += distance_err
                     # Calculate RMSE over all permutations
                     rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
