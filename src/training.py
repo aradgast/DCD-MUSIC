@@ -86,12 +86,13 @@ class TrainingParams(object):
         Returns:
 
         """
-        if self.field_type.lower() == "far":
+        if field_type.lower() == "far":
             self.field_type = "Far"
-        elif self.field_type.lower() == "near":
+        elif field_type.lower() == "near":
             self.field_type = "Near"
         else:
             raise Exception(f"TrainingParams.set_field_type: Unrecognized {field_type}-field type.")
+        return self
 
     def set_batch_size(self, batch_size: int):
         """

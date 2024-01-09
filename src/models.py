@@ -343,7 +343,7 @@ class SubspaceNet(nn.Module):
         self.search_grid = None
         self.theta_range = None
         self.distance_range = None
-        if diff_method.startswith("music_2d"):
+        if diff_method.startswith("music_2D"):
             wavelength = 1
             spacing = wavelength / 2
             diemeter = (N - 1) * spacing
@@ -351,8 +351,8 @@ class SubspaceNet(nn.Module):
             fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
             limit = N // 2
             self.array = torch.linspace(-limit, limit, N)
-            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 3600, dtype=torch.float, device=device)
-            self.distance_range = torch.arange(fersnel, franhofer, 0.01, dtype=torch.float, device=device)
+            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 1800, dtype=torch.float, device=device)
+            self.distance_range = torch.arange(fersnel, franhofer, 0.1, dtype=torch.float, device=device)
             self.search_grid = self.set_search_grid(self.theta_range, self.distance_range).type(
                 torch.complex64).detach()
 
@@ -587,7 +587,7 @@ class SubspaceNetMUSIC2D(SubspaceNet):
     """
 
     def __init__(self, tau: int, M: int, N: int):
-        super().__init__(tau, M, N: int)
+        super().__init__(tau, M, N)
         self.N = N
         wavelength = 1
         spacing = wavelength / 2
