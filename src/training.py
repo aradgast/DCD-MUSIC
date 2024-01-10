@@ -400,9 +400,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             Rx = Variable(Rx, requires_grad=True).to(device)
             DOA = Variable(DOA, requires_grad=True).to(device)
             # Get model output
-            t1 = time.time()
+            # t1 = time.time()
             model_output = model(Rx)
-            print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
+            # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
             if training_params.model_type.startswith("SubspaceNet"):
                 # Default - SubSpaceNet
                 DOA_predictions = model_output[0]

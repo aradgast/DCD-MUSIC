@@ -144,8 +144,8 @@ class RMSPELoss(nn.Module):
 
                 for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
                     # Calculate error with modulo pi
-                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
-                    distance_err = (prediction_distance - targets_distance) * (np.pi) / (10)
+                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / (2 * np.pi)
+                    distance_err = (prediction_distance - targets_distance)
                     # add_line_to_file("output.txt", f"{error.item()}\t{distance_err.item()}\n")
                     error += distance_err
                     # Calculate RMSE over all permutations
@@ -263,10 +263,11 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     """
     rmspe_list = []
     for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))), list(permutations(distance_predictions, len(distance_predictions)))):
-        p_doa, p_distance = np.array(p_doa, dtype=np.float32).squeeze(1), np.array(p_distance, dtype=np.float32).squeeze(1)
+        p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
         doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error = ((((p_doa - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / 2) + (p_distance - distance) * np.pi / 10
+        error = (((p_doa - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / (2 * np.pi)
+        error += (p_distance - distance)
         # Calculate RMSE over all permutations
         rmspe_val = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error)
         rmspe_list.append(rmspe_val)

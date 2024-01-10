@@ -75,9 +75,12 @@ def evaluate_dnn_model(
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
-            if model_type.endswith("MUSIC2D"):
-                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                RANGE.to(device)
+            if model_type.startswith("SubspaceNet"):
+                if model.field_type.endswith("Near"):
+                    DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                    RANGE.to(device)
+                else:
+                    DOA = true_label
             else:
                 DOA = true_label
             test_length += DOA.shape[0]
@@ -107,7 +110,7 @@ def evaluate_dnn_model(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
                     )
             elif model_type.startswith("SubspaceNet"):
-                if model_type.endswith("MUSIC2D"):
+                if model.field_type.endswith("Near"):
                     RANGE_predictions = model_output[1]
                 # Default - SubSpaceNet
                 DOA_predictions = model_output[0]
@@ -119,7 +122,7 @@ def evaluate_dnn_model(
             if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
-                if model_type.endswith("MUSIC2D"):
+                if model.field_type.endswith("Near"):
                     eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
@@ -127,7 +130,7 @@ def evaluate_dnn_model(
             overall_loss += eval_loss.item()
         overall_loss = overall_loss / test_length
     # Plot spectrum for SubspaceNet model
-    if plot_spec and model_type.startswith("SubspaceNet") and not model_type.endswith("MUSIC2D"):
+    if plot_spec and model_type.startswith("SubspaceNet"):
         DOA_all = model_output[1]
         roots = model_output[2]
         plot_spectrum(
@@ -359,8 +362,6 @@ def evaluate_model_based(
         elif algorithm.endswith("2D"):
             y = doa[0]
             doa, distances = y[:len(y)//2], y[len(y)//2:]
-
-
             doa_prediction, distance_prediction, _, _ = music_2d.narrowband(X)
             loss = criterion(doa_prediction, doa, distance_prediction, distances)
             loss_list.append(loss)

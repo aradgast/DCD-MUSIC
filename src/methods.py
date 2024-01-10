@@ -410,7 +410,7 @@ class MUSIC_2D(MUSIC):
         super(MUSIC, self).__init__(system_model)
 
         self._distances = np.arange(system_model.fresnel, system_model.fraunhofer, 0.1)
-        self._angels = np.linspace(-1 * np.pi / 2, np.pi / 2, 1800, endpoint=False)
+        self._angels = np.linspace(-1 * np.pi / 2, np.pi / 2, 180, endpoint=False)
         # Assign the frequency for steering vector calculation (multiplied in self.dist to get dist = 1/2)
         f = self.system_model.max_freq[self.system_model.params.signal_type]
         # Generate the GRID for the MUSIC spectrum
@@ -428,7 +428,7 @@ class MUSIC_2D(MUSIC):
         music_spectrum = 1 / inverse_spectrum
         return music_spectrum, inverse_spectrum
 
-    def get_predictions(self, spectrum: np.ndarray, number_of_sources: int,  is_soft: bool = True) -> tuple:
+    def get_predictions(self, spectrum: np.ndarray, number_of_sources: int,  is_soft: bool = False) -> tuple:
         """
 
         """
@@ -442,7 +442,7 @@ class MUSIC_2D(MUSIC):
             # Sort the peak by their amplitude
             peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
             # convert the peaks to 2d indices
-            original_idx = np.unravel_index(peaks, spectrum.shape)
+            original_idx = np.array(np.unravel_index(peaks, spectrum.shape))
             predict_theta = self._angels[original_idx[0]][0:number_of_sources]
             predict_dist = self._distances[original_idx[1]][0:number_of_sources]
             return predict_theta, predict_dist
@@ -478,8 +478,8 @@ class MUSIC_2D(MUSIC):
             metrix_thr /= np.max(metrix_thr)
             soft_max = np.exp(metrix_thr) / np.sum(np.exp(metrix_thr))
 
-            soft_row.append(self._angels[max_row_cell_idx].T @ np.sum(soft_max, axis=1))
-            soft_col.append(self._distances[max_col_cell_idx] @ np.sum(soft_max, axis=0))
+            soft_row.append((self._angels[max_row_cell_idx].T @ np.sum(soft_max, axis=1)).item())
+            soft_col.append((self._distances[max_col_cell_idx] @ np.sum(soft_max, axis=0)).item())
 
         return soft_row, soft_col
 
@@ -499,7 +499,7 @@ class MUSIC_2D(MUSIC):
         Un, _ = self.subspace_separation(covariance_mat=covariance_mat, M=M)
         spectrum, _ = self.spectrum_calculation(noise_eig_vecs=Un)
         # Find spectrum peaks
-        doa_predictions, distance_predictions = self.get_predictions(spectrum, number_of_sources=M, is_soft=True)
+        doa_predictions, distance_predictions = self.get_predictions(spectrum, number_of_sources=M, is_soft=False)
         return doa_predictions, distance_predictions, spectrum, M
 
 
