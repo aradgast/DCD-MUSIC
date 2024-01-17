@@ -16,7 +16,7 @@ This class is used for defining the samples model.
 import numpy as np
 from src.system_model import SystemModel, SystemModelParams
 from src.utils import D2R
-
+np.random.seed(0)
 
 class Samples(SystemModel):
     """
@@ -74,7 +74,7 @@ class Samples(SystemModel):
             """
             M = self.params.M
             while True:
-                DOA = np.round(np.random.rand(M) * 180, decimals=2) - 90
+                DOA = np.round(np.random.rand(M) * 120, decimals=2) - 60
                 DOA.sort()
                 diff_angles = np.array(
                     [np.abs(DOA[i + 1] - DOA[i]) for i in range(M - 1)]

@@ -38,18 +38,20 @@ from pathlib import Path
 from src.system_model import SystemModelParams
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+np.random.seed(0)
+torch.random.seed()
 
 
 def create_dataset(
-    system_model_params: SystemModelParams,
-    samples_size: float,
-    model_type: str,
-    tau: int = None,
-    save_datasets: bool = False,
-    datasets_path: Path = None,
-    true_doa: list = None,
-    true_range: list = None,
-    phase: str = None,
+        system_model_params: SystemModelParams,
+        samples_size: float,
+        model_type: str,
+        tau: int = None,
+        save_datasets: bool = False,
+        datasets_path: Path = None,
+        true_doa: list = None,
+        true_range: list = None,
+        phase: str = None,
 ):
     """
     Generates a synthetic dataset based on the specified parameters and model type.
@@ -257,12 +259,12 @@ def create_cov_tensor(X: torch.Tensor):
 
 
 def load_datasets(
-    system_model_params: SystemModelParams,
-    model_type: str,
-    samples_size: float,
-    datasets_path: Path,
-    train_test_ratio: float,
-    is_training: bool = False,
+        system_model_params: SystemModelParams,
+        model_type: str,
+        samples_size: float,
+        datasets_path: Path,
+        train_test_ratio: float,
+        is_training: bool = False,
 ):
     """
     Load different datasets based on the specified parameters and phase.
@@ -344,11 +346,11 @@ def set_dataset_filename(system_model_params: SystemModelParams, samples_size: f
         str: Suffix dataset filename
     """
     suffix_filename = (
-        f"_{system_model_params.signal_type}_"
-        + f"{system_model_params.signal_nature}_{samples_size}_M={system_model_params.M}_"
-        + f"N={system_model_params.N}_T={system_model_params.T}_SNR={system_model_params.snr}_"
-        + f"eta={system_model_params.eta}_sv_noise_var{system_model_params.sv_noise_var}_"
-        + f"bias={system_model_params.bias}_"
-        + ".h5"
+            f"_{system_model_params.signal_type}_"
+            + f"{system_model_params.signal_nature}_{samples_size}_M={system_model_params.M}_"
+            + f"N={system_model_params.N}_T={system_model_params.T}_SNR={system_model_params.snr}_"
+            + f"eta={system_model_params.eta}_sv_noise_var{system_model_params.sv_noise_var}_"
+            + f"bias={system_model_params.bias}_"
+            + ".h5"
     )
     return suffix_filename

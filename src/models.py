@@ -41,6 +41,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import numpy as np
+import scipy as sc
 import warnings
 from src.utils import gram_diagonal_overload, device
 from src.utils import sum_of_diags_torch, find_roots_torch
@@ -351,7 +352,7 @@ class SubspaceNet(nn.Module):
             fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
             limit = N // 2
             self.array = torch.linspace(-limit, limit, N)
-            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 180, dtype=torch.float, device=device)
+            self.theta_range = torch.linspace(-1 * torch.pi / 3, torch.pi / 3, 180, dtype=torch.float, device=device)
             self.distance_range = torch.arange(fersnel, franhofer, 0.1, dtype=torch.float, device=device)
             self.search_grid = self.set_search_grid(self.theta_range, self.distance_range).type(
                 torch.complex64).detach()
@@ -440,7 +441,7 @@ class SubspaceNet(nn.Module):
 
         return torch.exp(2 * -1j * np.pi * time_delay)
 
-    def forward(self, Rx_tau: torch.Tensor):
+    def forward(self, Rx_tau: torch.Tensor, is_soft=True):
         """
         Performs the forward pass of the SubspaceNet.
 
@@ -506,7 +507,8 @@ class SubspaceNet(nn.Module):
                                                                    self.M,
                                                                    self.search_grid,
                                                                    self.theta_range,
-                                                                   self.distance_range)
+                                                                   self.distance_range,
+                                                                   is_soft=is_soft)
             return doa_prediction, distance_prediction, Rz
 
 
@@ -689,7 +691,6 @@ class SubspaceNetMUSIC2D(SubspaceNet):
         if not inverse_spectrum.isreal().all():
             raise ValueError("Music spectrum must to be real!")
         music_spectrum = 1 / torch.real(inverse_spectrum)
-
         doa, distance = self.maskpeaks(music_spectrum, number_of_sources)
         torch.autograd.set_detect_anomaly(False)
 
@@ -1094,7 +1095,8 @@ def esprit(Rz: torch.Tensor, M: int, batch_size: int):
     return torch.stack(doa_batches, dim=0)
 
 
-def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, theta_range, distance_range) -> tuple:
+def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, theta_range, distance_range,
+             is_soft: bool = True) -> tuple:
     """
 
         Args:
@@ -1107,18 +1109,18 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
     torch.autograd.set_detect_anomaly(True)
 
     # using for loops
-    # music_spectrum = torch.zeros((Rz.shape[0], len(self.theta_range), len(self.distance_range)), dtype=torch.float)
+    # music_spectrum = torch.zeros((Rz.shape[0], len(theta_range), len(distance_range)), dtype=torch.complex64)
     # for batch in range(Rz.shape[0]):
     #     R = Rz[batch]
     #     eigenvalues, eigenvectors = torch.linalg.eig(R)
     #     sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
     #     Un = eigenvectors[sorted_indxs][:, number_of_sources].unsqueeze(1)
-    #     for t, theta in enumerate(self.theta_range):
-    #         for d, distance in enumerate(self.distance_range):
-    #             A = self.compute_steering_vector(theta, distance).squeeze(1)
+    #     for t, theta in enumerate(theta_range):
+    #         for d, distance in enumerate(distance_range):
+    #             A = search_grid[:, t, d]
     #             core_equiation = A.conj().T @ Un @ Un.conj().T @ A
-    #             music_spectrum[batch, t, d] = 1 / core_equiation
-    start = time.time()
+    #             music_spectrum[batch, t, d] = 1 / torch.real(core_equiation)
+
     # using einsum
     # Extract eigenvalues and eigenvectors using EVD
     eigenvalues, eigenvectors = torch.linalg.eig(Rz)
@@ -1133,11 +1135,29 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
     if not inverse_spectrum.isreal().all():
         raise ValueError("Music spectrum must to be real!")
     music_spectrum = 1 / torch.real(inverse_spectrum)
-
-    doa, distance = maskpeaks(music_spectrum, number_of_sources, theta_range, distance_range)
+    if is_soft:
+        doa, distance = maskpeaks(music_spectrum, number_of_sources, theta_range, distance_range)
+    else:
+        doa, distance = find_spectrum_peaks(music_spectrum, number_of_sources, theta_range, distance_range)
     torch.autograd.set_detect_anomaly(False)
 
     return torch.Tensor(doa), torch.Tensor(distance)
+
+
+def find_spectrum_peaks(music_spectrum, number_of_sources, theta_range, distance_range):
+    music_spectrum = music_spectrum.detach().numpy().squeeze()
+    # Flatten the spectrum
+    spectrum_flatten = music_spectrum.flatten()
+    # Find spectrum peaks
+    peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
+    # Sort the peak by their amplitude
+    peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
+    # convert the peaks to 2d indices
+    original_idx = np.unravel_index(peaks, music_spectrum.shape)
+    predict_theta = theta_range[original_idx[0]][0:number_of_sources]
+    predict_dist = distance_range[original_idx[1]][0:number_of_sources]
+
+    return predict_theta, predict_dist
 
 
 def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch.Tensor,
@@ -1158,7 +1178,7 @@ def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch
 
     soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
     soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-    cell_size = 20
+    cell_size = 5
     for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
         max_row_cell_idx = (max_r \
                             - cell_size \

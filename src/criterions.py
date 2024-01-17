@@ -73,6 +73,7 @@ def permute_prediction(prediction: torch.Tensor):
         
     """
     torch_perm_list = []
+    prediction = torch.atleast_1d(prediction)
     for p in list(permutations(range(prediction.shape[0]), prediction.shape[0])):
         torch_perm_list.append(prediction.index_select(0, torch.tensor(list(p), dtype=torch.int64).to(device)))
     predictions = torch.stack(torch_perm_list, dim=0)
@@ -144,8 +145,8 @@ class RMSPELoss(nn.Module):
 
                 for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
                     # Calculate error with modulo pi
-                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / (2 * np.pi)
-                    distance_err = (prediction_distance - targets_distance)
+                    error = ((((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - (np.pi / 2)) / (np.pi / 2)
+                    distance_err = (prediction_distance - targets_distance) / 8
                     # add_line_to_file("output.txt", f"{error.item()}\t{distance_err.item()}\n")
                     error += distance_err
                     # Calculate RMSE over all permutations
@@ -266,8 +267,8 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
         p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
         doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error = (((p_doa - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / (2 * np.pi)
-        error += (p_distance - distance)
+        error = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2) /(np.pi / 2)
+        error += (p_distance - distance) / 8
         # Calculate RMSE over all permutations
         rmspe_val = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error)
         rmspe_list.append(rmspe_val)

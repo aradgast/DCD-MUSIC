@@ -88,7 +88,10 @@ def evaluate_dnn_model(
             X = X.to(device)
             DOA = DOA.to(device)
             # Get model output
-            model_output = model(X)
+            if model_type.startswith("SubspaceNet") and model.field_type.endswith("Near"):
+                model_output = model(X, is_soft=False)
+            else:
+                model_output = model(X)
             if model_type.startswith("DA-MUSIC"):
                 # Deep Augmented MUSIC
                 DOA_predictions = model_output
