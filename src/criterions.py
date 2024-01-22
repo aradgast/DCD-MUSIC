@@ -104,9 +104,10 @@ class RMSPELoss(nn.Module):
 
     def __init__(self):
         super(RMSPELoss, self).__init__()
+        self.balance_factor = nn.Parameter(torch.Tensor([0.6]))
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
-                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None):
+                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
         """Compute the RMSPE loss between the predictions and target values.
         The forward method takes two input tensors: doa_predictions and doa.
         The predicted values and target values are expected to be in radians.
@@ -132,8 +133,12 @@ class RMSPELoss(nn.Module):
             None
         """
         rmspe = []
+        rmspe_angle = []
+        rmspe_distance = []
         for iter in range(doa_predictions.shape[0]):
             rmspe_list = []
+            rmspe_angle_list = []
+            rmspe_distance_list = []
             batch_predictions_doa = doa_predictions[iter].to(device)
             targets_doa = doa[iter].to(device)
             prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
@@ -145,13 +150,18 @@ class RMSPELoss(nn.Module):
 
                 for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
                     # Calculate error with modulo pi
-                    error = ((((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - (np.pi / 2)) / (np.pi / 2)
-                    distance_err = (prediction_distance - targets_distance) / 8
-                    # add_line_to_file("output.txt", f"{error.item()}\t{distance_err.item()}\n")
-                    error += distance_err
-                    # Calculate RMSE over all permutations
-                    rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
+                    angle_err = ((((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - (np.pi / 2))
+                    # Calculate error for distance
+                    distance_err = (prediction_distance - targets_distance)
+                    # Calculate RMSE over all permutations for each element
+                    rmspe_angle_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(angle_err)
+                    rmspe_distance_val = (1 / np.sqrt(len(targets_distance))) * torch.linalg.norm(distance_err)
+                    # Sum the rmpse with a balance factor
+                    rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
                     rmspe_list.append(rmspe_val)
+                    rmspe_angle_list.append(rmspe_distance_val)
+                    rmspe_distance_list.append(rmspe_angle_val)
+
             else:
                 for prediction_doa in prediction_perm_doa:
                     # Calculate error with modulo pi
@@ -160,12 +170,27 @@ class RMSPELoss(nn.Module):
                     rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
                     rmspe_list.append(rmspe_val)
             rmspe_tensor = torch.stack(rmspe_list, dim=0)
+            rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
+            rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
             # Choose minimal error from all permutations
-            rmspe_min = torch.min(rmspe_tensor)
-            rmspe.append(rmspe_min)
-        result = torch.sum(torch.stack(rmspe, dim=0))
+            if rmspe_tensor.shape[1] == 1:
+                rmspe_min = torch.min(rmspe_tensor)
+                rmspe_angle.append(rmspe_angle_tensor.item())
+                rmspe_distance.append(rmspe_distnace_tensor.item())
+            else:
+                rmspe_min, min_idx = torch.min(rmspe_tensor)
+                rmspe_angle.append(rmspe_angle_tensor[min_idx])
+                rmspe_distance.append(rmspe_distnace_tensor[min_idx])
 
-        return result
+            rmspe.append(rmspe_min)
+
+        result = torch.sum(torch.stack(rmspe, dim=0))
+        if is_separted:
+            result_angle = torch.sum(torch.stack(rmspe_angle, dim=0))
+            result_distance = torch.sum(torch.stack(rmspe_distance, dim=0))
+            return result, result_angle, result_distance
+        else:
+            return result
 
 
 class MSPELoss(nn.Module):
@@ -246,7 +271,7 @@ class MSPELoss(nn.Module):
 
 
 def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
-          distance_predictions: np.ndarray = None, distance: np.ndarray = None):
+          distance_predictions: np.ndarray = None, distance: np.ndarray = None, is_separted: bool = False):
     """
     Calculate the Root Mean Square Periodic Error (RMSPE) between the DOA predictions and target DOA values.
 
@@ -262,18 +287,32 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     Raises:
         None
     """
+    balance_factor = 0.6
     rmspe_list = []
+    rmspe_angle_list = []
+    rmspe_distance_list = []
     for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))), list(permutations(distance_predictions, len(distance_predictions)))):
         p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
         doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2) /(np.pi / 2)
-        error += (p_distance - distance) / 8
+        error_angle = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2)
+        error_distance = (p_distance - distance)
         # Calculate RMSE over all permutations
-        rmspe_val = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error)
+        rmspe_angle = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error_angle)
+        rmspe_distance = (1 / np.sqrt(len(p_distance), dtype=np.float64)) * np.linalg.norm(error_distance)
+        rmspe_val = balance_factor * rmspe_angle + (1 - balance_factor) * rmspe_distance
         rmspe_list.append(rmspe_val)
+        rmspe_angle_list.append(rmspe_angle)
+        rmspe_distance_list.append(rmspe_distance)
     # Choose minimal error from all permutations
-    return np.min(rmspe_list)
+    if is_separted:
+        rmspe, min_idx = np.min(rmspe_list)
+        rmspe_angle = rmspe_angle_list[min_idx]
+        rmspe_distance = rmspe_distance_list[min_idx]
+        res = rmspe, rmspe_angle, rmspe_distance
+    else:
+        res = np.min(rmspe_list)
+    return res
 
 
 def MSPE(doa_predictions: np.ndarray, doa: np.ndarray):

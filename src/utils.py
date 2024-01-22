@@ -170,6 +170,9 @@ def set_unified_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 # def get_k_angles(grid_size: float, k: int, prediction: torch.Tensor) -> torch.Tensor:

@@ -83,7 +83,7 @@ if __name__ == "__main__":
         .set_parameter("N", 5)
         .set_parameter("M", 1)
         .set_parameter("T", 100)
-        .set_parameter("snr", 0)
+        .set_parameter("snr", -20)
         .set_parameter("field_type", "Near")
         .set_parameter("signal_type", "NarrowBand")
         .set_parameter("signal_nature", "non-coherent")
@@ -97,12 +97,12 @@ if __name__ == "__main__":
         .set_model_type("SubspaceNet")
         .set_field_type(system_model_params.field_type)
         .set_diff_method("music_2D")
-        .set_tau(1)
+        .set_tau(5)
         .set_model(system_model_params)
     )
     # Define samples size
     samples_size = 100  # Overall dateset size
-    train_test_ratio = 0.1  # training and testing datasets ratio
+    train_test_ratio = 1  # training and testing datasets ratio
     # Sets simulation filename
     simulation_filename = get_simulation_filename(
         system_model_params=system_model_params, model_config=model_config
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         simulation_parameters = (
             TrainingParams()
             .set_batch_size(64)
-            .set_epochs(100)
+            .set_epochs(5)
             .set_model(model=model_config)
             .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
             .set_training_dataset(train_dataset)

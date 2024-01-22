@@ -27,6 +27,7 @@ evaluate: Wrapper function for model and algorithm evaluations.
 
 
 """
+import numpy as np
 # Imports
 import torch.nn as nn
 from matplotlib import pyplot as plt
@@ -46,7 +47,7 @@ def evaluate_dnn_model(
     plot_spec: bool = False,
     figures: dict = None,
     model_type: str = "SubspaceNet",
-):
+    is_separted: bool = False):
     """
     Evaluate the DNN model on a given dataset.
 
@@ -126,7 +127,7 @@ def evaluate_dnn_model(
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
                 if model.field_type.endswith("Near"):
-                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
+                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
@@ -250,7 +251,7 @@ def evaluate_model_based(
     plot_spec=False,
     algorithm: str = "music",
     figures: dict = None,
-):
+    is_separted: bool = False):
     """
     Evaluate different model-based algorithms on a given dataset.
 
@@ -270,6 +271,8 @@ def evaluate_model_based(
     """
     # Initialize parameters for evaluation
     loss_list = []
+    loss_list_angle = []
+    loss_list_distance = []
     if algorithm.endswith("2D"):
         music_2d = MUSIC_2D(system_model)
     for i, data in enumerate(dataset):
@@ -366,14 +369,22 @@ def evaluate_model_based(
             y = doa[0]
             doa, distances = y[:len(y)//2], y[len(y)//2:]
             doa_prediction, distance_prediction, _, _ = music_2d.narrowband(X)
-            loss = criterion(doa_prediction, doa, distance_prediction, distances)
-            loss_list.append(loss)
+            if is_separted:
+                rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances, is_separted)
+                loss_list_angle.append(rmspe_angle)
+                loss_list_distance.append(rmspe_distance)
+            else:
+                rmspe = criterion(doa_prediction, doa, distance_prediction, distances)
+            loss_list.append(rmspe)
 
         else:
             raise Exception(
                 f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
             )
-    return np.mean(loss_list)
+    if is_separted:
+        return np.mean(loss_list), np.mean(loss_list_angle), np.mean(loss_list_distance)
+    else:
+        return np.mean(loss_list)
 
 
 def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):
@@ -464,6 +475,7 @@ def evaluate(
         plot_spec=plot_spec,
         figures=figures,
         model_type=model_type,
+        is_separted=True
     )
     print(f"{model_type} Test loss = {model_test_loss}")
     # Evaluate SubspaceNet augmented methods
@@ -487,5 +499,6 @@ def evaluate(
             plot_spec=plot_spec,
             algorithm=algorithm,
             figures=figures,
+            is_separted=True
         )
         print("{} test loss = {}".format(algorithm.lower(), loss))
