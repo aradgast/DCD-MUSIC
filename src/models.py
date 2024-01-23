@@ -713,7 +713,7 @@ class SubspaceNetMUSIC2D(SubspaceNet):
 
         soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
         soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-        cell_size = 20
+        cell_size = 10
         for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
             max_row_cell_idx = (max_r \
                                 - cell_size \

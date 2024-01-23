@@ -186,8 +186,8 @@ class RMSPELoss(nn.Module):
 
         result = torch.sum(torch.stack(rmspe, dim=0))
         if is_separted:
-            result_angle = torch.sum(torch.stack(rmspe_angle, dim=0))
-            result_distance = torch.sum(torch.stack(rmspe_distance, dim=0))
+            result_angle = torch.sum(torch.Tensor(rmspe_angle))
+            result_distance = torch.sum(torch.Tensor(rmspe_distance))
             return result, result_angle, result_distance
         else:
             return result
@@ -306,7 +306,7 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
         rmspe_distance_list.append(rmspe_distance)
     # Choose minimal error from all permutations
     if is_separted:
-        rmspe, min_idx = np.min(rmspe_list)
+        rmspe, min_idx = np.min(rmspe_list), np.argmin(rmspe_list)
         rmspe_angle = rmspe_angle_list[min_idx]
         rmspe_distance = rmspe_distance_list[min_idx]
         res = rmspe, rmspe_angle, rmspe_distance

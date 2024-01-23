@@ -38,8 +38,6 @@ from pathlib import Path
 from src.system_model import SystemModelParams
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-np.random.seed(0)
-torch.random.seed()
 
 
 def create_dataset(
