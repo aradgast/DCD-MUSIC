@@ -157,8 +157,8 @@ class SystemModel(object):
         wavelength = 1
         spacing = wavelength / 2
         diemeter = (self.params.N - 1) * spacing
-        fraunhofer = 2 * diemeter ** 2 / wavelength
-        fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+        fraunhofer = np.floor(2 * diemeter ** 2 / wavelength)
+        fresnel = np.ceil(0.62 * (diemeter ** 3 / wavelength) ** 0.5)
 
         return fraunhofer, fresnel
 

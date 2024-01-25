@@ -73,13 +73,14 @@ class Samples(SystemModel):
             """
             M = self.params.M
             while True:
-                DOA = np.round(np.random.rand(M) * 120, decimals=2) - 60
+                # DOA = np.round(np.random.rand(M) * 180, decimals=0) - 90
+                DOA = np.random.randint(-90, 0, M) * 2 + 90
                 DOA.sort()
                 diff_angles = np.array(
                     [np.abs(DOA[i + 1] - DOA[i]) for i in range(M - 1)]
                 )
                 if (np.sum(diff_angles > gap) == M - 1) and (
-                    np.sum(diff_angles < (120 - gap)) == M - 1
+                    np.sum(diff_angles < (180 - gap)) == M - 1
                 ):
                     break
             return DOA
@@ -107,7 +108,7 @@ class Samples(SystemModel):
             distances = np.zeros(self.params.M)
             idx = 0
             while idx < self.params.M:
-                distance = np.round(np.random.uniform(min_val, max_val), decimals=2)
+                distance = np.round(np.random.uniform(min_val, max_val), decimals=0)
                 if len(distances) == 0:
                     distances[idx] = distance
                     idx += 1
