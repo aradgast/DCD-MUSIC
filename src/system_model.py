@@ -140,8 +140,7 @@ class SystemModel(object):
 
     def create_array(self):
         """create an array of sensors locations, around to origin."""
-        limit = self.params.N // 2
-        self.array = np.linspace(-limit, limit, self.params.N)
+        self.array = np.linspace(0, self.params.N, self.params.N)
 
     def calc_fresnel_fraunhofer_distance(self) -> tuple:
         """
@@ -260,7 +259,7 @@ class SystemModel(object):
         if not generate_search_grid:
             time_delay = np.zeros((len(self.array), len(theta)))
             for idx, (doa, dist) in enumerate(zip(theta, distance)):
-                first_order = np.abs(self.array) * np.sin(doa) * self.dist[self.params.signal_type]
+                first_order = self.array * np.sin(doa) * self.dist[self.params.signal_type]
                 second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array * self.dist[self.params.signal_type], 2), dist)
                 time_delay[:, idx] = first_order + second_order
 

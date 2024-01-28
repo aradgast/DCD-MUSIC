@@ -42,7 +42,7 @@ plt.close("all")
 
 
 if __name__ == "__main__":
-    snr_list = [10]
+    snr_list = [0]
     # snr_list = [-12, -10, -8, -6, -4, -2, 0, 2]
     for snr in snr_list:
         # Initialize seed
@@ -71,7 +71,7 @@ if __name__ == "__main__":
             "LOAD_DATA": False,  # Loading data from exist dataset
             "LOAD_MODEL": False,  # Load specific model for training
             "TRAIN_MODEL": True,  # Applying training operation
-            "SAVE_MODEL": True,  # Saving tuned model
+            "SAVE_MODEL": False,  # Saving tuned model
             "EVALUATE_MODE": True,  # Evaluating desired algorithms
         }
         # Saving simulation scores to external file
@@ -104,8 +104,8 @@ if __name__ == "__main__":
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 50000  # Overall dateset size
-        train_test_ratio = 0.05  # training and testing datasets ratio
+        samples_size = 512  # Overall dateset size
+        train_test_ratio = 0.1  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
             system_model_params=system_model_params, model_config=model_config
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                     save_datasets=True,
                     datasets_path=datasets_path,
                     true_doa=None,
-                    true_range=None,
+                    true_range=[3],
                     phase="train",
                 )
             if create_testing_data:
@@ -145,7 +145,7 @@ if __name__ == "__main__":
                     save_datasets=True,
                     datasets_path=datasets_path,
                     true_doa=None,
-                    true_range=None,
+                    true_range=[3],
                     phase="test",
                 )
         # Datasets loading
@@ -169,10 +169,10 @@ if __name__ == "__main__":
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(1024)
+                .set_batch_size(64)
                 .set_epochs(50)
                 .set_model(model=model_config)
-                .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
+                .set_optimizer(optimizer="Adam", learning_rate=0.01, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
                 .set_schedular(step_size=25, gamma=0.1)
                 .set_criterion()
