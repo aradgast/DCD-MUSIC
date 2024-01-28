@@ -462,7 +462,7 @@ class MUSIC_2D(MUSIC):
         max_col = (top_indxs % spectrum.shape[1]).astype(int)
         soft_row = []
         soft_col = []
-        cell_size = 20
+        cell_size = 10
         for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
             max_row_cell_idx = max_r - cell_size + \
                                np.arange(2 * cell_size + 1, dtype=int).reshape(-1, 1)
