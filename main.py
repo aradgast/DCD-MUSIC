@@ -85,7 +85,7 @@ if __name__ == "__main__":
             SystemModelParams()
             .set_parameter("N", 5)
             .set_parameter("M", 1)
-            .set_parameter("T", 100)
+            .set_parameter("T", 50)
             .set_parameter("snr", snr)
             .set_parameter("field_type", "Near")
             .set_parameter("signal_type", "NarrowBand")
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 512  # Overall dateset size
+        samples_size = 128  # Overall dateset size
         train_test_ratio = 0.1  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                     save_datasets=True,
                     datasets_path=datasets_path,
                     true_doa=None,
-                    true_range=[3],
+                    true_range=[6],
                     phase="train",
                 )
             if create_testing_data:
@@ -145,7 +145,7 @@ if __name__ == "__main__":
                     save_datasets=True,
                     datasets_path=datasets_path,
                     true_doa=None,
-                    true_range=[3],
+                    true_range=None,
                     phase="test",
                 )
         # Datasets loading
@@ -169,12 +169,12 @@ if __name__ == "__main__":
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(64)
-                .set_epochs(50)
+                .set_batch_size(32)
+                .set_epochs(10)
                 .set_model(model=model_config)
-                .set_optimizer(optimizer="Adam", learning_rate=0.01, weight_decay=1e-9)
+                .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
-                .set_schedular(step_size=25, gamma=0.1)
+                .set_schedular(step_size=45, gamma=0.1)
                 .set_criterion()
                 .set_field_type(system_model_params.field_type)
             )

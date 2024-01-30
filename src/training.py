@@ -386,6 +386,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             pass
         train_length = 0
         overall_train_loss = 0.0
+        overall_train_loss_angle = 0.0
+        overall_train_loss_distance = 0.0
         # Set model to train mode
         model.train()
         model = model.to(device)
@@ -419,7 +421,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     DOA_predictions.float(), DOA.float()
                 )
             elif training_params.field_type.startswith("Near"):
-                train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
+                train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
+                                                                                              DOA,
+                                                                                              RANGE_predictions,
+                                                                                              RANGE,
+                                                                                              True)
             else:
                 train_loss = training_params.criterion(DOA_predictions, DOA)
             # Back-propagation stage
@@ -438,8 +444,12 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             else:
                 # RMSPE is summed
                 overall_train_loss += train_loss.item()
+                overall_train_loss_angle += train_loss_angle.item()
+                overall_train_loss_distance += train_loss_distance.item()
         # Average the epoch training loss
         overall_train_loss = overall_train_loss / train_length
+        overall_train_loss_angle /= train_length
+        overall_train_loss_distance /= train_length
         loss_train_list.append(overall_train_loss)
         # Update schedular
         training_params.schedular.step()
@@ -457,6 +467,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 epoch + 1, training_params.epochs, overall_train_loss, valid_loss
             )
         )
+        print("RMSE ANGLE: {:.6f}, RMSE DISTANCE: {:.6f}".format(overall_train_loss_angle, overall_train_loss_distance))
         print("lr {}".format(training_params.optimizer.param_groups[0]["lr"]))
         # Save best model weights for early stoppings
         if min_valid_loss > valid_loss:

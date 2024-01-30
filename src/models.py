@@ -46,6 +46,7 @@ import warnings
 from src.utils import gram_diagonal_overload, device
 from src.utils import sum_of_diags_torch, find_roots_torch
 import time
+import matplotlib.pyplot as plt
 
 warnings.simplefilter("ignore")
 
@@ -334,8 +335,11 @@ class SubspaceNet(nn.Module):
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
         self.fully_linear1 = nn.Linear(128 * (2 * N - 3) * (N - 3), 128)
         self.fully_linear2 = nn.Linear(128, 32)
-        self.fully_linear3 = nn.Linear(32, 128)
-        self.fully_linear4 = nn.Linear(128, 128 * (2 * N - 3) * (N - 3))
+        self.fully_linear3_mu = nn.Linear(32, 8)
+        self.fully_linear3_logvar = nn.Linear(32, 8)
+        self.fully_linear4 = nn.Linear(8, 32)
+        self.fully_linear5 = nn.Linear(32, 128)
+        self.fully_linear6 = nn.Linear(128, 128 * (2 * N - 3) * (N - 3))
         self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
         self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2)
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
@@ -444,6 +448,11 @@ class SubspaceNet(nn.Module):
 
         return torch.exp(2 * -1j * np.pi * time_delay)
 
+    def reparmatrization(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
     def forward(self, Rx_tau: torch.Tensor, is_soft=True):
         """
         Performs the forward pass of the SubspaceNet.
@@ -476,12 +485,16 @@ class SubspaceNet(nn.Module):
 
         # # fully connected
         old_shape = x.shape
-        x = self.fully_linear1(x.view(x.shape[0], -1))
+        # x = self.fully_linear1(x.view(x.shape[0], -1))
         # x = self.fully_linear2(x)
-        # x = self.fully_linear3(x)
-        x = self.fully_linear4(x)
+        # mu = self.fully_linear3_mu(x).view(8, -1)
+        # logvar = self.fully_linear3_mu(x).view(8, -1)
+        # x = self.reparmatrization(mu, logvar).view(-1, 8)
+        # x = self.fully_linear4(x)
+        # x = self.fully_linear5(x)
+        # x = self.fully_linear6(x).view(old_shape)
         # DCNN block #2
-        x = self.deconv2(x.view(old_shape))
+        x = self.deconv2(x)
         x = self.anti_rectifier(x)
         # DCNN block #3
         x = self.deconv3(x)
@@ -946,17 +959,20 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
     #             music_spectrum[batch, t, d] = 1 / torch.real(core_equiation)
 
     # using einsum
-    # Extract eigenvalues and eigenvectors using EVD
-    eigenvalues, eigenvectors = torch.linalg.eig(Rz)
-    # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
-    sorted_indxs = torch.argsort(torch.real(eigenvalues), descending=True)
-    # Un = torch.zeros(Rz.shape[0], Rz.shape[1], Rz.shape[2] - number_of_sources).type(torch.complex64)
     music_spectrum = torch.zeros(Rz.shape[0], len(theta_range), len(distance_range))
     for batch in range(Rz.shape[0]):
-        Un = eigenvectors[batch][sorted_indxs[batch]][:, number_of_sources:]
-        var_1 = torch.transpose(search_grid.conj(), 0, 2) @ Un
-        inverse_spectrum = torch.norm(torch.transpose(var_1, 0, 1), dim=2)
+        # Extract eigenvalues and eigenvectors using EVD
+        eigenvalues, eigenvectors = torch.linalg.eig(Rz[batch])
+        # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
+        sorted_indxs = torch.argsort(torch.real(eigenvalues), descending=True)
+        Un = eigenvectors[sorted_indxs][:, number_of_sources:]
+        var_1 = torch.einsum("ijk, kl -> ijl", torch.transpose(search_grid.conj(), 0, 2), Un)
+        inverse_spectrum = torch.real(torch.einsum("ijk, kji -> ji", var_1, torch.transpose(var_1.conj(), 0, 2)))
         music_spectrum[batch] = 1 / inverse_spectrum
+    if False:
+        plot_3d_spectrum(spectrum=music_spectrum[0].detach().numpy(),
+                         theta_range=theta_range.detach().numpy(),
+                         distance_range=distance_range.detach().numpy())
     # var_1 = torch.einsum("dtn, bnm -> bdtm", torch.transpose(search_grid.conj(), 0, 2), Un)
     # var_2 = torch.transpose(var_1.conj(), -3, -1)
     # inverse_spectrum = torch.einsum("bijk, bkji -> bji", var_1, var_2)
@@ -1000,25 +1016,26 @@ def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch
         Returns:
 
         """
-    _, top_indxs = torch.topk(spectrum.view(spectrum.shape[0], -1), number_of_sources, dim=1)
+    top_indxs = torch.topk(spectrum.view(spectrum.shape[0], -1), number_of_sources, dim=1)[1]
     max_row = torch.div(top_indxs, spectrum.shape[2], rounding_mode="floor")
     max_col = torch.fmod(top_indxs, spectrum.shape[2]).int()
 
     soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
     soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-    cell_size = 5
+    cell_size_col = 1       # for distances
+    cell_size_row = 10      # for angles
     for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
         max_row_cell_idx = (max_r \
-                            - cell_size \
-                            + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
+                            - cell_size_row \
+                            + torch.arange(2 * cell_size_row + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
                     -1, max_r.shape[0])).to(device)
         max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0]
         max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[1]].view(-1, 1)
 
 
         max_col_cell_idx = (max_c \
-                            - cell_size \
-                            + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
+                            - cell_size_col \
+                            + torch.arange(2 * cell_size_col + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
                     -1, max_c.shape[0])).to(device)
         max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
         max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[2]].view(1, -1)
@@ -1036,3 +1053,41 @@ def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch
             soft_col[i, k] = distance_range[max_col_cell_idx_k] @ torch.sum(soft_max, dim=0)
 
     return soft_row, soft_col
+
+
+def plot_3d_spectrum(spectrum, theta_range, distance_range, highlight_coordinates=None):
+    """
+    Plot the MUSIC 2D spectrum.
+
+    """
+    # Creating figure
+    x, y = np.meshgrid(distance_range, np.rad2deg(theta_range))
+    # Plotting the 3D surface
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(x, y, 10 * np.log10(spectrum), cmap='viridis')
+
+    if highlight_coordinates:
+        highlight_coordinates = np.array(highlight_coordinates)
+        ax.scatter(
+            highlight_coordinates[:, 0],
+            np.rad2deg(highlight_coordinates[:, 1]),
+            np.log1p(highlight_coordinates[:, 2]),
+            color='red',
+            s=50,
+            label='Highlight Points'
+        )
+    ax.set_title('MUSIC spectrum')
+    ax.set_xlim(distance_range[0], distance_range[-1])
+    ax.set_ylim(np.rad2deg(theta_range[0]), np.rad2deg(theta_range[-1]))
+    # Adding labels
+    ax.set_ylabel('Theta [deg]')
+    ax.set_xlabel('Radius [m]')
+    ax.set_zlabel('Power [dB]')
+    plt.colorbar(ax.plot_surface(x, y, 10 * np.log10(spectrum), cmap='viridis'), shrink=0.5, aspect=5)
+
+    if highlight_coordinates:
+        ax.legend()  # Adding a legend
+
+    # Display the plot
+    plt.show()

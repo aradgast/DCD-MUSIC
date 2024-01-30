@@ -32,6 +32,7 @@ import numpy as np
 import torch.nn as nn
 import torch
 from itertools import permutations
+BALANCE_FACTOR = 1
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu");
 
@@ -104,7 +105,7 @@ class RMSPELoss(nn.Module):
 
     def __init__(self):
         super(RMSPELoss, self).__init__()
-        self.balance_factor = nn.Parameter(torch.Tensor([0.6]))
+        self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR]))
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
                 distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
@@ -137,13 +138,14 @@ class RMSPELoss(nn.Module):
         rmspe_distance = []
         for iter in range(doa_predictions.shape[0]):
             rmspe_list = []
-            rmspe_angle_list = []
-            rmspe_distance_list = []
+
             batch_predictions_doa = doa_predictions[iter].to(device)
             targets_doa = doa[iter].to(device)
             prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
 
             if distance is not None:
+                rmspe_angle_list = []
+                rmspe_distance_list = []
                 batch_predictions_distance = distance_predictions[iter].to(device)
                 targets_distance = distance[iter].to(device)
                 prediction_perm_distance = permute_prediction(batch_predictions_distance).to(device)
@@ -159,8 +161,21 @@ class RMSPELoss(nn.Module):
                     # Sum the rmpse with a balance factor
                     rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
                     rmspe_list.append(rmspe_val)
-                    rmspe_angle_list.append(rmspe_distance_val)
-                    rmspe_distance_list.append(rmspe_angle_val)
+                    rmspe_angle_list.append(rmspe_angle_val)
+                    rmspe_distance_list.append(rmspe_distance_val)
+                rmspe_tensor = torch.stack(rmspe_list, dim=0)
+                rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
+                rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
+                # Choose minimal error from all permutations
+                if rmspe_tensor.shape[1] == 1:
+                    rmspe_min = torch.min(rmspe_tensor)
+                    rmspe_angle.append(rmspe_angle_tensor.item())
+                    rmspe_distance.append(rmspe_distnace_tensor.item())
+                else:
+                    rmspe_min, min_idx = torch.min(rmspe_tensor)
+                    rmspe_angle.append(rmspe_angle_tensor[min_idx])
+                    rmspe_distance.append(rmspe_distnace_tensor[min_idx])
+                rmspe.append(rmspe_min)
 
             else:
                 for prediction_doa in prediction_perm_doa:
@@ -169,20 +184,9 @@ class RMSPELoss(nn.Module):
                     # Calculate RMSE over all permutations
                     rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
                     rmspe_list.append(rmspe_val)
-            rmspe_tensor = torch.stack(rmspe_list, dim=0)
-            rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
-            rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
-            # Choose minimal error from all permutations
-            if rmspe_tensor.shape[1] == 1:
+                rmspe_tensor = torch.stack(rmspe_list, dim=0)
                 rmspe_min = torch.min(rmspe_tensor)
-                rmspe_angle.append(rmspe_angle_tensor.item())
-                rmspe_distance.append(rmspe_distnace_tensor.item())
-            else:
-                rmspe_min, min_idx = torch.min(rmspe_tensor)
-                rmspe_angle.append(rmspe_angle_tensor[min_idx])
-                rmspe_distance.append(rmspe_distnace_tensor[min_idx])
-
-            rmspe.append(rmspe_min)
+                rmspe.append(rmspe_min)
 
         result = torch.sum(torch.stack(rmspe, dim=0))
         if is_separted:
@@ -287,7 +291,7 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     Raises:
         None
     """
-    balance_factor = 0.6
+    balance_factor = BALANCE_FACTOR
     rmspe_list = []
     rmspe_angle_list = []
     rmspe_distance_list = []
