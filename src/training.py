@@ -379,6 +379,10 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     min_valid_loss = np.inf
     # Set initial time for start training
     since = time.time()
+    grad_diff_norm = {}
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            grad_diff_norm[name] = 0.0
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
@@ -433,6 +437,26 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 train_loss.backward()
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
+
+            if epoch == 1:
+                print("#" * 10 + "EPOCH 1" + "#" * 10)
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        if param.grad is None:
+                            pass
+                        else:
+                            grad_diff_norm[name] = torch.norm(param.grad)
+                            print(f"{name} grad norm: {grad_diff_norm[name]}")
+            if epoch == 29:
+                print("#" * 10 + "EPOCH 30" + "#" * 10)
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        if param.grad is None:
+                            pass
+                        else:
+                            grad_diff_norm[name] = torch.norm(param.grad)
+                            print(f"{name} grad norm: {grad_diff_norm[name]}")
+                print("#" * 40)
             # optimizer update
             optimizer.step()
             # reset gradients
@@ -444,12 +468,12 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             else:
                 # RMSPE is summed
                 overall_train_loss += train_loss.item()
-                overall_train_loss_angle += train_loss_angle.item()
-                overall_train_loss_distance += train_loss_distance.item()
+                # overall_train_loss_angle += train_loss_angle.item()
+                # overall_train_loss_distance += train_loss_distance.item()
         # Average the epoch training loss
         overall_train_loss = overall_train_loss / train_length
-        overall_train_loss_angle /= train_length
-        overall_train_loss_distance /= train_length
+        # overall_train_loss_angle /= train_length
+        # overall_train_loss_distance /= train_length
         loss_train_list.append(overall_train_loss)
         # Update schedular
         training_params.schedular.step()
@@ -467,7 +491,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 epoch + 1, training_params.epochs, overall_train_loss, valid_loss
             )
         )
-        print("RMSE ANGLE: {:.6f}, RMSE DISTANCE: {:.6f}".format(overall_train_loss_angle, overall_train_loss_distance))
+        # print("RMSE ANGLE: {:.6f}, RMSE DISTANCE: {:.6f}".format(overall_train_loss_angle, overall_train_loss_distance))
         print("lr {}".format(training_params.optimizer.param_groups[0]["lr"]))
         # Save best model weights for early stoppings
         if min_valid_loss > valid_loss:

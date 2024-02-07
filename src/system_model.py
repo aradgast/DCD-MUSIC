@@ -223,7 +223,7 @@ class SystemModel(object):
             )
         # If calculation is applied through method (array mismatches are not known).
         else:
-            mis_distance, mis_geometry_noise = 0, 0
+            mis_distance, mis_geometry_noise, uniform_bias = 0, 0, 0
 
         return (
                 np.exp(
@@ -239,7 +239,7 @@ class SystemModel(object):
         )
 
     def steering_vec_near_field(self, theta: np.ndarray, distance: np.ndarray,f: float = 1, array_form="ULA",
-                                nominal=False, generate_search_grid: bool = False) -> np.ndarray:
+                                nominal=False, generate_search_grid: bool = False, known_angles: bool = False) -> np.ndarray:
         """
 
         Args:
@@ -256,39 +256,61 @@ class SystemModel(object):
         # define uniform deviation in spacing (for each sensor)
         if not nominal:
             raise Exception("Currently support only nominal sensor array")
-        if not generate_search_grid:
-            time_delay = np.zeros((len(self.array), len(theta)))
-            for idx, (doa, dist) in enumerate(zip(theta, distance)):
-                first_order = self.array * np.sin(doa) * self.dist[self.params.signal_type]
-                second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array * self.dist[self.params.signal_type], 2), dist)
-                time_delay[:, idx] = first_order + second_order
+        if not known_angles:
+            if not generate_search_grid:
+                time_delay = np.zeros((len(self.array), len(theta)))
+                for idx, (doa, dist) in enumerate(zip(theta, distance)):
+                    first_order = self.array * np.sin(doa) * self.dist[self.params.signal_type]
+                    second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array * self.dist[self.params.signal_type], 2), dist)
+                    time_delay[:, idx] = first_order + second_order
 
-            return np.exp(-1j
-                          * 2
-                          * np.pi
-                          * time_delay)
-        else:
+                return np.exp(-1j
+                              * 2
+                              * np.pi
+                              * time_delay)
+            else:
 
-            theta = np.atleast_1d(theta)[:, np.newaxis]
-            distance = np.atleast_1d(distance)[:, np.newaxis]
-            array = np.tile(self.array[:, np.newaxis], (1, self.params.N))
-            array_square = np.power(array, 2)
+                theta = np.atleast_1d(theta)[:, np.newaxis]
+                distance = np.atleast_1d(distance)[:, np.newaxis]
+                array = np.tile(self.array[:, np.newaxis], (1, self.params.N))
+                array_square = np.power(array, 2)
 
-            first_order = array @ np.tile(np.sin(theta), (1, self.params.N)).T * self.dist[self.params.signal_type]
-            first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
+                first_order = array @ np.tile(np.sin(theta), (1, self.params.N)).T * self.dist[self.params.signal_type]
+                first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
 
-            second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist[self.params.signal_type], 2), distance.T)
-            second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
-            second_order = np.einsum("ij, jkl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
+                second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist[self.params.signal_type], 2), distance.T)
+                second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
+                second_order = np.einsum("ij, jkl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
 
-            time_delay = first_order + second_order
+                time_delay = first_order + second_order
 
-            return np.exp(2
-                          * -1j
-                          * np.pi
-                          * time_delay
-                          # need to divide here by the wavelength, seems that for the narrowband scenrio, wavelength = 1 here.
-            )
+                return np.exp(2
+                              * -1j
+                              * np.pi
+                              * time_delay
+                              # need to divide here by the wavelength, seems that for the narrowband scenrio, wavelength = 1 here.
+                )
+        else: # known angles
+            if not generate_search_grid: # generate the steering vector for a known angles and distances
+                time_delay = np.zeros((len(self.array), len(theta)))
+                for idx, doa in enumerate(theta):
+                    first_order = self.array * np.sin(doa) * self.dist[self.params.signal_type]
+                    second_order = -0.5 * np.divide(np.power(np.cos(doa) * self.array * self.dist[self.params.signal_type], 2), distance)
+                    time_delay[:, idx] = first_order + second_order
+
+                return np.exp(-1j
+                              * 2
+                              * np.pi
+                              * time_delay)
+            else: # create a 1D grid for a known angles
+                distance_search_grid = np.zeros((len(theta), len(self.array), len(distance)))
+                for k, theta_k in enumerate(theta):
+                    time_delay = np.zeros((len(self.array), len(distance)))
+                    for idx, dist in enumerate(distance):
+                        first_order = self.array * np.sin(theta_k) * self.dist[self.params.signal_type]
+                        second_order = -0.5 * np.divide(np.power(np.cos(theta_k) * self.array * self.dist[self.params.signal_type], 2), dist)
+                        time_delay[:, idx] = first_order + second_order
+                    distance_search_grid[k] = np.exp(-1j * 2 * np.pi * time_delay)
 
 
     def __str__(self):

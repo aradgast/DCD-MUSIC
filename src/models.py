@@ -47,6 +47,7 @@ from src.utils import gram_diagonal_overload, device
 from src.utils import sum_of_diags_torch, find_roots_torch
 import time
 import matplotlib.pyplot as plt
+from torch.autograd import Variable
 
 warnings.simplefilter("ignore")
 
@@ -333,13 +334,13 @@ class SubspaceNet(nn.Module):
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
-        self.fully_linear1 = nn.Linear(128 * (2 * N - 3) * (N - 3), 128)
-        self.fully_linear2 = nn.Linear(128, 32)
-        self.fully_linear3_mu = nn.Linear(32, 8)
-        self.fully_linear3_logvar = nn.Linear(32, 8)
-        self.fully_linear4 = nn.Linear(8, 32)
-        self.fully_linear5 = nn.Linear(32, 128)
-        self.fully_linear6 = nn.Linear(128, 128 * (2 * N - 3) * (N - 3))
+        # self.fully_linear1 = nn.Linear(128 * (2 * N - 3) * (N - 3), 128)
+        # self.fully_linear2 = nn.Linear(128, 32)
+        # self.fully_linear3_mu = nn.Linear(32, 8)
+        # self.fully_linear3_logvar = nn.Linear(32, 8)
+        # self.fully_linear4 = nn.Linear(8, 32)
+        # self.fully_linear5 = nn.Linear(32, 128)
+        # self.fully_linear6 = nn.Linear(128, 128 * (2 * N - 3) * (N - 3))
         self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
         self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2)
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
@@ -359,10 +360,21 @@ class SubspaceNet(nn.Module):
             franhofer = np.floor(2 * diemeter ** 2 / wavelength)
             fersnel = np.ceil(0.62 * (diemeter ** 3 / wavelength) ** 0.5)
             self.array = torch.linspace(0, N, N)
-            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, dtype=torch.float, device=device)
-            self.distance_range = torch.arange(np.floor(fersnel), np.round(franhofer + 0.5), 1, dtype=torch.float, device=device)
+            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, dtype=torch.float,
+                                              device=device).requires_grad_(True)
+            self.distance_range = torch.arange(np.floor(fersnel), np.round(franhofer + 0.5), 1, dtype=torch.float,
+                                               device=device).requires_grad_(True)
             self.search_grid = self.set_search_grid(self.theta_range, self.distance_range).type(
-                torch.complex64).detach()
+                torch.complex64).requires_grad_(True)
+        elif diff_method.startswith("music_nf_1D"):
+            wavelength = 1
+            spacing = wavelength / 2
+            diemeter = (N - 1) * spacing
+            franhofer = np.floor(2 * diemeter ** 2 / wavelength)
+            fersnel = np.ceil(0.62 * (diemeter ** 3 / wavelength) ** 0.5)
+            self.array = torch.linspace(0, N, N)
+            self.distance_range = torch.arange(np.floor(fersnel), np.round(franhofer + 0.5), 1, dtype=torch.float,
+                                               device=device).requires_grad_(True)
 
     def set_field_type(self, field_type: str):
         """
@@ -453,7 +465,7 @@ class SubspaceNet(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def forward(self, Rx_tau: torch.Tensor, is_soft=True):
+    def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
         """
         Performs the forward pass of the SubspaceNet.
 
@@ -484,7 +496,7 @@ class SubspaceNet(nn.Module):
         x = self.anti_rectifier(x)
 
         # # fully connected
-        old_shape = x.shape
+        # old_shape = x.shape
         # x = self.fully_linear1(x.view(x.shape[0], -1))
         # x = self.fully_linear2(x)
         # mu = self.fully_linear3_mu(x).view(8, -1)
@@ -526,13 +538,20 @@ class SubspaceNet(nn.Module):
             return doa_prediction, doa_all_predictions, roots, Rz
 
         elif self.field_type == "Near":
-            doa_prediction, distance_prediction = self.diff_method(Rz,
-                                                                   self.M,
-                                                                   self.search_grid,
-                                                                   self.theta_range,
-                                                                   self.distance_range,
-                                                                   is_soft=is_soft)
-            return doa_prediction, distance_prediction, Rz
+            if known_angles is None:
+                doa_prediction, distance_prediction = self.diff_method(Rz,
+                                                                       self.M,
+                                                                       self.search_grid,
+                                                                       self.theta_range,
+                                                                       self.distance_range,
+                                                                       is_soft=is_soft)
+                return doa_prediction, distance_prediction, Rz
+            else: # the angles are known
+                search_grid = self.set_search_grid(known_angles, self.distance_range)
+                distance_prediction = music_nf_1d(Rz, self.M, search_grid, self.distance_range, is_soft=is_soft)
+                return distance_prediction, Rz
+
+
 
 
 class SubspaceNetEsprit(SubspaceNet):
@@ -932,6 +951,41 @@ def esprit(Rz: torch.Tensor, M: int, batch_size: int):
     return torch.stack(doa_batches, dim=0)
 
 
+def music_nf_1d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, distance_range,
+                is_soft: bool = True) -> torch.Tensor:
+    """
+    This function is for 1D search over the distance range, and it is intended for the near-field scenario.
+    Args:
+        Rz:
+        number_of_sources:
+        search_grid:
+        distance_range:
+        is_soft:
+    Returns:
+        torch.Tensor: The predicted range, over all batches.
+
+    """
+    torch.autograd.set_detect_anomaly(True)
+    music_spectrum = torch.zeros(Rz.shape[0], len(distance_range))  # 1D search grid
+    for batch in range(Rz.shape[0]):
+        R = Rz[batch]
+        eigenvalues, eigenvectors = torch.linalg.eig(R)
+        sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
+        Un = eigenvectors[sorted_indxs][:, number_of_sources]
+        for d, distance in enumerate(distance_range):
+            A = search_grid[:, d]
+            core_equiation = A.conj().T @ Un @ Un.conj().T @ A
+            if not core_equiation.isreal():
+                raise ValueError("Music spectrum must to be real!")
+            music_spectrum[batch, d] = 1 / torch.real(core_equiation)
+    if is_soft:
+        distances = maskpeaks_1d(music_spectrum, number_of_sources, distance_range)
+    else:
+        distances = find_spectrum_peaks_1d(music_spectrum, number_of_sources, distance_range)
+    torch.autograd.set_detect_anomaly(False)
+    return distances
+
+
 def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, theta_range, distance_range,
              is_soft: bool = True) -> tuple:
     """
@@ -980,32 +1034,72 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
     #     raise ValueError("Music spectrum must to be real!")
     # music_spectrum = 1 / torch.real(inverse_spectrum)
     if is_soft:
-        doa, distance = maskpeaks(music_spectrum, number_of_sources, theta_range, distance_range)
+        doa, distance = maskpeaks_2d(music_spectrum, number_of_sources, theta_range, distance_range)
     else:
-        doa, distance = find_spectrum_peaks(music_spectrum, number_of_sources, theta_range, distance_range)
+        doa, distance = find_spectrum_peaks_2d(music_spectrum, number_of_sources, theta_range, distance_range)
     torch.autograd.set_detect_anomaly(False)
 
     return torch.Tensor(doa), torch.Tensor(distance)
 
 
-def find_spectrum_peaks(music_spectrum, number_of_sources, theta_range, distance_range):
-    music_spectrum = music_spectrum.detach().numpy().squeeze()
-    # Flatten the spectrum
-    spectrum_flatten = music_spectrum.flatten()
-    # Find spectrum peaks
-    peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
-    # Sort the peak by their amplitude
-    peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
-    # convert the peaks to 2d indices
-    original_idx = np.unravel_index(peaks, music_spectrum.shape)
-    predict_theta = theta_range[original_idx[0]][0:number_of_sources]
-    predict_dist = distance_range[original_idx[1]][0:number_of_sources]
+def find_spectrum_peaks_1d(music_spectrum, number_of_sources, distance_range) -> torch.Tensor:
+    predict_dist = torch.zeros(music_spectrum.shape[0], number_of_sources)
+    for batch in range(music_spectrum.shape[0]):
+        music_spectrum = music_spectrum[batch].detach().numpy().squeeze()
+        # Find spectrum peaks
+        peaks = list(sc.signal.find_peaks(music_spectrum)[0])
+        # Sort the peak by their amplitude
+        peaks.sort(key=lambda x: music_spectrum[x], reverse=True)
+        predict_dist = distance_range[peaks[0:number_of_sources]]
 
-    return predict_theta, predict_dist
+    return torch.Tensor(predict_dist)
 
 
-def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch.Tensor,
-              distance_range: torch.Tensor) -> tuple:
+def find_spectrum_peaks_2d(music_spectrum, number_of_sources, theta_range, distance_range) -> tuple:
+    predict_theta = np.zeros((music_spectrum.shape[0], number_of_sources))
+    predict_dist = np.zeros((music_spectrum.shape[0], number_of_sources))
+    for batch in range(music_spectrum.shape[0]):
+        music_spectrum = music_spectrum[batch].detach().numpy().squeeze()
+        # Flatten the spectrum
+        spectrum_flatten = music_spectrum.flatten()
+        # Find spectrum peaks
+        peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
+        # Sort the peak by their amplitude
+        peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
+        # convert the peaks to 2d indices
+        original_idx = np.unravel_index(peaks, music_spectrum.shape)
+        predict_theta[batch] = theta_range[original_idx[0]][0:number_of_sources]
+        predict_dist[batch] = distance_range[original_idx[1]][0:number_of_sources]
+
+    return torch.Tensor(predict_theta), torch.Tensor(predict_dist)
+
+def maskpeaks_1d(spectrum: torch.Tensor, number_of_sources: int, distance_range: torch.Tensor) -> torch.Tensor:
+    """
+Args:
+    spectrum:
+    number_of_sources:
+    distance_range:
+Returns:
+    torch.Tensor: The predicted range, over all batches.
+    """
+    soft_decision = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
+    cell_size = 1  # for distances
+    for batch in range(spectrum.shape[0]):
+        flat_spectrum = spectrum[batch].flatten()
+        top_indxs = torch.topk(flat_spectrum, number_of_sources, dim = 0)[1]
+        for i, max_idx in enumerate(top_indxs):
+            cell_idx = (
+                    max_idx - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
+            cell_idx = cell_idx[cell_idx >= 0]
+            cell_idx = cell_idx[cell_idx < spectrum.shape[0]]
+            metrix_thr = spectrum[batch, cell_idx]
+            soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
+            soft_decision[batch, i] = (distance_range @ torch.sum(soft_max, dim=0)).requires_grad_(True)
+
+    return soft_decision
+
+def maskpeaks_2d(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch.Tensor,
+                 distance_range: torch.Tensor) -> tuple:
     """
 
         Args:
@@ -1016,41 +1110,44 @@ def maskpeaks(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch
         Returns:
 
         """
-    top_indxs = torch.topk(spectrum.view(spectrum.shape[0], -1), number_of_sources, dim=1)[1]
-    max_row = torch.div(top_indxs, spectrum.shape[2], rounding_mode="floor")
-    max_col = torch.fmod(top_indxs, spectrum.shape[2]).int()
-
+    spectrum = Variable(spectrum, requires_grad=True)
+    theta_range = Variable(theta_range, requires_grad=True)
+    distance_range = Variable(distance_range, requires_grad=True)
     soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
     soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-    cell_size_col = 1       # for distances
-    cell_size_row = 10      # for angles
-    for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
-        max_row_cell_idx = (max_r \
-                            - cell_size_row \
-                            + torch.arange(2 * cell_size_row + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
-                    -1, max_r.shape[0])).to(device)
-        max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0]
-        max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[1]].view(-1, 1)
+    cell_size_col = 1  # for distances
+    cell_size_row = 11  # for angles
 
+    for batch in range(spectrum.shape[0]):
+        flat_spectrum = spectrum[batch].flatten()
+        top_indxs = torch.topk(flat_spectrum, number_of_sources, dim=0)[1]
+        max_row = torch.div(top_indxs, spectrum.shape[2], rounding_mode="floor")
+        max_col = torch.fmod(top_indxs, spectrum.shape[2]).int()
+        for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
+            max_row_cell_idx = (
+                    max_r - cell_size_row + torch.arange(2 * cell_size_row + 1, dtype=torch.int32, device=device))
+            max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0]
+            max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[1]].view(-1, 1)
 
-        max_col_cell_idx = (max_c \
-                            - cell_size_col \
-                            + torch.arange(2 * cell_size_col + 1, dtype=torch.long, device=device).unsqueeze(1).expand(
-                    -1, max_c.shape[0])).to(device)
-        max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
-        max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[2]].view(1, -1)
-        for k in range(number_of_sources):
-            # max_row_cell_idx_k = torch.fmod(max_row_cell_idx[:, k].view(-1, 1), spectrum.shape[1])
-            # max_col_cell_idx_k = torch.fmod(max_col_cell_idx[:, k].view(1, -1), spectrum.shape[2])
-            max_row_cell_idx_k = max_row_cell_idx[:, k].view(-1, 1)
-            max_col_cell_idx_k = max_col_cell_idx[k, :].view(1, -1)
+            max_col_cell_idx = (
+                    max_c - cell_size_col + torch.arange(2 * cell_size_col + 1, dtype=torch.long, device=device))
+            max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
+            max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[2]].view(1, -1)
 
-            metrix_thr = spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k]# / torch.max(
-                # spectrum[i, max_row_cell_idx_k, max_col_cell_idx_k])
+            metrix_thr = spectrum[batch, max_row_cell_idx, max_col_cell_idx]
             soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
-
-            soft_row[i, k] = theta_range[max_row_cell_idx_k].T @ torch.sum(soft_max, dim=1)
-            soft_col[i, k] = distance_range[max_col_cell_idx_k] @ torch.sum(soft_max, dim=0)
+            left_pad = max(0, max_r - cell_size_row + 1)
+            right_pad = theta_range.shape[0] - left_pad - soft_max.shape[0]
+            soft_row[batch, i] = (theta_range.T @ torch.nn.functional.pad(torch.sum(soft_max, dim=1),
+                                                                          (left_pad, right_pad),
+                                                                          mode="constant", value=0)).requires_grad_(
+                True)
+            left_pad = max(0, max_c - cell_size_col + 1)
+            right_pad = distance_range.shape[0] - left_pad - soft_max.shape[1]
+            soft_col[batch, i] = (distance_range @ torch.nn.functional.pad(torch.sum(soft_max, dim=0),
+                                                                           (left_pad, right_pad),
+                                                                           mode="constant", value=0)).requires_grad_(
+                True)
 
     return soft_row, soft_col
 
