@@ -92,7 +92,10 @@ def evaluate_dnn_model(
             DOA = DOA.to(device)
             # Get model output
             if model_type.startswith("SubspaceNet") and model.field_type.endswith("Near"):
-                model_output = model(X, is_soft=False)
+                if model.theta_range is None:
+                    model_output = model(X, is_soft=False, known_angles=DOA)
+                else:
+                    model_output = model(X, is_soft=False)
             else:
                 model_output = model(X)
             if model_type.startswith("DA-MUSIC"):
@@ -117,9 +120,15 @@ def evaluate_dnn_model(
                     )
             elif model_type.startswith("SubspaceNet"):
                 if model.field_type.endswith("Near"):
-                    RANGE_predictions = model_output[1]
-                # Default - SubSpaceNet
-                DOA_predictions = model_output[0]
+                    if model.theta_range is None:
+                        RANGE_predictions = model_output[0]
+                        DOA_predictions = DOA
+                    else:
+                        RANGE_predictions = model_output[1]
+                        DOA_predictions = model_output[0]
+                elif model.field_type.endswith("Far"):
+                    # Default - SubSpaceNet
+                    DOA_predictions = model_output[0]
             else:
                 raise Exception(
                     f"evaluate_dnn_model: Model type {model_type} is not defined"

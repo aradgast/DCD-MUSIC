@@ -409,13 +409,21 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             DOA = Variable(DOA, requires_grad=True).to(device)
             # Get model output
             # t1 = time.time()
-            model_output = model(Rx)
+            if "music_1D" in model_name:
+                model_output = model(Rx, known_angles=DOA)
+            else:
+                model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
             if training_params.model_type.startswith("SubspaceNet"):
-                # Default - SubSpaceNet
-                DOA_predictions = model_output[0]
-                if training_params.field_type.startswith("Near"):
-                    RANGE_predictions = model_output[1]
+                if training_params.field_type.startswith("Far"):
+                    DOA_predictions = model_output[0]
+                elif training_params.field_type.startswith("Near"):
+                    if "music_1D" in model_name:
+                        RANGE_predictions = model_output[0]
+                        DOA_predictions = DOA
+                    else:
+                        DOA_predictions = model_output[0]
+                        RANGE_predictions = model_output[1]
             else:
                 # Deep Augmented MUSIC or DeepCNN
                 DOA_predictions = model_output
@@ -438,8 +446,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
 
-            if epoch == 1:
-                print("#" * 10 + "EPOCH 1" + "#" * 10)
+            if epoch % 30 == 0:
+                print("#" * 10 + f"EPOCH {epoch + 1}" + "#" * 10)
                 for name, param in model.named_parameters():
                     if param.requires_grad:
                         if param.grad is None:
@@ -447,16 +455,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                         else:
                             grad_diff_norm[name] = torch.norm(param.grad)
                             print(f"{name} grad norm: {grad_diff_norm[name]}")
-            if epoch == 29:
-                print("#" * 10 + "EPOCH 30" + "#" * 10)
-                for name, param in model.named_parameters():
-                    if param.requires_grad:
-                        if param.grad is None:
-                            pass
-                        else:
-                            grad_diff_norm[name] = torch.norm(param.grad)
-                            print(f"{name} grad norm: {grad_diff_norm[name]}")
-                print("#" * 40)
+
             # optimizer update
             optimizer.step()
             # reset gradients

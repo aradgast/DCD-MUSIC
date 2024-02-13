@@ -409,7 +409,7 @@ class MUSIC_2D(MUSIC):
     def __init__(self, system_model: SystemModel):
         super(MUSIC, self).__init__(system_model)
 
-        self._distances = np.arange(system_model.fresnel, system_model.fraunhofer, 1)
+        self._distances = np.arange(np.floor(system_model.fresnel), system_model.fraunhofer + 0.5, .1)
         self._angels = np.linspace(-1 * np.pi / 2, np.pi / 2, 90, endpoint=False)
         # Assign the frequency for steering vector calculation (multiplied in self.dist to get dist = 1/2)
         f = self.system_model.max_freq[self.system_model.params.signal_type]

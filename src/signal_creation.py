@@ -108,7 +108,7 @@ class Samples(SystemModel):
             distances = np.zeros(self.params.M)
             idx = 0
             while idx < self.params.M:
-                distance = np.round(np.random.uniform(min_val, max_val), decimals=0)
+                distance = np.round(np.random.uniform(min_val, max_val), decimals=1)
                 if len(distances) == 0:
                     distances[idx] = distance
                     idx += 1

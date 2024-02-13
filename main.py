@@ -85,7 +85,7 @@ if __name__ == "__main__":
             SystemModelParams()
             .set_parameter("N", 5)
             .set_parameter("M", 1)
-            .set_parameter("T", 50)
+            .set_parameter("T", 100)
             .set_parameter("snr", snr)
             .set_parameter("field_type", "Near")
             .set_parameter("signal_type", "NarrowBand")
@@ -99,13 +99,13 @@ if __name__ == "__main__":
             ModelGenerator()
             .set_model_type("SubspaceNet")
             .set_field_type(system_model_params.field_type)
-            .set_diff_method("music_2D")
+            .set_diff_method("music_1D")
             .set_tau(3)
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 32  # Overall dateset size
-        train_test_ratio = 0.1  # training and testing datasets ratio
+        samples_size = 16  # Overall dateset size
+        train_test_ratio = 0.5  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
             system_model_params=system_model_params, model_config=model_config
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                     save_datasets=True,
                     datasets_path=datasets_path,
                     true_doa=None,
-                    true_range=[6],
+                    true_range=None,
                     phase="train",
                 )
             if create_testing_data:
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                 .set_model(model=model_config)
                 .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
-                .set_schedular(step_size=25, gamma=0.1)
+                .set_schedular(step_size=30, gamma=0.1)
                 .set_criterion()
                 .set_field_type(system_model_params.field_type)
             )
