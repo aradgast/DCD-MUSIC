@@ -386,7 +386,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-        if epoch == 30:
+        if epoch == 900:
             pass
         train_length = 0
         overall_train_loss = 0.0

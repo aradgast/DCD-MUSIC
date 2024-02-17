@@ -53,7 +53,8 @@ warnings.simplefilter("ignore")
 
 
 # Constants
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
 
 
 class ModelGenerator(object):
@@ -377,7 +378,7 @@ class SubspaceNet(nn.Module):
             franhofer = np.floor(2 * diemeter ** 2 / wavelength)
             fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
             self.array = torch.linspace(0, N, N)
-            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .1, dtype=torch.float,
+            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .01, dtype=torch.float,
                                                device=device).requires_grad_(True)
 
     def set_field_type(self, field_type: str):
@@ -454,7 +455,7 @@ class SubspaceNet(nn.Module):
             theta = torch.atleast_1d(theta).unsqueeze(1)
         distances = torch.atleast_1d(distances).unsqueeze(1)
 
-        array = torch.tile(self.array.unsqueeze(1), (1, self.N))
+        array = torch.tile(self.array.unsqueeze(1), (1, self.N)).to(device)
         array_square = array.pow(2)
 
         first_order = array @ torch.tile(torch.sin(theta), (1, self.N)).t()
@@ -492,49 +493,51 @@ class SubspaceNet(nn.Module):
         # Rx_tau shape: [Batch size, tau, 2N, N]
         self.N = Rx_tau.shape[-1]
         self.batch_size = Rx_tau.shape[0]
-        ## Architecture flow ##
-        # CNN block #1
-        x = self.conv1(Rx_tau)
-        x = self.anti_rectifier(x)
-        # CNN block #2
-        x = self.conv2(x)
-        x = self.anti_rectifier(x)
-        # CNN block #3
-        x = self.conv3(x)
-        x = self.anti_rectifier(x)
-
-        # CNN block #4
-        # x = self.conv4(x)
+        ############################
+        # ## Architecture flow ##
+        # # CNN block #1
+        # x = self.conv1(Rx_tau)
         # x = self.anti_rectifier(x)
-
-        # fully connected
-        # old_shape = x.shape
-        # x = self.fc1(x.view(x.shape[0], -1))
-        # x = self.fc2(x)
-        # x = self.fc5(x)
-        # x = self.fc6(x).view(old_shape)
-        # DCNN block #1
-        # x = self.deconv1(x)
+        # # CNN block #2
+        # x = self.conv2(x)
         # x = self.anti_rectifier(x)
-        # DCNN block #2
-        x = self.deconv2(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #3
-        x = self.deconv3(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #4
-        x = self.DropOut(x)
-        Rx = self.deconv4(x)
-        # Reshape Output shape: [Batch size, 2N, N]
-        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
+        # # CNN block #3
+        # x = self.conv3(x)
+        # x = self.anti_rectifier(x)
+        #
+        # # CNN block #4
+        # # x = self.conv4(x)
+        # # x = self.anti_rectifier(x)
+        #
+        # # fully connected
+        # # old_shape = x.shape
+        # # x = self.fc1(x.view(x.shape[0], -1))
+        # # x = self.fc2(x)
+        # # x = self.fc5(x)
+        # # x = self.fc6(x).view(old_shape)
+        # # DCNN block #1
+        # # x = self.deconv1(x)
+        # # x = self.anti_rectifier(x)
+        # # DCNN block #2
+        # x = self.deconv2(x)
+        # x = self.anti_rectifier(x)
+        # # DCNN block #3
+        # x = self.deconv3(x)
+        # x = self.anti_rectifier(x)
+        # # DCNN block #4
+        # x = self.DropOut(x)
+        # Rx = self.deconv4(x)
+        # # Reshape Output shape: [Batch size, 2N, N]
+        # Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
+        Rx_View = Rx_tau[:, 0]
         Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
         Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
-        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
+        Rz = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(
-            Kx=Kx_tag, eps=1, batch_size=self.batch_size
-        )  # Shape: [Batch size, N, N]
+        # Rz = gram_diagonal_overload(
+        #     Kx=Kx_tag, eps=1, batch_size=self.batch_size
+        # )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
 
         if self.field_type == "Far":
@@ -977,7 +980,7 @@ def music_nf_1d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Ten
 
     """
     torch.autograd.set_detect_anomaly(True)
-    music_spectrum = torch.zeros(Rz.shape[0], len(distance_range))  # 1D search grid
+    music_spectrum = torch.zeros(Rz.shape[0], len(distance_range)).to(device)  # 1D search grid
     for batch in range(Rz.shape[0]):
         R = Rz[batch]
         search_grid_batch = search_grid[:, batch, :]
@@ -1060,7 +1063,7 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
 def find_spectrum_peaks_1d(music_spectrum, number_of_sources, distance_range) -> torch.Tensor:
     predict_dist = torch.zeros(music_spectrum.shape[0], number_of_sources)
     for batch in range(music_spectrum.shape[0]):
-        music_spectrum = music_spectrum[batch].detach().numpy().squeeze()
+        music_spectrum = music_spectrum[batch].cpu().detach().numpy().squeeze()
         # Find spectrum peaks
         peaks = list(sc.signal.find_peaks(music_spectrum)[0])
         # Sort the peak by their amplitude

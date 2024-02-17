@@ -69,9 +69,9 @@ if __name__ == "__main__":
             "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
             "CREATE_DATA": True,  # Creating new dataset
             "LOAD_DATA": False,  # Loading data from exist dataset
-            "LOAD_MODEL": False,  # Load specific model for training
+            "LOAD_MODEL": True,  # Load specific model for training
             "TRAIN_MODEL": True,  # Applying training operation
-            "SAVE_MODEL": False,  # Saving tuned model
+            "SAVE_MODEL": True,  # Saving tuned model
             "EVALUATE_MODE": True,  # Evaluating desired algorithms
         }
         # Saving simulation scores to external file
@@ -104,8 +104,8 @@ if __name__ == "__main__":
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 16  # Overall dateset size
-        train_test_ratio = 0.5  # training and testing datasets ratio
+        samples_size = 64  # Overall dateset size
+        train_test_ratio = 0.1  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
             system_model_params=system_model_params, model_config=model_config
@@ -131,7 +131,7 @@ if __name__ == "__main__":
                     tau=model_config.tau,
                     save_datasets=True,
                     datasets_path=datasets_path,
-                    true_doa=None,
+                    true_doa=[30],
                     true_range=None,
                     phase="train",
                 )
@@ -144,7 +144,7 @@ if __name__ == "__main__":
                     tau=model_config.tau,
                     save_datasets=True,
                     datasets_path=datasets_path,
-                    true_doa=None,
+                    true_doa=[30],
                     true_range=None,
                     phase="test",
                 )
@@ -169,12 +169,12 @@ if __name__ == "__main__":
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(16)
-                .set_epochs(100)
+                .set_batch_size(1024)
+                .set_epochs(2)
                 .set_model(model=model_config)
-                .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
+                .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
-                .set_schedular(step_size=30, gamma=0.1)
+                .set_schedular(step_size=50, gamma=0.1)
                 .set_criterion()
                 .set_field_type(system_model_params.field_type)
             )

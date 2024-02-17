@@ -34,7 +34,8 @@ import torch
 from itertools import permutations
 BALANCE_FACTOR = 0
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu");
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
 
 def add_line_to_file(file_name, line_to_add):
     try:
@@ -105,7 +106,7 @@ class RMSPELoss(nn.Module):
 
     def __init__(self):
         super(RMSPELoss, self).__init__()
-        self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR]))
+        self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(device)
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
                 distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
