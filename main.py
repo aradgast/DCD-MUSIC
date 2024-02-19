@@ -42,7 +42,7 @@ plt.close("all")
 
 
 if __name__ == "__main__":
-    snr_list = [0]
+    snr_list = [5]
     # snr_list = [-12, -10, -8, -6, -4, -2, 0, 2]
     for snr in snr_list:
         # Initialize seed
@@ -67,8 +67,8 @@ if __name__ == "__main__":
         # Operations commands
         commands = {
             "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
-            "CREATE_DATA": True,  # Creating new dataset
-            "LOAD_DATA": False,  # Loading data from exist dataset
+            "CREATE_DATA": False,  # Creating new dataset
+            "LOAD_DATA": True,  # Loading data from exist dataset
             "LOAD_MODEL": True,  # Load specific model for training
             "TRAIN_MODEL": True,  # Applying training operation
             "SAVE_MODEL": True,  # Saving tuned model
@@ -96,16 +96,16 @@ if __name__ == "__main__":
         )
         # Generate model configuration
         model_config = (
-            ModelGenerator()
+            ModelGenerator(SystemModelParams)
             .set_model_type("SubspaceNet")
             .set_field_type(system_model_params.field_type)
-            .set_diff_method("music_1D")
-            .set_tau(3)
+            .set_diff_method("music_2D")
+            .set_tau(8)
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 64  # Overall dateset size
-        train_test_ratio = 0.1  # training and testing datasets ratio
+        samples_size = 1024  # Overall dateset size
+        train_test_ratio = .1  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
             system_model_params=system_model_params, model_config=model_config
@@ -131,7 +131,7 @@ if __name__ == "__main__":
                     tau=model_config.tau,
                     save_datasets=True,
                     datasets_path=datasets_path,
-                    true_doa=[30],
+                    true_doa=None,
                     true_range=None,
                     phase="train",
                 )
@@ -144,7 +144,7 @@ if __name__ == "__main__":
                     tau=model_config.tau,
                     save_datasets=True,
                     datasets_path=datasets_path,
-                    true_doa=[30],
+                    true_doa=None,
                     true_range=None,
                     phase="test",
                 )
@@ -169,8 +169,8 @@ if __name__ == "__main__":
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(1024)
-                .set_epochs(2)
+                .set_batch_size(256)
+                .set_epochs(100)
                 .set_model(model=model_config)
                 .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)

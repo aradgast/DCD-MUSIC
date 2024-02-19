@@ -101,7 +101,7 @@ class SubspaceMethod(object):
         --------
             covariance_mat (np.ndarray): Covariance matrix.
 
-        Raises:
+        Raises:narrowband
         -------
             Exception: If the given model for covariance calculation is not from SubspaceNet type.
             Exception: If the covariance calculation mode is not defined.
@@ -422,9 +422,8 @@ class MUSIC_2D(MUSIC):
 
         """
 
-        var_1 = np.einsum("ijk,kl->ijl", np.transpose(self.grid.conj(), (2, 1, 0)), noise_eig_vecs)
-        var_2 = np.transpose(var_1.conj(), (2, 1, 0))
-        inverse_spectrum = np.real(np.einsum("ijk,kji->ji", var_1, var_2))
+        var_1 = np.einsum("ijk,kl->ijl", np.transpose(self.grid.conj(), (1, 2, 0)), noise_eig_vecs)
+        inverse_spectrum = np.real(np.linalg.norm(var_1, axis=2))
         music_spectrum = 1 / inverse_spectrum
         return music_spectrum, inverse_spectrum
 

@@ -442,7 +442,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 train_loss = training_params.criterion(DOA_predictions, DOA)
             # Back-propagation stage
             try:
-                train_loss.backward()
+                train_loss.backward(retain_graph=True)
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
 

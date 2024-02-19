@@ -62,7 +62,7 @@ class ModelGenerator(object):
     Generates an instance of the desired model, according to model configuration parameters.
     """
 
-    def __init__(self):
+    def __init__(self, system_model=None):
         """
         Initialize ModelParams object.
         """
@@ -71,6 +71,7 @@ class ModelGenerator(object):
         self.diff_method = None
         self.tau = None
         self.model = None
+        self.system_model = system_model
 
     def set_field_type(self, field_type: str = None):
         """
@@ -184,7 +185,8 @@ class ModelGenerator(object):
                                      M=system_model_params.M,
                                      N=system_model_params.N,
                                      diff_method=self.diff_method,
-                                     field_type=self.field_type)
+                                     field_type=self.field_type,
+                                     system_model = self.system_model)
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
 
@@ -317,7 +319,7 @@ class SubspaceNet(nn.Module):
 
     """
 
-    def __init__(self, tau: int, M: int, N: int, diff_method: str = "root_music", field_type: str = "Far"):
+    def __init__(self, tau: int, M: int, N: int, diff_method: str = "root_music", field_type: str = "Far", system_model=None):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -337,13 +339,13 @@ class SubspaceNet(nn.Module):
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
         # self.conv4 = nn.Conv2d(128, 128, kernel_size=2)
-        # self.fc1 = nn.Sequential(nn.Linear(256 * (2 * N - 4) * (N - 4), 256),
+        # self.fc1 = nn.Sequential(nn.Linear(128 * (2 * N - 3) * (N - 3), 128),
         #                          nn.ReLU(), nn.Dropout(self.p))
         # self.fc2 = nn.Sequential(nn.Linear(256, 128),
         #                          nn.LeakyReLU(), nn.Dropout(self.p))
         # self.fc5 = nn.Sequential(nn.Linear(128, 256),
         #                          nn.ReLU(), nn.Dropout(self.p))
-        # self.fc6 = nn.Sequential(nn.Linear(256, 256 * (2 * N - 4) * (N - 4)),
+        # self.fc6 = nn.Sequential(nn.Linear(128, 128 * (2 * N - 3) * (N - 3)),
         #                          nn.LeakyReLU(), nn.Dropout(self.p))
         # self.deconv1 = nn.ConvTranspose2d(256, 64, kernel_size=2)
         self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
@@ -365,10 +367,8 @@ class SubspaceNet(nn.Module):
             franhofer = np.floor(2 * diemeter ** 2 / wavelength)
             fersnel = np.ceil(0.62 * (diemeter ** 3 / wavelength) ** 0.5)
             self.array = torch.linspace(0, N, N)
-            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, dtype=torch.float,
-                                              device=device).requires_grad_(True)
-            self.distance_range = torch.arange(np.floor(fersnel), np.round(franhofer + 0.5), 1, dtype=torch.float,
-                                               device=device).requires_grad_(True)
+            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
+            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .1, device=device).requires_grad_(True)
             self.search_grid = self.set_search_grid(self.theta_range, self.distance_range).type(
                 torch.complex64).requires_grad_(True)
         elif diff_method.startswith("music_1D"):
@@ -377,8 +377,8 @@ class SubspaceNet(nn.Module):
             diemeter = (N - 1) * spacing
             franhofer = np.floor(2 * diemeter ** 2 / wavelength)
             fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
-            self.array = torch.linspace(0, N, N)
-            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .01, dtype=torch.float,
+            self.array = torch.linspace(0, N, N, dtype=torch.float32)
+            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .1, dtype=torch.float32,
                                                device=device).requires_grad_(True)
 
     def set_field_type(self, field_type: str):
@@ -452,22 +452,22 @@ class SubspaceNet(nn.Module):
         """
         theta = theta.float()
         if len(theta.shape) == 1:
-            theta = torch.atleast_1d(theta).unsqueeze(1)
-        distances = torch.atleast_1d(distances).unsqueeze(1)
+            theta = torch.atleast_1d(theta)[:, None]
+        distances = torch.atleast_1d(distances)[:, None]
 
-        array = torch.tile(self.array.unsqueeze(1), (1, self.N)).to(device)
-        array_square = array.pow(2)
+        array = torch.tile(self.array[:, None], (1, self.N)).to(device)
+        array_square = torch.pow(array, 2)
 
-        first_order = array @ torch.tile(torch.sin(theta), (1, self.N)).t()
-        first_order = first_order.unsqueeze(2).expand(-1, -1, len(distances))
+        first_order = array @ torch.tile(torch.sin(theta), (1, self.N)).T * (1 / 2)
+        first_order = torch.tile(first_order[:, :, None], (1, 1, distances.shape[0]))
 
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta), 2), distances.t())
-        second_order = second_order.unsqueeze(2).expand(-1, -1, self.N)
-        second_order = torch.einsum("ij, jkl -> ilk", array_square, second_order.permute(2, 1, 0))
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * (1 / 2), 2), distances.T)
+        second_order = torch.tile(second_order[:, :, None], (1, 1, self.N))
+        second_order = torch.einsum("ij, jkl -> ilk", array_square, torch.transpose(second_order, 2, 0))
 
         time_delay = first_order + second_order
 
-        return torch.exp(2 * -1j * np.pi * time_delay)
+        return torch.exp(2 * -1j * torch.pi * time_delay)
 
     def reparmatrization(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -494,50 +494,49 @@ class SubspaceNet(nn.Module):
         self.N = Rx_tau.shape[-1]
         self.batch_size = Rx_tau.shape[0]
         ############################
-        # ## Architecture flow ##
-        # # CNN block #1
-        # x = self.conv1(Rx_tau)
+        ## Architecture flow ##
+        # CNN block #1
+        x = self.conv1(Rx_tau)
+        x = self.anti_rectifier(x)
+        # CNN block #2
+        x = self.conv2(x)
+        x = self.anti_rectifier(x)
+        # CNN block #3
+        x = self.conv3(x)
+        x = self.anti_rectifier(x)
+
+        # CNN block #4
+        # x = self.conv4(x)
         # x = self.anti_rectifier(x)
-        # # CNN block #2
-        # x = self.conv2(x)
-        # x = self.anti_rectifier(x)
-        # # CNN block #3
-        # x = self.conv3(x)
-        # x = self.anti_rectifier(x)
-        #
-        # # CNN block #4
-        # # x = self.conv4(x)
-        # # x = self.anti_rectifier(x)
         #
         # # fully connected
-        # # old_shape = x.shape
-        # # x = self.fc1(x.view(x.shape[0], -1))
-        # # x = self.fc2(x)
-        # # x = self.fc5(x)
-        # # x = self.fc6(x).view(old_shape)
+        # old_shape = x.shape
+        # x = self.fc1(x.view(x.shape[0], -1))
+        # x = self.fc2(x)
+        # x = self.fc5(x)
+        # x = self.fc6(x).view(old_shape)
         # # DCNN block #1
-        # # x = self.deconv1(x)
-        # # x = self.anti_rectifier(x)
-        # # DCNN block #2
-        # x = self.deconv2(x)
+        # x = self.deconv1(x)
         # x = self.anti_rectifier(x)
-        # # DCNN block #3
-        # x = self.deconv3(x)
-        # x = self.anti_rectifier(x)
-        # # DCNN block #4
-        # x = self.DropOut(x)
-        # Rx = self.deconv4(x)
-        # # Reshape Output shape: [Batch size, 2N, N]
-        # Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
+        # DCNN block #2
+        x = self.deconv2(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #3
+        x = self.deconv3(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #4
+        x = self.DropOut(x)
+        Rx = self.deconv4(x)
+        # Reshape Output shape: [Batch size, 2N, N]
+        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
-        Rx_View = Rx_tau[:, 0]
-        Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
+        Rx_real = Rx_View[:, :self.N, :]  # Shape: [Batch size, N, N])
         Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
-        Rz = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
+        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
-        # Rz = gram_diagonal_overload(
-        #     Kx=Kx_tag, eps=1, batch_size=self.batch_size
-        # )  # Shape: [Batch size, N, N]
+        Rz = gram_diagonal_overload(
+            Kx=Kx_tag, eps=1, batch_size=self.batch_size
+        )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
 
         if self.field_type == "Far":
@@ -985,15 +984,17 @@ def music_nf_1d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Ten
         R = Rz[batch]
         search_grid_batch = search_grid[:, batch, :]
         eigenvalues, eigenvectors = torch.linalg.eig(R)
-        sorted_indxs = torch.argsort(torch.abs(eigenvalues), descending=True)
-        Un = eigenvectors[sorted_indxs][:, number_of_sources]
+        eigenvectors = eigenvectors[:, torch.argsort(torch.real(eigenvalues), descending=True)]
+        Un = eigenvectors[:, number_of_sources:]
         if len(Un.shape) == 1:
             Un = torch.atleast_2d(Un).T
         var1 = search_grid_batch.conj().T @ Un
-        inverse_spectrum = torch.einsum("dm, md -> d", var1, var1.conj().T)
+        inverse_spectrum = torch.norm(var1, dim=1)
         if not inverse_spectrum.all().isreal():
             raise ValueError("Music spectrum must to be real!")
         music_spectrum[batch] = 1 / torch.real(inverse_spectrum)
+
+
     if is_soft:
         distances = maskpeaks_1d(music_spectrum, number_of_sources, distance_range)
     else:
@@ -1036,11 +1037,12 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
         # Extract eigenvalues and eigenvectors using EVD
         eigenvalues, eigenvectors = torch.linalg.eig(Rz[batch])
         # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
-        sorted_indxs = torch.argsort(torch.real(eigenvalues), descending=True)
-        Un = eigenvectors[sorted_indxs][:, number_of_sources:]
+        eigenvectors = eigenvectors[:, torch.argsort(torch.real(eigenvalues), descending=True)]
+        Un = eigenvectors[:, number_of_sources:]
         var_1 = torch.einsum("ijk, kl -> ijl", torch.transpose(search_grid.conj(), 0, 2), Un)
-        inverse_spectrum = torch.real(torch.einsum("ijk, kji -> ji", var_1, torch.transpose(var_1.conj(), 0, 2)))
-        music_spectrum[batch] = 1 / inverse_spectrum
+        inverse_spectrum = torch.real(torch.norm(var_1, dim=2))
+        # inverse_spectrum = torch.real(torch.einsum("ijk, kji -> ji", var_1, torch.transpose(var_1.conj(), 0, 2)))
+        music_spectrum[batch] = 1 / torch.transpose(inverse_spectrum, 0, 1)
     if False:
         plot_3d_spectrum(spectrum=music_spectrum[0].detach().numpy(),
                          theta_range=theta_range.detach().numpy(),
@@ -1133,8 +1135,8 @@ def maskpeaks_2d(spectrum: torch.Tensor, number_of_sources: int, theta_range: to
     # distance_range = Variable(distance_range, requires_grad=True)
     soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
     soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-    cell_size_col = 1  # for distances
-    cell_size_row = 11  # for angles
+    cell_size_col = 5  # for distances
+    cell_size_row = 5  # for angles
 
     for batch in range(spectrum.shape[0]):
         flat_spectrum = spectrum[batch].flatten()
