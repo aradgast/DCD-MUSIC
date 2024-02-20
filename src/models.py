@@ -1032,7 +1032,7 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
     #             music_spectrum[batch, t, d] = 1 / torch.real(core_equiation)
 
     # using einsum
-    music_spectrum = torch.zeros(Rz.shape[0], len(theta_range), len(distance_range))
+    music_spectrum = torch.zeros(Rz.shape[0], len(theta_range), len(distance_range)).to(device)
     for batch in range(Rz.shape[0]):
         # Extract eigenvalues and eigenvectors using EVD
         eigenvalues, eigenvectors = torch.linalg.eig(Rz[batch])
@@ -1040,9 +1040,9 @@ def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor
         eigenvectors = eigenvectors[:, torch.argsort(torch.real(eigenvalues), descending=True)]
         Un = eigenvectors[:, number_of_sources:]
         var_1 = torch.einsum("ijk, kl -> ijl", torch.transpose(search_grid.conj(), 0, 2), Un)
-        inverse_spectrum = torch.real(torch.norm(var_1, dim=2))
+        inverse_spectrum = torch.real(torch.norm(var_1.T, dim=0))
         # inverse_spectrum = torch.real(torch.einsum("ijk, kji -> ji", var_1, torch.transpose(var_1.conj(), 0, 2)))
-        music_spectrum[batch] = 1 / torch.transpose(inverse_spectrum, 0, 1)
+        music_spectrum[batch] = 1 / inverse_spectrum
     if False:
         plot_3d_spectrum(spectrum=music_spectrum[0].detach().numpy(),
                          theta_range=theta_range.detach().numpy(),
@@ -1079,7 +1079,7 @@ def find_spectrum_peaks_2d(music_spectrum, number_of_sources, theta_range, dista
     predict_theta = np.zeros((music_spectrum.shape[0], number_of_sources))
     predict_dist = np.zeros((music_spectrum.shape[0], number_of_sources))
     for batch in range(music_spectrum.shape[0]):
-        music_spectrum = music_spectrum[batch].detach().numpy().squeeze()
+        music_spectrum = music_spectrum[batch].detach().cpu().numpy().squeeze()
         # Flatten the spectrum
         spectrum_flatten = music_spectrum.flatten()
         # Find spectrum peaks
@@ -1088,8 +1088,8 @@ def find_spectrum_peaks_2d(music_spectrum, number_of_sources, theta_range, dista
         peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
         # convert the peaks to 2d indices
         original_idx = np.unravel_index(peaks, music_spectrum.shape)
-        predict_theta[batch] = theta_range[original_idx[0]][0:number_of_sources]
-        predict_dist[batch] = distance_range[original_idx[1]][0:number_of_sources]
+        predict_theta[batch] = theta_range.cpu().numpy()[original_idx[0]][0:number_of_sources]
+        predict_dist[batch] = distance_range.cpu().numpy()[original_idx[1]][0:number_of_sources]
 
     return torch.Tensor(predict_theta), torch.Tensor(predict_dist)
 
@@ -1156,18 +1156,9 @@ def maskpeaks_2d(spectrum: torch.Tensor, number_of_sources: int, theta_range: to
 
             metrix_thr = spectrum[batch, max_row_cell_idx, max_col_cell_idx]
             soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
-            left_pad = max(0, max_r - cell_size_row + 1)
-            right_pad = theta_range.shape[0] - left_pad - soft_max.shape[0]
-            soft_row[batch, i] = (theta_range.T @ torch.nn.functional.pad(torch.sum(soft_max, dim=1),
-                                                                          (left_pad, right_pad),
-                                                                          mode="constant", value=0)).requires_grad_(
+            soft_row[batch, i] = (theta_range[max_row_cell_idx].reshape(1, -1) @ torch.sum(soft_max, dim=1)).requires_grad_(
                 True)
-            left_pad = max(0, max_c - cell_size_col + 1)
-            right_pad = distance_range.shape[0] - left_pad - soft_max.shape[1]
-            soft_col[batch, i] = (distance_range @ torch.nn.functional.pad(torch.sum(soft_max, dim=0),
-                                                                           (left_pad, right_pad),
-                                                                           mode="constant", value=0)).requires_grad_(
-                True)
+            soft_col[batch, i] = (distance_range[max_col_cell_idx] @ torch.sum(soft_max, dim=0)).requires_grad_(True)
 
     return soft_row, soft_col
 
