@@ -73,7 +73,7 @@ class Samples(SystemModel):
             """
             M = self.params.M
             while True:
-                # DOA = np.round(np.random.rand(M) * 180, decimals=0) - 90
+                # DOA = np.round(np.random.rand(M) * 180, decimals=2) - 90
                 DOA = np.random.randint(-90, 0, M) * 2 + 90
                 DOA.sort()
                 diff_angles = np.array(

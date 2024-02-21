@@ -32,7 +32,7 @@ import numpy as np
 import torch.nn as nn
 import torch
 from itertools import permutations
-BALANCE_FACTOR = 0.6
+BALANCE_FACTOR = 0
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = "cpu"

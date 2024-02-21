@@ -410,7 +410,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Get model output
             # t1 = time.time()
             if "music_1D" in model_name:
-                model_output = model(Rx, known_angles=DOA)
+                noisy_DOA = DOA + (torch.randn(DOA.shape) / (10 ** 0.5))
+                model_output = model(Rx, known_angles=noisy_DOA)
             else:
                 model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
@@ -446,15 +447,15 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
 
-            if epoch % 30 == 0:
-                print("#" * 10 + f"EPOCH {epoch + 1}" + "#" * 10)
-                for name, param in model.named_parameters():
-                    if param.requires_grad:
-                        if param.grad is None:
-                            pass
-                        else:
-                            grad_diff_norm[name] = torch.norm(param.grad)
-                            print(f"{name} grad norm: {grad_diff_norm[name]}")
+            # if epoch % 30 == 0:
+            #     print("#" * 10 + f"EPOCH {epoch + 1}" + "#" * 10)
+            #     for name, param in model.named_parameters():
+            #         if param.requires_grad:
+            #             if param.grad is None:
+            #                 pass
+            #             else:
+            #                 grad_diff_norm[name] = torch.norm(param.grad)
+            #                 print(f"{name} grad norm: {grad_diff_norm[name]}")
 
             # optimizer update
             optimizer.step()

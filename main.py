@@ -67,9 +67,9 @@ if __name__ == "__main__":
         # Operations commands
         commands = {
             "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
-            "CREATE_DATA": False,  # Creating new dataset
-            "LOAD_DATA": True,  # Loading data from exist dataset
-            "LOAD_MODEL": True,  # Load specific model for training
+            "CREATE_DATA": True,  # Creating new dataset
+            "LOAD_DATA": False,  # Loading data from exist dataset
+            "LOAD_MODEL": False,  # Load specific model for training
             "TRAIN_MODEL": True,  # Applying training operation
             "SAVE_MODEL": True,  # Saving tuned model
             "EVALUATE_MODE": True,  # Evaluating desired algorithms
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             ModelGenerator(SystemModelParams)
             .set_model_type("SubspaceNet")
             .set_field_type(system_model_params.field_type)
-            .set_diff_method("music_2D")
+            .set_diff_method("music_1D")
             .set_tau(8)
             .set_model(system_model_params)
         )
@@ -169,8 +169,8 @@ if __name__ == "__main__":
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(256)
-                .set_epochs(100)
+                .set_batch_size(64)
+                .set_epochs(150)
                 .set_model(model=model_config)
                 .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
