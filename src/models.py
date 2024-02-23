@@ -1108,17 +1108,47 @@ class MUSIC(SubspaceMethod):
 
         self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
 
-    def plot_3d_spectrum(self, highlight_coordinates=None):
+    def plot_spectrum(self, highlight_corrdinates=None):
+        if self.estimation_params == "angle, range":
+            self._plot_3d_spectrum(highlight_corrdinates)
+        else:
+            self._plot_1d_spectrum(highlight_corrdinates)
+
+    def _plot_1d_spectrum(self, highlight_corrdinates=None):
+        if self.estimation_params == "angle":
+            x = np.rad2deg(self._angels.detach().cpu().numpy())
+            x_label = "angle [deg]"
+        elif self.estimation_params == "range":
+            x = self._distances.detach().cpu().numpy()
+            x_label = "distance [m]"
+        else:
+            raise ValueError(f"_plot_1d_spectrum: No such option for param estimation.")
+        y = self.music_spectrum.detach().cpu().numpy()
+        plt.figure()
+        plt.plot(x, y, label="Music Spectrum")
+        for idx, dot in enumerate(highlight_corrdinates):
+            plt.scatter(dot, label=f"dot {idx}")
+        plt.title("MUSIC SPECTRUM")
+        plt.grid()
+        plt.ylabel("Spectrum power")
+        plt.xlabel(x_label)
+        plt.legend()
+        plt.show()
+
+    def _plot_3d_spectrum(self, highlight_coordinates=None):
         """
         Plot the MUSIC 2D spectrum.
 
         """
         # Creating figure
-        x, y = np.meshgrid(self._distances, np.rad2deg(self._angels))
+        distances = self._distances.detach().cpu().numpy()
+        angles = self._angels.detach().cpu().numpy()
+        spectrum = self.music_spectrum.detach().cpu().numpy()
+        x, y = np.meshgrid(distances, np.rad2deg(angles))
         # Plotting the 3D surface
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(x, y, 10 * np.log10(self.music_spectrum), cmap='viridis')
+        ax.plot_surface(x, y, 10 * np.log10(spectrum), cmap='viridis')
 
         if highlight_coordinates:
             highlight_coordinates = np.array(highlight_coordinates)
@@ -1131,13 +1161,13 @@ class MUSIC(SubspaceMethod):
                 label='Highlight Points'
             )
         ax.set_title('MUSIC spectrum')
-        ax.set_xlim(self._distances[0], self._distances[-1])
-        ax.set_ylim(np.rad2deg(self._angels[0]), np.rad2deg(self._angels[-1]))
+        ax.set_xlim(distances[0], distances[-1])
+        ax.set_ylim(np.rad2deg(angles[0]), np.rad2deg(angles[-1]))
         # Adding labels
         ax.set_ylabel('Theta [deg]')
         ax.set_xlabel('Radius [m]')
         ax.set_zlabel('Power [dB]')
-        plt.colorbar(ax.plot_surface(x, y, 10 * np.log10(self.music_spectrum), cmap='viridis'), shrink=0.5, aspect=5)
+        plt.colorbar(ax.plot_surface(x, y, 10 * np.log10(spectrum), cmap='viridis'), shrink=0.5, aspect=5)
 
         if highlight_coordinates:
             ax.legend()  # Adding a legend
@@ -1267,20 +1297,12 @@ def music_nf_1d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Ten
 
     """
     torch.autograd.set_detect_anomaly(True)
-    music_spectrum = torch.zeros(Rz.shape[0], len(distance_range)).to(device)
-    for batch in range(Rz.shape[0]):
-        R = Rz[batch]
-        search_grid_batch = search_grid[:, batch, :]
-        eigenvalues, eigenvectors = torch.linalg.eig(R)  # 1D search grid
-        eigenvectors = eigenvectors[:, torch.argsort(torch.real(eigenvalues), descending=True)]
-        Un = eigenvectors[:, number_of_sources:]
-        if len(Un.shape) == 1:
-            Un = torch.atleast_2d(Un).T
-        var1 = search_grid_batch.conj().T @ Un
-        inverse_spectrum = torch.norm(var1, dim=1)
-        if not inverse_spectrum.all().isreal():
-            raise ValueError("Music spectrum must to be real!")
-        music_spectrum[batch] = 1 / torch.real(inverse_spectrum)
+    eigenvalues, eigenvectors = torch.linalg.eig(Rz)  # 1D search grid
+    sorted_idx = torch.argsort(torch.real(eigenvalues), descending=True)
+    Un = torch.gather(eigenvectors, 2, sorted_idx.unsqueeze(-1).expand(-1, -1, Rz.shape[-1]).transpose(1, 2))[:, :, number_of_sources:]
+    var1 = torch.einsum("dbn, nbm -> bdm", search_grid.conj().transpose(0, 2), Un.transpose(0,1))
+    inverse_spectrum = torch.norm(var1, dim=2)
+    music_spectrum = 1 / torch.real(inverse_spectrum)
 
     if is_soft:
         distances = maskpeaks_1d(music_spectrum, number_of_sources, distance_range)
@@ -1392,17 +1414,17 @@ Returns:
     """
     soft_decision = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
     cell_size = 5  # for distances
+    top_indxs = torch.topk(spectrum, number_of_sources, dim=1)[1]
+    cell_idx = (top_indxs - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
+    if number_of_sources == 1:
+        cell_idx = cell_idx.unsqueeze(-1)
     for batch in range(spectrum.shape[0]):
-        flat_spectrum = spectrum[batch].flatten()
-        top_indxs = torch.topk(flat_spectrum, number_of_sources)[1]
-        for i, max_idx in enumerate(top_indxs):
-            cell_idx = (
-                    max_idx - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
-            cell_idx = cell_idx[cell_idx >= 0]
-            cell_idx = cell_idx[cell_idx < spectrum.shape[1]]
-            metrix_thr = spectrum[batch, cell_idx]
+        for i, max_idx in enumerate(top_indxs[batch]):
+            cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
+            cell_idx_batch = cell_idx_batch[cell_idx_batch < spectrum.shape[1]]
+            metrix_thr = spectrum[batch, cell_idx_batch]
             soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
-            soft_decision[batch, i] = (distance_range[cell_idx] @ soft_max).requires_grad_(True)
+            soft_decision[batch, i] = (distance_range[cell_idx_batch] @ soft_max).requires_grad_(True)
 
     return soft_decision
 
