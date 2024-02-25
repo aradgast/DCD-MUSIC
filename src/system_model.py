@@ -43,7 +43,7 @@ class SystemModelParams:
     M = None                            # Number of sources
     N = None                            # Number of sensors
     T = None                            # Number of observations
-    field_type = "Far"                  # field type ("Far" or "Near")
+    field_type = None                  # field type ("Far" or "Near")
     signal_type = "NarrowBand"          # Signal type ("NarrowBand" or "Broadband")
     freq_values = [0, 500]              # Frequency values for Broadband signal
     signal_nature = "non-coherent"      # Signal nature ("non-coherent" or "coherent")
