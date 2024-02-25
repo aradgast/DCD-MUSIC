@@ -69,7 +69,7 @@ if __name__ == "__main__":
             "SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
             "CREATE_DATA": False,  # Creating new dataset
             "LOAD_DATA": True,  # Loading data from exist dataset
-            "LOAD_MODEL": True,  # Load specific model for training
+            "LOAD_MODEL": False,  # Load specific model for training
             "TRAIN_MODEL": True,  # Applying training operation
             "SAVE_MODEL": True,  # Saving tuned model
             "EVALUATE_MODE": True,  # Evaluating desired algorithms
@@ -173,7 +173,7 @@ if __name__ == "__main__":
                 .set_batch_size(64)
                 .set_epochs(100)
                 .set_model(model=model_config)
-                .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
+                .set_optimizer(optimizer="Adam", learning_rate=0.00001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
                 .set_schedular(step_size=100, gamma=0.5)
                 .set_criterion()

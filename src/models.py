@@ -565,11 +565,11 @@ class SubspaceNet(nn.Module):
                                                                        is_soft=is_soft)
                 return doa_prediction, distance_prediction, Rz
             else:  # the angles are known
-                # search_grid = self.set_search_grid(known_angles, self.distance_range)
-                # distance_prediction = music_nf_1d(Rz, self.M, search_grid, self.distance_range, is_soft=is_soft)
-                distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
-                if distance_prediction.nelement() == 0:
-                    pass
+                search_grid = self.set_search_grid(known_angles, self.distance_range)
+                distance_prediction = music_nf_1d(Rz, self.M, search_grid, self.distance_range, is_soft=is_soft)
+                # distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
+                # if distance_prediction.nelement() == 0:
+                #     pass
                 return distance_prediction, Rz
 
 
@@ -910,6 +910,7 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
+        self.search_grid = None
         if self._angels is not None and self._distances is not None:
             self.set_search_grid()
 
@@ -979,8 +980,9 @@ class MUSIC(SubspaceMethod):
             cell_idx = cell_idx.unsqueeze(-1)
         for batch in range(self.music_spectrum.shape[0]):
             for i, max_idx in enumerate(top_indxs[batch]):
-                cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
-                cell_idx_batch = cell_idx_batch[cell_idx_batch < self.music_spectrum.shape[1]]
+                cell_idx_batch = cell_idx[batch, :, i] % self.music_spectrum.shape[1]
+                # cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
+                # cell_idx_batch = cell_idx_batch[cell_idx_batch < self.music_spectrum.shape[1]]
                 metrix_thr = self.music_spectrum[batch, cell_idx_batch]
                 soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
                 soft_decision[batch, i] = (search_space[cell_idx_batch] @ soft_max).requires_grad_(True)
@@ -1031,6 +1033,8 @@ class MUSIC(SubspaceMethod):
             if tmp.nelement() == 0:
                 tmp = self._maskpeak_1D(search_space)
                 print("_peak_finder_1D: No peaks were found!")
+            else:
+                pass
             predict_param[batch] = tmp
 
 
@@ -1432,8 +1436,9 @@ Returns:
         cell_idx = cell_idx.unsqueeze(-1)
     for batch in range(spectrum.shape[0]):
         for i, max_idx in enumerate(top_indxs[batch]):
-            cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
-            cell_idx_batch = cell_idx_batch[cell_idx_batch < spectrum.shape[1]]
+            # cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
+            # cell_idx_batch = cell_idx_batch[cell_idx_batch < spectrum.shape[1]]
+            cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] < spectrum.shape[1]]
             metrix_thr = spectrum[batch, cell_idx_batch]
             soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
             soft_decision[batch, i] = (distance_range[cell_idx_batch] @ soft_max).requires_grad_(True)
