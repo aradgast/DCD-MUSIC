@@ -565,9 +565,9 @@ class SubspaceNet(nn.Module):
                                                                        is_soft=is_soft)
                 return doa_prediction, distance_prediction, Rz
             else:  # the angles are known
-                search_grid = self.set_search_grid(known_angles, self.distance_range)
-                distance_prediction = music_nf_1d(Rz, self.M, search_grid, self.distance_range, is_soft=is_soft)
-                # distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
+                # search_grid = self.set_search_grid(known_angles, self.distance_range)
+                # distance_prediction = music_nf_1d(Rz, self.M, search_grid, self.distance_range, is_soft=is_soft)
+                distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
                 # if distance_prediction.nelement() == 0:
                 #     pass
                 return distance_prediction, Rz
@@ -917,7 +917,7 @@ class MUSIC(SubspaceMethod):
     def forward(self, cov, known_angles=None, known_distances=None, is_soft: bool = True):
         # init tensor for holding spectrum
         self.set_search_grid(known_angles = known_angles, known_distances = known_distances)
-        self._init_spectrum(batch_size=cov.shape[0])
+        # self._init_spectrum(batch_size=cov.shape[0])
         _, Un = self.subspace_separation(cov, self.system_model.params.M)
         inverse_spectrum = self.get_inverse_spectrum(Un)
         self.music_spectrum = 1 / inverse_spectrum
@@ -971,21 +971,15 @@ class MUSIC(SubspaceMethod):
                 return self._maskpeak_1D(self._distances)
 
     def _maskpeak_1D(self, search_space):
-        soft_decision = torch.zeros(self.music_spectrum.shape[0], self.system_model.params.M, dtype=torch.float32).to(
-            device)
         cell_size = 5  # for distances
         top_indxs = torch.topk(self.music_spectrum, self.system_model.params.M, dim=1)[1]
         cell_idx = (top_indxs - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
+        cell_idx %= self.music_spectrum.shape[1]
         if self.system_model.params.M == 1:
             cell_idx = cell_idx.unsqueeze(-1)
-        for batch in range(self.music_spectrum.shape[0]):
-            for i, max_idx in enumerate(top_indxs[batch]):
-                cell_idx_batch = cell_idx[batch, :, i] % self.music_spectrum.shape[1]
-                # cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
-                # cell_idx_batch = cell_idx_batch[cell_idx_batch < self.music_spectrum.shape[1]]
-                metrix_thr = self.music_spectrum[batch, cell_idx_batch]
-                soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
-                soft_decision[batch, i] = (search_space[cell_idx_batch] @ soft_max).requires_grad_(True)
+        metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
+        soft_max = torch.softmax(metrix_thr, dim=1)
+        soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max)
 
         return soft_decision
 
@@ -1123,13 +1117,13 @@ class MUSIC(SubspaceMethod):
 
         self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
 
-    def plot_spectrum(self, highlight_corrdinates=None):
+    def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0):
         if self.estimation_params == "angle, range":
-            self._plot_3d_spectrum(highlight_corrdinates)
+            self._plot_3d_spectrum(highlight_corrdinates, batch)
         else:
-            self._plot_1d_spectrum(highlight_corrdinates)
+            self._plot_1d_spectrum(highlight_corrdinates, batch)
 
-    def _plot_1d_spectrum(self, highlight_corrdinates=None):
+    def _plot_1d_spectrum(self, highlight_corrdinates, batch):
         if self.estimation_params == "angle":
             x = np.rad2deg(self._angels.detach().cpu().numpy())
             x_label = "angle [deg]"
@@ -1138,7 +1132,7 @@ class MUSIC(SubspaceMethod):
             x_label = "distance [m]"
         else:
             raise ValueError(f"_plot_1d_spectrum: No such option for param estimation.")
-        y = self.music_spectrum.detach().cpu().numpy()
+        y = self.music_spectrum[batch].detach().cpu().numpy()
         plt.figure()
         plt.plot(x, y.T, label="Music Spectrum")
         if highlight_corrdinates is not None:
@@ -1151,7 +1145,7 @@ class MUSIC(SubspaceMethod):
         plt.legend()
         plt.show()
 
-    def _plot_3d_spectrum(self, highlight_coordinates=None):
+    def _plot_3d_spectrum(self, highlight_coordinates, batch):
         """
         Plot the MUSIC 2D spectrum.
 
@@ -1159,7 +1153,7 @@ class MUSIC(SubspaceMethod):
         # Creating figure
         distances = self._distances.detach().cpu().numpy()
         angles = self._angels.detach().cpu().numpy()
-        spectrum = self.music_spectrum.detach().cpu().numpy()
+        spectrum = self.music_spectrum[batch].detach().cpu().numpy()
         x, y = np.meshgrid(distances, np.rad2deg(angles))
         # Plotting the 3D surface
         fig = plt.figure()
@@ -1428,20 +1422,15 @@ Args:
 Returns:
     torch.Tensor: The predicted range, over all batches.
     """
-    soft_decision = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
     cell_size = 5  # for distances
     top_indxs = torch.topk(spectrum, number_of_sources, dim=1)[1]
     cell_idx = (top_indxs - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
+    cell_idx %= spectrum.shape[1]
     if number_of_sources == 1:
         cell_idx = cell_idx.unsqueeze(-1)
-    for batch in range(spectrum.shape[0]):
-        for i, max_idx in enumerate(top_indxs[batch]):
-            # cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] >= 0]
-            # cell_idx_batch = cell_idx_batch[cell_idx_batch < spectrum.shape[1]]
-            cell_idx_batch = cell_idx[batch, :, i][cell_idx[batch, :, i] < spectrum.shape[1]]
-            metrix_thr = spectrum[batch, cell_idx_batch]
-            soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
-            soft_decision[batch, i] = (distance_range[cell_idx_batch] @ soft_max).requires_grad_(True)
+    metrix_thr = torch.gather(spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
+    soft_max = torch.softmax(metrix_thr, dim=1)
+    soft_decision = torch.einsum("bkm, bkm -> bm", distance_range[cell_idx], soft_max)
 
     return soft_decision
 
