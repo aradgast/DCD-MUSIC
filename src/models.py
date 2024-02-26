@@ -179,10 +179,8 @@ class ModelGenerator(object):
             self.model = DeepCNN(N=system_model_params.N, grid_size=361)
         elif self.model_type.startswith("SubspaceNet"):
             self.model = SubspaceNet(tau=self.tau,
-                                     M=system_model_params.M,
-                                     N=system_model_params.N,
+                                     N = system_model_params.N,
                                      diff_method=self.diff_method,
-                                     field_type=self.field_type,
                                      system_model=self.system_model)
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
@@ -316,8 +314,8 @@ class SubspaceNet(nn.Module):
 
     """
 
-    def __init__(self, tau: int, M: int, N: int, diff_method: str = "root_music", field_type: str = "Far",
-                 system_model=None):
+    def __init__(self, tau: int, N: int, diff_method: str = "root_music",
+                 system_model: SystemModel=None):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -327,11 +325,8 @@ class SubspaceNet(nn.Module):
 
         """
         super(SubspaceNet, self).__init__()
-        self.M = M
         self.tau = tau
         self.N = N
-        self.diff_method = None
-        self.field_type = None
         self.p = 0.1
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
@@ -351,50 +346,11 @@ class SubspaceNet(nn.Module):
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
         self.DropOut = nn.Dropout(self.p)
         self.ReLU = nn.ReLU()
-        # Set the field type scenario: Far or Near.
-        self.set_field_type(field_type)
+        self.diff_method = None
+        self.field_type = None
+        self.system_model = system_model
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
-        self.search_grid = None
-        self.theta_range = None
-        self.distance_range = None
-        if diff_method.startswith("music_2D"):
-            wavelength = 1
-            spacing = wavelength / 2
-            diemeter = (N - 1) * spacing
-            franhofer = np.floor(2 * diemeter ** 2 / wavelength)
-            fersnel = np.ceil(0.62 * (diemeter ** 3 / wavelength) ** 0.5)
-            self.array = torch.linspace(0, N, N)
-            self.theta_range = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
-            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .1, device=device).requires_grad_(
-                True)
-            self.search_grid = self.set_search_grid(self.theta_range, self.distance_range).type(
-                torch.complex64).requires_grad_(True)
-        elif diff_method.startswith("music_1D"):
-            wavelength = 1
-            spacing = wavelength / 2
-            diemeter = (N - 1) * spacing
-            franhofer = np.floor(2 * diemeter ** 2 / wavelength)
-            fersnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
-            self.array = torch.linspace(0, N, N, dtype=torch.float32)
-            self.distance_range = torch.arange(np.floor(fersnel), franhofer + 0.5, .1, dtype=torch.float32,
-                                               device=device).requires_grad_(True)
-
-    def set_field_type(self, field_type: str):
-        """
-
-        Args:
-            field_type:
-
-        Returns:
-
-        """
-        if field_type.lower() == "far":
-            self.field_type = "Far"
-        elif field_type.lower() == "near":
-            self.field_type = "Near"
-        else:
-            raise Exception(f"Unrecognized field type {field_type}, possible options are Far or Near.")
 
     def set_diff_method(self, diff_method: str, system_model):
         """Sets the differentiable subspace method for training subspaceNet.
@@ -408,23 +364,24 @@ class SubspaceNet(nn.Module):
         -------
             Exception: Method diff_method is not defined for SubspaceNet
         """
-        if self.field_type == "Far":
+        if self.system_model.params.field_type == "Far":
             if diff_method.startswith("root_music"):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
                 self.diff_method = esprit
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
-                                f" Method {diff_method} is not defined for SubspaceNet in {self.field_type} scenario")
-        elif self.field_type == "Near":
+                                f" Method {diff_method} is not defined for SubspaceNet in "
+                                f"{self.system_model.params.field_type} scenario")
+        elif self.system_model.params.field_type == "Near":
             if diff_method.startswith("music_2D"):
-                self.diff_method = music_2d
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
             elif diff_method.startswith("music_1D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
-                # self.diff_method = music_nf_1d
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
-                                f" Method {diff_method} is not defined for SubspaceNet in {self.field_type} Field scenario")
+                                f" Method {diff_method} is not defined for SubspaceNet in "
+                                f"{self.system_model.params.field_type} Field scenario")
 
     def anti_rectifier(self, X):
         """Applies the anti-rectifier operation to the input tensor.
@@ -439,40 +396,6 @@ class SubspaceNet(nn.Module):
 
         """
         return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
-
-    def set_search_grid(self, theta: torch.Tensor, distances: torch.Tensor) -> torch.Tensor:
-        """
-
-        Args:
-            theta:
-            distances:
-
-        Returns:
-
-        """
-        theta = theta.float()
-        if len(theta.shape) == 1:
-            theta = torch.atleast_1d(theta)[:, None]
-        distances = torch.atleast_1d(distances)[:, None]
-
-        array = torch.tile(self.array[:, None], (1, self.N)).to(device)
-        array_square = torch.pow(array, 2)
-
-        first_order = array @ torch.tile(torch.sin(theta), (1, self.N)).T * (1 / 2)
-        first_order = torch.tile(first_order[:, :, None], (1, 1, distances.shape[0]))
-
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * (1 / 2), 2), distances.T)
-        second_order = torch.tile(second_order[:, :, None], (1, 1, self.N))
-        second_order = torch.einsum("ij, jkl -> ilk", array_square, torch.transpose(second_order, 2, 0))
-
-        time_delay = first_order + second_order
-
-        return torch.exp(2 * -1j * torch.pi * time_delay)
-
-    def reparmatrization(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
 
     def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
         """
@@ -539,8 +462,8 @@ class SubspaceNet(nn.Module):
         )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
 
-        if self.field_type == "Far":
-            method_output = self.diff_method(Rz, self.M, self.batch_size)
+        if self.system_model.params.field_type == "Far":
+            method_output = self.diff_method(Rz, self.system_model.params.M, self.batch_size)
             if isinstance(method_output, tuple):
                 # Root MUSIC output
                 doa_prediction, doa_all_predictions, roots = method_output
@@ -550,21 +473,12 @@ class SubspaceNet(nn.Module):
                 doa_all_predictions, roots = None, None
             return doa_prediction, doa_all_predictions, roots, Rz
 
-        elif self.field_type == "Near":
+        elif self.system_model.params.field_type == "Near":
             if known_angles is None:
-                doa_prediction, distance_prediction = self.diff_method(Rz,
-                                                                       self.M,
-                                                                       self.search_grid,
-                                                                       self.theta_range,
-                                                                       self.distance_range,
-                                                                       is_soft=is_soft)
+                doa_prediction, distance_prediction = self.diff_method(Rz, is_soft=is_soft)
                 return doa_prediction, distance_prediction, Rz
             else:  # the angles are known
-                # search_grid = self.set_search_grid(known_angles, self.distance_range)
-                # distance_prediction = music_nf_1d(Rz, self.M, search_grid, self.distance_range, is_soft=is_soft)
                 distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
-                # if distance_prediction.nelement() == 0:
-                #     pass
                 return distance_prediction, Rz
 
 
@@ -900,19 +814,18 @@ class MUSIC(SubspaceMethod):
         """
         super().__init__(system_model)
         self.estimation_params = estimation_parameter
-        self._angels = None
-        self._distances = None
+        self.angels = None
+        self.distances = None
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
         self.search_grid = None
-        if self._angels is not None and self._distances is not None:
+        if self.angels is not None and self.distances is not None:
             self.set_search_grid()
 
     def forward(self, cov, known_angles=None, known_distances=None, is_soft: bool = True):
-        # init tensor for holding spectrum
-        self.set_search_grid(known_angles = known_angles, known_distances = known_distances)
-        # self._init_spectrum(batch_size=cov.shape[0])
+        if self.angels is None or self.distances is None:
+            self.set_search_grid(known_angles = known_angles, known_distances = known_distances)
         _, Un = self.subspace_separation(cov, self.system_model.params.M)
         inverse_spectrum = self.get_inverse_spectrum(Un)
         self.music_spectrum = 1 / inverse_spectrum
@@ -925,8 +838,8 @@ class MUSIC(SubspaceMethod):
             inverse_spectrum = torch.norm(var1, dim=2).T
         else:
             if self.estimation_params.startswith("angle, range"):
-                var1 = torch.einsum("ijk, kl -> ijl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace)
-                inverse_spectrum = torch.real(torch.norm(var1.T, dim=0))
+                var1 = torch.einsum("ijk, bkl -> bijl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace)
+                inverse_spectrum = torch.real(torch.norm(var1, dim=-1)).transpose(1, 2)
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("ban, nam -> abm", self.search_grid.conj().transpose(0, 2), noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=2).T
@@ -945,25 +858,25 @@ class MUSIC(SubspaceMethod):
 
     def _peak_finder(self):
         if self.system_model.params.field_type.startswith("Far"):
-            return self._peak_finder_1D(self._angels)
+            return self._peak_finder_1D(self.angels)
         else:
             if self.estimation_params.startswith("angle, range"):
                 return self._peak_finder_2D()
             elif self.estimation_params.endswith("angle"):
-                return self._peak_finder_1D(self._angels)
+                return self._peak_finder_1D(self.angels)
             elif self.estimation_params.startswith("range"):
-                return self._peak_finder_1D(self._distances)
+                return self._peak_finder_1D(self.distances)
 
     def _maskpeak(self):
         if self.system_model.params.field_type.startswith("Far"):
-            return self._maskpeak_1D(self._angels)
+            return self._maskpeak_1D(self.angels)
         else:
             if self.estimation_params.startswith("angle, range"):
                 return self._maskpeak_2D()
             elif self.estimation_params.endswith("angle"):
-                return self._maskpeak_1D(self._angels)
+                return self._maskpeak_1D(self.angels)
             elif self.estimation_params.startswith("range"):
-                return self._maskpeak_1D(self._distances)
+                return self._maskpeak_1D(self.distances)
 
     def _maskpeak_1D(self, search_space):
         cell_size = 5  # for distances
@@ -979,35 +892,33 @@ class MUSIC(SubspaceMethod):
         return soft_decision
 
     def _maskpeak_2D(self):
+        batch_size = self.music_spectrum.shape[0]
         soft_row = torch.zeros(self.music_spectrum.shape[0], self.system_model.params.M, dtype=torch.float32).to(device)
         soft_col = torch.zeros(self.music_spectrum.shape[0], self.system_model.params.M, dtype=torch.float32).to(device)
         cell_size_col = 5  # for distances
         cell_size_row = 5  # for angles
+        flat_spectrum = self.music_spectrum.reshape(self.music_spectrum.shape[0], -1)
+        top_indxs = torch.topk(flat_spectrum, self.system_model.params.M, dim=1)[1]
+        max_row = torch.div(top_indxs, self.music_spectrum.shape[2], rounding_mode="floor")
+        max_col = torch.fmod(top_indxs, self.music_spectrum.shape[2]).int()
+        max_row_cell_idx = (max_row - cell_size_row + torch.arange(2 * cell_size_row + 1, dtype=torch.int32, device=device))
+        max_row_cell_idx %= self.music_spectrum.shape[1]
+        max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
 
-        for batch in range(self.music_spectrum.shape[0]):
-            flat_spectrum = self.music_spectrum[batch].flatten()
-            top_indxs = torch.topk(flat_spectrum, self.system_model.params.M, dim=0)[1]
-            max_row = torch.div(top_indxs, self.music_spectrum.shape[2], rounding_mode="floor")
-            max_col = torch.fmod(top_indxs, self.music_spectrum.shape[2]).int()
-            for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
-                max_row_cell_idx = (
-                        max_r - cell_size_row + torch.arange(2 * cell_size_row + 1, dtype=torch.int32, device=device))
-                max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0]
-                max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < self.music_spectrum.shape[1]].view(-1, 1)
-
-                max_col_cell_idx = (
-                        max_c - cell_size_col + torch.arange(2 * cell_size_col + 1, dtype=torch.long, device=device))
-                max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
-                max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < self.music_spectrum.shape[2]].view(1, -1)
-
-                metrix_thr = self.music_spectrum[batch, max_row_cell_idx, max_col_cell_idx]
-                soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
+        max_col_cell_idx = (max_col - cell_size_col + torch.arange(2 * cell_size_col + 1, dtype=torch.long, device=device))
+        max_col_cell_idx %= self.music_spectrum.shape[2]
+        max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
+        metrix_thr = self.music_spectrum.gather(1, max_row_cell_idx.expand(-1, -1, self.music_spectrum.shape[2]))\
+            .gather(2, max_col_cell_idx.transpose(1, 2).expand(-1, -1, max_col_cell_idx.shape[-1]).transpose(1,2))
+        soft_max = torch.softmax(metrix_thr.view(batch_size, -1), dim=1).reshape(metrix_thr.shape)
+        for batch in range(batch_size):
+            for i, (max_r, max_c) in enumerate(zip(max_row[batch], max_col[batch])):
                 soft_row[batch, i] = (
-                        self._angles[max_row_cell_idx].reshape(1, -1) @ torch.sum(soft_max, dim=1)).requires_grad_(
+                        self.angels[max_row_cell_idx[batch]].reshape(1, -1) @ torch.sum(soft_max[batch], dim=1)).requires_grad_(
                     True)
-                soft_col[batch, i] = (self._distances[max_col_cell_idx] @ torch.sum(soft_max, dim=0)).requires_grad_(
+                soft_col[batch, i] = (self.distances[max_col_cell_idx[batch]] @ torch.sum(soft_max[batch], dim=0)).requires_grad_(
                     True)
-
+                pass
         return soft_row, soft_col
 
     def _peak_finder_1D(self, search_space):
@@ -1042,34 +953,34 @@ class MUSIC(SubspaceMethod):
             peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
             # convert the peaks to 2d indices
             original_idx = np.unravel_index(peaks, music_spectrum.shape)
-            predict_theta[batch] = self._angels.cpu().numpy()[original_idx[0]][0:self.system_model.params.M]
-            predict_dist[batch] = self._distances.cpu().numpy()[original_idx[1]][0:self.system_model.params.M]
+            predict_theta[batch] = self.angels.cpu().numpy()[original_idx[0]][0:self.system_model.params.M]
+            predict_dist[batch] = self.distances.cpu().numpy()[original_idx[1]][0:self.system_model.params.M]
 
         return torch.Tensor(predict_theta), torch.Tensor(predict_dist)
 
     def _init_spectrum(self, batch_size):
         if self.system_model.params.field_type == "Far":
-            self.music_spectrum = torch.zeros(batch_size, len(self._angels))
+            self.music_spectrum = torch.zeros(batch_size, len(self.angels))
         else:
             if self.estimation_params.startswith("angle, range"):
-                self.music_spectrum = torch.zeros(batch_size, len(self._angels), len(self._distances))
+                self.music_spectrum = torch.zeros(batch_size, len(self.angels), len(self.distances))
             elif self.estimation_params.endswith("angle"):
-                self.music_spectrum = torch.zeros(batch_size, len(self._angels))
+                self.music_spectrum = torch.zeros(batch_size, len(self.angels))
             elif self.estimation_params.startswith("range"):
-                self.music_spectrum = torch.zeros(batch_size, len(self._distances))
+                self.music_spectrum = torch.zeros(batch_size, len(self.distances))
 
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self._angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
+            self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self._angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
-            elif self.estimation_params.endswith("range"):
-                self._distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .01, device=device) \
+                self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
+            if self.estimation_params.endswith("range"):
+                self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .01, device=device) \
                     .requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"
@@ -1085,14 +996,14 @@ class MUSIC(SubspaceMethod):
 
         """
         if known_angles is None:
-            theta = self._angels
+            theta = self.angels[:, None]
         else:
             theta = known_angles.float()
             if len(theta.shape) == 1:
                 theta = torch.atleast_1d(theta)[:, None]
 
         if known_distances is None:
-            distances = self._distances
+            distances = self.distances[:, None]
         else:
             distances = known_distances.float()
             if len(distances.shape) == 1:
@@ -1110,7 +1021,7 @@ class MUSIC(SubspaceMethod):
 
         time_delay = first_order + second_order
 
-        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
+        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay).requires_grad_(True)
 
     def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0):
         if self.estimation_params == "angle, range":
@@ -1120,10 +1031,10 @@ class MUSIC(SubspaceMethod):
 
     def _plot_1d_spectrum(self, highlight_corrdinates, batch):
         if self.estimation_params == "angle":
-            x = np.rad2deg(self._angels.detach().cpu().numpy())
+            x = np.rad2deg(self.angels.detach().cpu().numpy())
             x_label = "angle [deg]"
         elif self.estimation_params == "range":
-            x = self._distances.detach().cpu().numpy()
+            x = self.distances.detach().cpu().numpy()
             x_label = "distance [m]"
         else:
             raise ValueError(f"_plot_1d_spectrum: No such option for param estimation.")
@@ -1146,8 +1057,8 @@ class MUSIC(SubspaceMethod):
 
         """
         # Creating figure
-        distances = self._distances.detach().cpu().numpy()
-        angles = self._angels.detach().cpu().numpy()
+        distances = self.distances.detach().cpu().numpy()
+        angles = self.angels.detach().cpu().numpy()
         spectrum = self.music_spectrum[batch].detach().cpu().numpy()
         x, y = np.meshgrid(distances, np.rad2deg(angles))
         # Plotting the 3D surface

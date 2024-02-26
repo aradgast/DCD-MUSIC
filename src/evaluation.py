@@ -79,7 +79,7 @@ def evaluate_dnn_model(
         for data in dataset:
             X, true_label = data
             if model_type.startswith("SubspaceNet"):
-                if model.field_type.endswith("Near"):
+                if model.system_model.params.field_type.endswith("Near"):
                     DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                     RANGE.to(device)
                 else:
@@ -91,8 +91,8 @@ def evaluate_dnn_model(
             X = X.to(device)
             DOA = DOA.to(device)
             # Get model output
-            if model_type.startswith("SubspaceNet") and model.field_type.endswith("Near"):
-                if model.theta_range is None:
+            if model_type.startswith("SubspaceNet") and model.system_model.params.field_type.endswith("Near"):
+                if model.diff_method.angels is None:
                     model_output = model(X, is_soft=False, known_angles=DOA)
                 else:
                     model_output = model(X, is_soft=False)
@@ -119,14 +119,14 @@ def evaluate_dnn_model(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
                     )
             elif model_type.startswith("SubspaceNet"):
-                if model.field_type.endswith("Near"):
-                    if model.theta_range is None:
+                if model.system_model.params.field_type.endswith("Near"):
+                    if model.diff_method.angels is None:
                         RANGE_predictions = model_output[0]
                         DOA_predictions = DOA
                     else:
                         RANGE_predictions = model_output[1]
                         DOA_predictions = model_output[0]
-                elif model.field_type.endswith("Far"):
+                elif model.system_model.params.field_type.endswith("Far"):
                     # Default - SubSpaceNet
                     DOA_predictions = model_output[0]
             else:
@@ -137,7 +137,7 @@ def evaluate_dnn_model(
             if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
-                if model.field_type.endswith("Near"):
+                if model.system_model.params.field_type.endswith("Near"):
                     eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
                     if is_separted:
                         eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
