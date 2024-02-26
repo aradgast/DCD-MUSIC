@@ -53,11 +53,6 @@ from src.system_model import SystemModel
 warnings.simplefilter("ignore")
 
 # Constants
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-# device = "cpu"
-
 
 class ModelGenerator(object):
     """
@@ -1074,7 +1069,7 @@ class MUSIC(SubspaceMethod):
             if self.estimation_params.startswith("angle"):
                 self._angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device).requires_grad_(True)
             elif self.estimation_params.endswith("range"):
-                self._distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .1, device=device) \
+                self._distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .01, device=device) \
                     .requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"

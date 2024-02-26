@@ -410,7 +410,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Get model output
             # t1 = time.time()
             if "music_1D" in model_name:
-                noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250)) # add error with var of 0.1 deg.
+                noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
                 model_output = model(Rx, known_angles=noisy_DOA)
             else:
                 model_output = model(Rx)

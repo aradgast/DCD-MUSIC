@@ -32,10 +32,9 @@ import numpy as np
 import torch.nn as nn
 import torch
 from itertools import permutations
+from src.utils import *
 BALANCE_FACTOR = 0
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = "cpu"
 
 def add_line_to_file(file_name, line_to_add):
     try:

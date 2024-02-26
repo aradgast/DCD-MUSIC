@@ -36,9 +36,7 @@ from tqdm import tqdm
 from src.signal_creation import Samples
 from pathlib import Path
 from src.system_model import SystemModelParams
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = "cpu"
+from src.utils import *
 
 def create_dataset(
         system_model_params: SystemModelParams,

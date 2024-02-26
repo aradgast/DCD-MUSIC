@@ -42,7 +42,7 @@ plt.close("all")
 
 
 if __name__ == "__main__":
-    snr_list = [5]
+    snr_list = [-4, -2, 0, 2, 4, 6]
     # snr_list = [-12, -10, -8, -6, -4, -2, 0, 2]
     for snr in snr_list:
         # Initialize seed
@@ -65,14 +65,14 @@ if __name__ == "__main__":
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
         dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
         # Operations commands
-        commands = {"SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
+        commands = {"SAVE_TO_FILE": True,  # Saving results to file or present them over CMD
                     "CREATE_DATA": True,  # Creating new dataset
                     "LOAD_MODEL": False,  # Load specific model for training
                     "TRAIN_MODEL": True,  # Applying training operation
                     "SAVE_MODEL": True,  # Saving tuned model
                     "EVALUATE_MODE": True,  # Evaluating desired algorithms
         }
-        commands["LOAD_DATA"] = True  # Loading data from exist dataset
+        commands["LOAD_DATA"] = not(commands["CREATE_DATA"])  # Loading data from exist dataset
         # Saving simulation scores to external file
         if commands["SAVE_TO_FILE"]:
             file_path = (
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 4096  # Overall dateset size
+        samples_size = 8192  # Overall dateset size
         train_test_ratio = .1  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
@@ -169,12 +169,12 @@ if __name__ == "__main__":
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(512)
-                .set_epochs(150)
+                .set_batch_size(256)
+                .set_epochs(200)
                 .set_model(model=model_config)
                 .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
-                .set_schedular(step_size=100, gamma=0.5)
+                .set_schedular(step_size=60, gamma=0.5)
                 .set_criterion()
                 .set_field_type(system_model_params.field_type)
             )
