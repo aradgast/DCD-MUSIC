@@ -893,8 +893,6 @@ class MUSIC(SubspaceMethod):
 
     def _maskpeak_2D(self):
         batch_size = self.music_spectrum.shape[0]
-        soft_row = torch.zeros(self.music_spectrum.shape[0], self.system_model.params.M, dtype=torch.float32).to(device)
-        soft_col = torch.zeros(self.music_spectrum.shape[0], self.system_model.params.M, dtype=torch.float32).to(device)
         cell_size_col = 5  # for distances
         cell_size_row = 5  # for angles
         flat_spectrum = self.music_spectrum.reshape(self.music_spectrum.shape[0], -1)
@@ -911,14 +909,8 @@ class MUSIC(SubspaceMethod):
         metrix_thr = self.music_spectrum.gather(1, max_row_cell_idx.expand(-1, -1, self.music_spectrum.shape[2]))\
             .gather(2, max_col_cell_idx.transpose(1, 2).expand(-1, -1, max_col_cell_idx.shape[-1]).transpose(1,2))
         soft_max = torch.softmax(metrix_thr.view(batch_size, -1), dim=1).reshape(metrix_thr.shape)
-        for batch in range(batch_size):
-            for i, (max_r, max_c) in enumerate(zip(max_row[batch], max_col[batch])):
-                soft_row[batch, i] = (
-                        self.angels[max_row_cell_idx[batch]].reshape(1, -1) @ torch.sum(soft_max[batch], dim=1)).requires_grad_(
-                    True)
-                soft_col[batch, i] = (self.distances[max_col_cell_idx[batch]] @ torch.sum(soft_max[batch], dim=0)).requires_grad_(
-                    True)
-                pass
+        soft_row = torch.einsum("bmc, bcm -> bm", self.angels[max_row_cell_idx].transpose(1,2), torch.sum(soft_max, dim=2).unsqueeze(-1))
+        soft_col = torch.einsum("bmc, bcm -> bm", self.distances[max_col_cell_idx], torch.sum(soft_max, dim=1).unsqueeze(-1))
         return soft_row, soft_col
 
     def _peak_finder_1D(self, search_space):
