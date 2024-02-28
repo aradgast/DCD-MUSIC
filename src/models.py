@@ -1083,6 +1083,53 @@ class MUSIC(SubspaceMethod):
         # Display the plot
         plt.show()
 
+class RootMusic(SubspaceMethod):
+    def __init__(self, system_model: SystemModel):
+        super(RootMusic, self).__init__(system_model)
+
+    def forward(self, cov: torch.Tensor):
+        batch_size = cov.shape[0]
+        _, noise_subspace = self.subspace_separation(cov, number_of_sources=self.system_model.params.M)
+        poly_generator = torch.einsum("bnk, bkn -> bnn", noise_subspace, noise_subspace.conj().transpose(1, 2))
+        diag_sum = self.sum_of_diag(poly_generator)
+        roots = self.find_roots(diag_sum)
+        # Calculate doa
+        # angles_prediction_all = self.get_doa_from_roots(roots)
+
+        # the actual prediction is for roots that are closest to the unit circle.
+        roots = self.extract_roots_closest_unit_circle(roots)
+        angles_prediction = self.get_doa_from_roots(roots)
+        return angles_prediction
+
+    def get_doa_from_roots(self, roots):
+        roots_phase = torch.angle(roots)
+        angle_predicted = torch.arcsin((1 / (2 * np.pi * self.system_model.dist["Narrowband"])) * roots_phase)
+        return angle_predicted
+    def extract_roots_closest_unit_circle(self, roots):
+        return roots
+
+    def sum_of_diag(self, tensor: torch.Tensor):
+        tensor = self.__check_diag_sums_dim(tensor)
+        N = torch.shape[-1]
+        diag_indcies = torch.linspace(-N + 1, N - 1, 2 * N - 1)
+        sum_of_diags = torch.zeros(tensor.shape[0], 2 * N - 1)
+        for idx, diag_idx in enumerate(diag_indcies):
+            sum_of_diags[:, idx] = torch.sum(torch.diagonal(tensor, dim1=-2, dim2=-1, offset=diag_idx), dim=-1)
+        return sum_of_diags
+
+    def find_roots(self, coeffs: torch.Tensor):
+        return coeffs
+
+    def __check_diag_sums_dim(self, tensor):
+        if len(tensor.shape) != 3:
+            if len(tensor.shape) == 2:
+                tensor = tensor.unsqueeze(0)
+            else:
+                raise ValueError("sum_of_diag: Input tensor shape should be 2 or 3 dim")
+        else:
+            if tensor.shape[-1] != tensor.shape[-2]:
+                raise ValueError("sum_of_diag: input tensor should be square matrices as a batch.")
+        return tensor
 
 def root_music(Rz: torch.Tensor, M: int, batch_size: int):
     """Implementation of the model-based Root-MUSIC algorithm, support Pytorch, intended for
