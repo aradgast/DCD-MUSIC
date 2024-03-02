@@ -383,6 +383,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     for name, param in model.named_parameters():
         if param.requires_grad:
             grad_diff_norm[name] = 0.0
+    if "music_1D" in model_name:
+        mse_loss = nn.MSELoss()
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
@@ -410,8 +412,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Get model output
             # t1 = time.time()
             if "music_1D" in model_name:
-                noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
-                model_output = model(Rx, known_angles=noisy_DOA)
+                # noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
+                model_output = model(Rx, known_angles=DOA)
             else:
                 model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
@@ -434,7 +436,12 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     DOA_predictions.float(), DOA.float()
                 )
             elif training_params.field_type.startswith("Near"):
-                train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
+                if "music_1D" in model_name:
+                    train_loss = mse_loss(RANGE_predictions, RANGE.to(torch.float32))
+                    train_loss_angle = 0.0
+                    train_loss_distance = train_loss
+                else:
+                    train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
                                                                                               DOA,
                                                                                               RANGE_predictions,
                                                                                               RANGE,

@@ -847,7 +847,15 @@ class MUSIC(SubspaceMethod):
         """
         # single param estimation: the search grid should be updated for each batch, else, it's the same search grid.
         if self.angels is None or self.distances is None:
-            self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
+            if known_angles.shape[-1] == 1:
+                self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
+            else:
+                params = torch.zeros((cov.shape[0], self.system_model.params.M))
+                for source in range(self.system_model.params.M):
+                    params_source = self.forward(cov,
+                                                     known_angles=known_angles[:, source][:, None])
+                    params[:, source] = params_source.squeeze()
+                return params
         _, Un = self.subspace_separation(cov, self.system_model.params.M)
         inverse_spectrum = self.get_inverse_spectrum(Un)
         self.music_spectrum = 1 / inverse_spectrum
@@ -971,11 +979,10 @@ class MUSIC(SubspaceMethod):
 
     def _maskpeak_1D(self, search_space):
         cell_size = 5  # for distances
-        top_indxs = torch.topk(self.music_spectrum, self.system_model.params.M, dim=1)[1]
+        top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
         cell_idx = (top_indxs - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
         cell_idx %= self.music_spectrum.shape[1]
-        if self.system_model.params.M == 1:
-            cell_idx = cell_idx.unsqueeze(-1)
+        cell_idx = cell_idx.unsqueeze(-1)
         metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
         soft_max = torch.softmax(metrix_thr, dim=1)
         soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max)
@@ -1009,14 +1016,14 @@ class MUSIC(SubspaceMethod):
         return soft_row, soft_col
 
     def _peak_finder_1D(self, search_space):
-        predict_param = torch.zeros(self.music_spectrum.shape[0], self.system_model.params.M)
+        predict_param = torch.zeros(self.music_spectrum.shape[0], 1)
         for batch in range(self.music_spectrum.shape[0]):
             music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
             # Find spectrum peaks
             peaks = list(sc.signal.find_peaks(music_spectrum)[0])
             # Sort the peak by their amplitude
             peaks.sort(key=lambda x: music_spectrum[x], reverse=True)
-            tmp = search_space[peaks[0:self.system_model.params.M]]
+            tmp = search_space[peaks[0:1]]
             if tmp.nelement() == 0:
                 tmp = self._maskpeak_1D(search_space)
                 print("_peak_finder_1D: No peaks were found!")

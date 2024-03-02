@@ -167,12 +167,12 @@ class RMSPELoss(nn.Module):
                 rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
                 rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
                 # Choose minimal error from all permutations
-                if rmspe_tensor.shape[1] == 1:
+                if rmspe_tensor.shape[0] == 1:
                     rmspe_min = torch.min(rmspe_tensor)
                     rmspe_angle.append(rmspe_angle_tensor.item())
                     rmspe_distance.append(rmspe_distnace_tensor.item())
                 else:
-                    rmspe_min, min_idx = torch.min(rmspe_tensor)
+                    rmspe_min, min_idx = torch.min(rmspe_tensor, dim=0)
                     rmspe_angle.append(rmspe_angle_tensor[min_idx])
                     rmspe_distance.append(rmspe_distnace_tensor[min_idx])
                 rmspe.append(rmspe_min)

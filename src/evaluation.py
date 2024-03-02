@@ -28,6 +28,7 @@ evaluate: Wrapper function for model and algorithm evaluations.
 
 """
 import numpy as np
+import torch
 # Imports
 import torch.nn as nn
 from matplotlib import pyplot as plt
@@ -75,6 +76,8 @@ def evaluate_dnn_model(
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
+    if model.diff_method.angels is None:
+        mse_loss = nn.MSELoss()
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
@@ -138,20 +141,23 @@ def evaluate_dnn_model(
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
                 if model.system_model.params.field_type.endswith("Near"):
-                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
-                    if is_separted:
-                        eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
-                        overall_loss_angle += eval_loss_angle.item()
-                        overall_loss_distance += eval_loss_distance.item()
+                    if model.diff_method.angels is None:
+                        eval_loss = mse_loss(RANGE.to(torch.float32), RANGE_predictions)
+                    else:
+                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
+                        if is_separted:
+                            eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
+                            overall_loss_angle += eval_loss_angle.item()
+                            overall_loss_distance += eval_loss_distance.item()
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item()
 
         overall_loss = overall_loss / test_length
-        if is_separted:
-            overall_loss_angle /= test_length
-            overall_loss_distance /= test_length
+        # if is_separted:
+        #     overall_loss_angle /= test_length
+        #     overall_loss_distance /= test_length
     # Plot spectrum for SubspaceNet model
     if plot_spec and model_type.startswith("SubspaceNet"):
         DOA_all = model_output[1]
