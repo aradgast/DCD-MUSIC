@@ -40,6 +40,32 @@ warnings.simplefilter("ignore")
 os.system("cls||clear")
 plt.close("all")
 
+# Initialize paths
+external_data_path = Path.cwd() / "data"
+scenario_data_path = "uniform_bias_spacing"
+datasets_path = external_data_path / "datasets" / scenario_data_path
+simulations_path = external_data_path / "simulations"
+saving_path = external_data_path / "weights"
+# create folders if not exists
+datasets_path.mkdir(parents=True, exist_ok=True)
+(datasets_path / "train").mkdir(parents=True, exist_ok=True)
+(datasets_path / "test").mkdir(parents=True, exist_ok=True)
+datasets_path.mkdir(parents=True, exist_ok=True)
+simulations_path.mkdir(parents=True, exist_ok=True)
+saving_path.mkdir(parents=True, exist_ok=True)
+# Initialize time and date
+now = datetime.now()
+dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
+# Operations commands
+commands = {"SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
+            "CREATE_DATA": True,  # Creating new dataset
+            "LOAD_MODEL": False,  # Load specific model for training
+            "TRAIN_MODEL": True,  # Applying training operation
+            "SAVE_MODEL": False,  # Saving tuned model
+            "EVALUATE_MODE": True,  # Evaluating desired algorithms
+            }
+commands["LOAD_DATA"] = not (commands["CREATE_DATA"])  # Loading data from exist dataset
 
 if __name__ == "__main__":
     snr_list = [15]
@@ -47,36 +73,11 @@ if __name__ == "__main__":
     for snr in snr_list:
         # Initialize seed
         set_unified_seed()
-        # Initialize paths
-        external_data_path = Path.cwd() / "data"
-        scenario_data_path = "uniform_bias_spacing"
-        datasets_path = external_data_path / "datasets" / scenario_data_path
-        simulations_path = external_data_path / "simulations"
-        saving_path = external_data_path / "weights"
-        # create folders if not exists
-        datasets_path.mkdir(parents=True, exist_ok=True)
-        (datasets_path / "train").mkdir(parents=True, exist_ok=True)
-        (datasets_path / "test").mkdir(parents=True, exist_ok=True)
-        datasets_path.mkdir(parents=True, exist_ok=True)
-        simulations_path.mkdir(parents=True, exist_ok=True)
-        saving_path.mkdir(parents=True, exist_ok=True)
-        # Initialize time and date
-        now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
-        # Operations commands
-        commands = {"SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
-                    "CREATE_DATA": True,  # Creating new dataset
-                    "LOAD_MODEL": True,  # Load specific model for training
-                    "TRAIN_MODEL": True,  # Applying training operation
-                    "SAVE_MODEL": True,  # Saving tuned model
-                    "EVALUATE_MODE": True,  # Evaluating desired algorithms
-        }
-        commands["LOAD_DATA"] = not(commands["CREATE_DATA"])  # Loading data from exist dataset
+
         # Saving simulation scores to external file
         if commands["SAVE_TO_FILE"]:
             file_path = (
-                simulations_path / "results" / "scores" / Path(dt_string_for_save + f"_{snr}" + ".txt")
+                    simulations_path / "results" / "scores" / Path(dt_string_for_save + f"_{snr}" + ".txt")
             )
             sys.stdout = open(file_path, "w")
         # Define system model parameters
@@ -87,11 +88,7 @@ if __name__ == "__main__":
             .set_parameter("T", 100)
             .set_parameter("snr", snr)
             .set_parameter("field_type", "Near")
-            .set_parameter("signal_type", "NarrowBand")
             .set_parameter("signal_nature", "non-coherent")
-            .set_parameter("eta", 0)
-            .set_parameter("bias", 0)
-            .set_parameter("sv_noise_var", 0)
         )
         system_model = SystemModel(system_model_params)
         # Generate model configuration
@@ -104,7 +101,7 @@ if __name__ == "__main__":
             .set_model(system_model_params)
         )
         # Define samples size
-        samples_size = 4096  # Overall dateset size
+        samples_size = 1024  # Overall dateset size
         train_test_ratio = .1  # training and testing datasets ratio
         # Sets simulation filename
         simulation_filename = get_simulation_filename(
@@ -116,8 +113,30 @@ if __name__ == "__main__":
         print("------------------------------------")
         print("date and time =", dt_string)
 
+        # Datasets loading
+        if commands["LOAD_DATA"]:
+            try:
+                (
+                    train_dataset,
+                    test_dataset,
+                    generic_test_dataset,
+                    samples_model,
+                ) = load_datasets(
+                    system_model_params=system_model_params,
+                    model_type=model_config.model_type,
+                    samples_size=samples_size,
+                    datasets_path=datasets_path,
+                    train_test_ratio=train_test_ratio,
+                    is_training=True,
+                )
+            except Exception as e:
+                print(e)
+                print("Dataset not found")
+                commands["CREATE_DATA"] = True
+                commands["LOAD_DATA"] = False
+
         # Datasets creation
-        if commands["CREATE_DATA"]:
+        if commands["CREATE_DATA"] and not commands["LOAD_DATA"]:
             # Define which datasets to generate
             create_training_data = True  # Flag for creating training data
             create_testing_data = True  # Flag for creating test data
@@ -148,40 +167,30 @@ if __name__ == "__main__":
                     true_range=None,
                     phase="test",
                 )
-        # Datasets loading
-        elif commands["LOAD_DATA"]:
-            (
-                train_dataset,
-                test_dataset,
-                generic_test_dataset,
-                samples_model,
-            ) = load_datasets(
-                system_model_params=system_model_params,
-                model_type=model_config.model_type,
-                samples_size=samples_size,
-                datasets_path=datasets_path,
-                train_test_ratio=train_test_ratio,
-                is_training=True,
-            )
+
 
         # Training stage
         if commands["TRAIN_MODEL"]:
             # Assign the training parameters object
             simulation_parameters = (
                 TrainingParams()
-                .set_batch_size(128)
-                .set_epochs(120)
+                .set_training_objective("range")
+                .set_batch_size(256)
+                .set_epochs(2)
                 .set_model(model=model_config)
-                .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
+                .set_optimizer(optimizer="Adam", learning_rate=0.00001, weight_decay=1e-9)
                 .set_training_dataset(train_dataset)
                 .set_schedular(step_size=100, gamma=0.5)
                 .set_criterion()
-                .set_field_type(system_model_params.field_type)
+
             )
             if commands["LOAD_MODEL"]:
-                simulation_parameters.load_model(
-                    loading_path=saving_path / "final_models" / simulation_filename
-                )
+                try:
+                    simulation_parameters.load_model(loading_path=saving_path / "final_models" / simulation_filename)
+                except Exception as e:
+                    print(e)
+                    print("Model not found.")
+
             # Print training simulation details
             simulation_summary(
                 system_model_params=system_model_params,
@@ -217,7 +226,7 @@ if __name__ == "__main__":
             # Initialize figures dict for plotting
             figures = initialize_figures()
             # Define loss measure for evaluation
-            criterion, subspace_criterion = set_criterions("rmse")
+            criterion, subspace_criterion = set_criterions("rmspe")
             # Load datasets for evaluation
             if not (commands["CREATE_DATA"] or commands["LOAD_DATA"]):
                 test_dataset, generic_test_dataset, samples_model = load_datasets(
@@ -243,8 +252,8 @@ if __name__ == "__main__":
                     .set_model(model=model_config)
                     .load_model(
                         loading_path=saving_path
-                        / "final_models"
-                        / simulation_filename
+                                     / "final_models"
+                                     / simulation_filename
                     )
                 )
                 model = simulation_parameters.model

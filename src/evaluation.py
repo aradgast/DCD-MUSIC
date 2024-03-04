@@ -33,11 +33,11 @@ import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
 from src.utils import device
-from src.criterions import RMSPELoss, MSPELoss
+from src.criterions import RMSPELoss, MSPELoss, RMSELoss
 from src.criterions import RMSPE, MSPE
 from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
-from src.models import SubspaceNet
+from src.models import SubspaceNet, MUSIC
 from src.plotting import plot_spectrum
 
 
@@ -76,8 +76,7 @@ def evaluate_dnn_model(
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
-    if model.diff_method.angels is None:
-        mse_loss = nn.MSELoss()
+
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
@@ -95,7 +94,7 @@ def evaluate_dnn_model(
             DOA = DOA.to(device)
             # Get model output
             if model_type.startswith("SubspaceNet") and model.system_model.params.field_type.endswith("Near"):
-                if model.diff_method.angels is None:
+                if model.diff_method.estimation_params == "range":
                     model_output = model(X, is_soft=False, known_angles=DOA)
                 else:
                     model_output = model(X, is_soft=False)
@@ -123,7 +122,7 @@ def evaluate_dnn_model(
                     )
             elif model_type.startswith("SubspaceNet"):
                 if model.system_model.params.field_type.endswith("Near"):
-                    if model.diff_method.angels is None:
+                    if model.diff_method.estimation_params == "range":
                         RANGE_predictions = model_output[0]
                         DOA_predictions = DOA
                     else:
@@ -142,22 +141,18 @@ def evaluate_dnn_model(
             else:
                 if model.system_model.params.field_type.endswith("Near"):
                     if model.diff_method.angels is None:
-                        eval_loss = mse_loss(RANGE.to(torch.float32), RANGE_predictions)
+                        eval_loss = criterion(RANGE.to(torch.float32), RANGE_predictions)
                     else:
                         eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
                         if is_separted:
                             eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
-                            overall_loss_angle += eval_loss_angle.item()
-                            overall_loss_distance += eval_loss_distance.item()
+                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
-            overall_loss += eval_loss.item()
+            overall_loss += eval_loss.item() / len(dataset)
 
-        overall_loss = overall_loss / test_length
-        # if is_separted:
-        #     overall_loss_angle /= test_length
-        #     overall_loss_distance /= test_length
     # Plot spectrum for SubspaceNet model
     if plot_spec and model_type.startswith("SubspaceNet"):
         DOA_all = model_output[1]
@@ -216,10 +211,10 @@ def evaluate_augmented_model(
     # Initialize instances of subspace methods
     methods = {
         "mvdr": MVDR(system_model),
-        "music": MUSIC(system_model),
+        "music": MUSIC(system_model, estimation_parameter="angle"),
         "esprit": Esprit(system_model),
         "r-music": RootMUSIC(system_model),
-        "music_2D": MUSIC_2D(system_model)
+        "music_2D": MUSIC(system_model, estimation_parameter="angle, range")
     }
     # If algorithm is not in methods
     if methods.get(algorithm) is None:
@@ -303,7 +298,10 @@ def evaluate_model_based(
     loss_list_angle = []
     loss_list_distance = []
     if algorithm.endswith("2D"):
+        music_2d_ = MUSIC(system_model, estimation_parameter="angle, range")
         music_2d = MUSIC_2D(system_model)
+        tmp_rmspe = RMSPELoss()
+
     for i, data in enumerate(dataset):
         X, doa = data
         X = X[0]
@@ -396,27 +394,33 @@ def evaluate_model_based(
                 )
         elif algorithm.endswith("2D"):
             y = doa[0]
-            doa, distances = y[:len(y) // 2], y[len(y) // 2:]
-            doa_prediction, distance_prediction, _, _ = music_2d.narrowband(X)
+            doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
+
+            Rx = torch.from_numpy(np.cov(X.detach().numpy()))[None, :, :]
+            doa_prediction_, distance_prediction_ = music_2d_(Rx, is_soft=False)
+            doa_prediction, distance_prediction, spectra, _ = music_2d.narrowband(X)
+
             if is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
                                                                is_separted)
-                loss_list_angle.append(rmspe_angle)
-                loss_list_distance.append(rmspe_distance)
+                rmspe_, rmspe_angle_, rmspe_distance_ = tmp_rmspe(doa_prediction_, doa, distance_prediction_, distances,
+                                                               is_separted)
+                loss_list_angle.append(rmspe_angle.item())
+                loss_list_distance.append(rmspe_distance.item())
             else:
                 rmspe = criterion(doa_prediction, doa, distance_prediction, distances)
-            loss_list.append(rmspe)
+            loss_list.append(rmspe.item())
 
         else:
             raise Exception(
                 f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
             )
     if is_separted:
-        return {"Overall":  np.mean(loss_list),
-                "Angle":    np.mean(loss_list_angle),
-                "Distance": np.mean(loss_list_distance)}
+        return {"Overall":  torch.mean(torch.Tensor(loss_list)).item(),
+                "Angle":    torch.mean(torch.Tensor(loss_list_angle)).item(),
+                "Distance": torch.mean(torch.Tensor(loss_list_distance)).item()}
     else:
-        return np.mean(loss_list)
+        return torch.mean(torch.Tensor(loss_list)).item()
 
 
 def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):

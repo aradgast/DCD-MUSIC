@@ -75,23 +75,33 @@ class TrainingParams(object):
         """
         Initializes the TrainingParams object.
         """
-        self.field_type = None
+        self.criterion = None
+        self.model = None
+        self.diff_method = None
+        self.tau = None
+        self.model_type = None
+        self.epochs = None
+        self.batch_size = None
+        self.training_objective = None
 
-    def set_field_type(self, field_type: str):
+    def set_training_objective(self, training_objective: str):
         """
 
         Args:
-            field_type:
+            training_objective:
 
         Returns:
 
         """
-        if field_type.lower() == "far":
-            self.field_type = "Far"
-        elif field_type.lower() == "near":
-            self.field_type = "Near"
+        if training_objective.lower() == "angle":
+            self.training_objective = "angle"
+        elif training_objective.lower() == "range":
+            self.training_objective = "range"
+        elif training_objective.lower() == "angle, range":
+            self.training_objective = "angle, range"
         else:
-            raise Exception(f"TrainingParams.set_field_type: Unrecognized {field_type}-field type.")
+            raise Exception(f"TrainingParams.set_training_objective:"
+                            f" Unrecognized training objective : {training_objective}.")
         return self
 
     def set_batch_size(self, batch_size: int):
@@ -273,8 +283,10 @@ class TrainingParams(object):
         # Define loss criterion
         if self.model_type.startswith("DeepCNN"):
             self.criterion = nn.BCELoss()
-        else:
+        elif self.training_objective.startswith("angle"):
             self.criterion = RMSPELoss()
+        elif self.training_objective.startswith("range"):
+            self.criterion = RMSELoss()
         return self
 
     def set_training_dataset(self, train_dataset: list):
@@ -383,13 +395,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     for name, param in model.named_parameters():
         if param.requires_grad:
             grad_diff_norm[name] = 0.0
-    if "music_1D" in model_name:
-        mse_loss = nn.MSELoss()
+
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-        if epoch == 900:
-            pass
+
         train_length = 0
         overall_train_loss = 0.0
         overall_train_loss_angle = 0.0
@@ -399,7 +409,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model = model.to(device)
         for data in tqdm(training_params.train_dataset):
             Rx, true_label = data
-            if training_params.field_type.startswith("Near"):
+            if training_params.training_objective in ["range", "angle, range"]:
                 DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                 RANGE = Variable(RANGE, requires_grad=True).to(device)
             else:
@@ -411,20 +421,19 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             DOA = Variable(DOA, requires_grad=True).to(device)
             # Get model output
             # t1 = time.time()
-            if "music_1D" in model_name:
+            if training_params.training_objective == "range":
                 # noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
                 model_output = model(Rx, known_angles=DOA)
             else:
                 model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
             if training_params.model_type.startswith("SubspaceNet"):
-                if training_params.field_type.startswith("Far"):
+                if training_params.training_objective.endswith("angle"):
                     DOA_predictions = model_output[0]
-                elif training_params.field_type.startswith("Near"):
-                    if "music_1D" in model_name:
+                elif training_params.training_objective.startswith("range"):
                         RANGE_predictions = model_output[0]
                         DOA_predictions = DOA
-                    else:
+                else:
                         DOA_predictions = model_output[0]
                         RANGE_predictions = model_output[1]
             else:
@@ -435,34 +444,24 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 train_loss = training_params.criterion(
                     DOA_predictions.float(), DOA.float()
                 )
-            elif training_params.field_type.startswith("Near"):
-                if "music_1D" in model_name:
-                    train_loss = mse_loss(RANGE_predictions, RANGE.to(torch.float32))
+            elif training_params.model_type.startswith("SubspaceNet"):
+                if training_params.training_objective == "angle":
+                    train_loss = training_params.criterion(DOA_predictions, DOA)
+                elif training_params.training_objective == "range":
+                    train_loss = training_params.criterion(RANGE_predictions, RANGE.to(torch.float32))
                     train_loss_angle = 0.0
                     train_loss_distance = train_loss
-                else:
+                elif training_params.training_objective == "angle, range":
                     train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
                                                                                               DOA,
                                                                                               RANGE_predictions,
                                                                                               RANGE,
                                                                                               True)
-            else:
-                train_loss = training_params.criterion(DOA_predictions, DOA)
             # Back-propagation stage
             try:
                 train_loss.backward(retain_graph=True)
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
-
-            # if epoch % 30 == 0:
-            #     print("#" * 10 + f"EPOCH {epoch + 1}" + "#" * 10)
-            #     for name, param in model.named_parameters():
-            #         if param.requires_grad:
-            #             if param.grad is None:
-            #                 pass
-            #             else:
-            #                 grad_diff_norm[name] = torch.norm(param.grad)
-            #                 print(f"{name} grad norm: {grad_diff_norm[name]}")
 
             # optimizer update
             optimizer.step()
@@ -474,11 +473,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 overall_train_loss += train_loss.item() * len(data[0])
             else:
                 # RMSPE is summed
-                overall_train_loss += train_loss.item()
+                overall_train_loss += train_loss.item() / len(training_params.train_dataset)
                 # overall_train_loss_angle += train_loss_angle.item()
                 # overall_train_loss_distance += train_loss_distance.item()
         # Average the epoch training loss
-        overall_train_loss = overall_train_loss / train_length
+        # overall_train_loss = overall_train_loss
         # overall_train_loss_angle /= train_length
         # overall_train_loss_distance /= train_length
         loss_train_list.append(overall_train_loss)

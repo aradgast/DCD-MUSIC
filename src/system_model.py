@@ -43,7 +43,7 @@ class SystemModelParams:
     M = None                            # Number of sources
     N = None                            # Number of sensors
     T = None                            # Number of observations
-    field_type = None                  # field type ("Far" or "Near")
+    field_type = "Far"                  # field type ("Far" or "Near")
     signal_type = "NarrowBand"          # Signal type ("NarrowBand" or "Broadband")
     freq_values = [0, 500]              # Frequency values for Broadband signal
     signal_nature = "non-coherent"      # Signal nature ("non-coherent" or "coherent")
@@ -94,6 +94,13 @@ class SystemModel(object):
                 eta: float = 0, geo_noise_var: float = 0) -> np.ndarray: Computes the steering vector.
 
         """
+        self.array = None
+        self.dist_array_elems = None
+        self.time_axis = None
+        self.f_sampling = None
+        self.max_freq = None
+        self.min_freq = None
+        self.f_rng = None
         self.params = system_model_params
         # Assign signal type parameters
         self.define_scenario_params()
@@ -132,7 +139,7 @@ class SystemModel(object):
             ),
         }
         # distance between array elements
-        self.dist = {
+        self.dist_array_elems = {
             "NarrowBand": 1 / 2,
             "Broadband": 1
                          / (2 * (self.max_freq["Broadband"] - self.min_freq["Broadband"])),
@@ -231,7 +238,7 @@ class SystemModel(object):
                     * 1j
                     * np.pi
                     * f_sv[self.params.signal_type]
-                    * (uniform_bias + mis_distance + self.dist[self.params.signal_type])
+                    * (uniform_bias + mis_distance + self.dist_array_elems[self.params.signal_type])
                     * self.array
                     * np.sin(theta)
                 )
@@ -260,8 +267,8 @@ class SystemModel(object):
             if not generate_search_grid:
                 time_delay = np.zeros((len(self.array), len(theta)))
                 for idx, (doa, dist) in enumerate(zip(theta, distance)):
-                    first_order = self.array * np.sin(doa) * self.dist[self.params.signal_type]
-                    second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array * self.dist[self.params.signal_type], 2), dist)
+                    first_order = self.array * np.sin(doa) * self.dist_array_elems[self.params.signal_type]
+                    second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array * self.dist_array_elems[self.params.signal_type], 2), dist)
                     time_delay[:, idx] = first_order + second_order
 
                 return np.exp(-1j
@@ -271,16 +278,16 @@ class SystemModel(object):
             else:
                 theta = np.atleast_1d(theta)[:, np.newaxis]
                 distance = np.atleast_1d(distance)[:, np.newaxis]
-                array = np.tile(self.array[:, np.newaxis], (1, self.params.N))
+                array = self.array[:, np.newaxis]
                 array_square = np.power(array, 2)
 
-                first_order = array @ np.tile(np.sin(theta), (1, self.params.N)).T * self.dist[self.params.signal_type]
+                first_order = np.einsum("nm, na -> na", array, np.tile(np.sin(theta), (1, self.params.N)).T * self.dist_array_elems[self.params.signal_type])
                 first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
 
-                second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist[self.params.signal_type], 2),
+                second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist_array_elems[self.params.signal_type], 2),
                                                 distance.T)
                 second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
-                second_order = np.einsum("ij, jkl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
+                second_order = np.einsum("ij, ikl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
 
                 time_delay = first_order + second_order
 
@@ -288,29 +295,10 @@ class SystemModel(object):
                               * -1j
                               * np.pi
                               * time_delay
-                              # need to divide here by the wavelength, seems that for the narrowband scenrio, wavelength = 1 here.
+                              / 1
+                              # need to divide here by the wavelength, seems that for the narrowband scenario,
+                              # wavelength = 1.
                 )
-        # else: # known angles
-        #     if not generate_search_grid: # generate the steering vector for a known angles and distances
-        #         time_delay = np.zeros((len(self.array), len(theta)))
-        #         for idx, doa in enumerate(theta):
-        #             first_order = self.array * np.sin(doa) * self.dist[self.params.signal_type]
-        #             second_order = -0.5 * np.divide(np.power(np.cos(doa) * self.array * self.dist[self.params.signal_type], 2), distance)
-        #             time_delay[:, idx] = first_order + second_order
-        #
-        #         return np.exp(-1j
-        #                       * 2
-        #                       * np.pi
-        #                       * time_delay)
-        #     else: # create a 1D grid for a known angles
-        #         distance_search_grid = np.zeros((len(theta), len(self.array), len(distance)))
-        #         for k, theta_k in enumerate(theta):
-        #             time_delay = np.zeros((len(self.array), len(distance)))
-        #             for idx, dist in enumerate(distance):
-        #                 first_order = self.array * np.sin(theta_k) * self.dist[self.params.signal_type]
-        #                 second_order = -0.5 * np.divide(np.power(np.cos(theta_k) * self.array * self.dist[self.params.signal_type], 2), dist)
-        #                 time_delay[:, idx] = first_order + second_order
-        #             distance_search_grid[k] = np.exp(-1j * 2 * np.pi * time_delay)
 
 
     def __str__(self):

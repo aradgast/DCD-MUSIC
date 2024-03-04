@@ -33,6 +33,7 @@ import torch.nn as nn
 import torch
 from itertools import permutations
 from src.utils import *
+
 BALANCE_FACTOR = 0
 
 
@@ -79,6 +80,15 @@ def permute_prediction(prediction: torch.Tensor):
         torch_perm_list.append(prediction.index_select(0, torch.tensor(list(p), dtype=torch.int64).to(device)))
     predictions = torch.stack(torch_perm_list, dim=0)
     return predictions
+
+
+class RMSELoss(nn.MSELoss):
+    def __init__(self, *args):
+        super(RMSELoss, self).__init__(*args)
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        mse_loss = super(RMSELoss, self).forward(input, target)
+        return torch.sqrt(mse_loss)
 
 
 class RMSPELoss(nn.Module):
@@ -160,9 +170,9 @@ class RMSPELoss(nn.Module):
                     rmspe_distance_val = (1 / np.sqrt(len(targets_distance))) * torch.linalg.norm(distance_err)
                     # Sum the rmpse with a balance factor
                     rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
-                    rmspe_list.append(rmspe_val)
-                    rmspe_angle_list.append(rmspe_angle_val)
-                    rmspe_distance_list.append(rmspe_distance_val)
+                    rmspe_list.append(rmspe_val.item())
+                    rmspe_angle_list.append(rmspe_angle_val.item())
+                    rmspe_distance_list.append(rmspe_distance_val.item())
                 rmspe_tensor = torch.stack(rmspe_list, dim=0)
                 rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
                 rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
@@ -188,10 +198,10 @@ class RMSPELoss(nn.Module):
                 rmspe_min = torch.min(rmspe_tensor)
                 rmspe.append(rmspe_min)
 
-        result = torch.sum(torch.stack(rmspe, dim=0))
+        result = torch.mean(torch.stack(rmspe, dim=0))
         if is_separted:
-            result_angle = torch.sum(torch.Tensor(rmspe_angle))
-            result_distance = torch.sum(torch.Tensor(rmspe_distance))
+            result_angle = torch.mean(torch.Tensor(rmspe_angle))
+            result_distance = torch.mean(torch.Tensor(rmspe_distance))
             return result, result_angle, result_distance
         else:
             return result
@@ -295,11 +305,12 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     rmspe_list = []
     rmspe_angle_list = []
     rmspe_distance_list = []
-    for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))), list(permutations(distance_predictions, len(distance_predictions)))):
+    for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))),
+                                 list(permutations(distance_predictions, len(distance_predictions)))):
         p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
         doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error_angle = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2)
+        error_angle = (((p_doa - doa) + np.pi / 2) % np.pi) - (np.pi / 2)
         error_distance = (p_distance - distance)
         # Calculate RMSE over all permutations
         rmspe_angle = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error_angle)
@@ -319,7 +330,8 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     return res
 
 
-def MSPE(doa_predictions: np.ndarray, doa: np.ndarray):
+def MSPE(doa_predictions: np.ndarray, doa: np.ndarray,
+         distance_predictions: np.ndarray = None, distance: np.ndarray = None, is_separted: bool = False):
     """Calculate the Mean Square Percentage Error (RMSPE) between the DOA predictions and target DOA values.
 
     Args:
@@ -332,17 +344,32 @@ def MSPE(doa_predictions: np.ndarray, doa: np.ndarray):
     Raises:
         None
     """
-    rmspe_list = []
-    for p in list(permutations(doa_predictions, len(doa_predictions))):
-        p = np.array(p)
-        doa = np.array(doa)
+    balance_factor = BALANCE_FACTOR
+    mspe_list = []
+    mspe_angle_list = []
+    mspe_distance_list = []
+    for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))),
+                                 list(permutations(distance_predictions, len(distance_predictions)))):
+        p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
+        doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
         # Calculate error with modulo pi
-        error = (((p - doa) * np.pi / 180) + np.pi / 2) % np.pi - np.pi / 2
+        error_angle = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2)
+        error_distance = (p_distance - distance)
         # Calculate MSE over all permutations
-        rmspe_val = (1 / len(p)) * (np.linalg.norm(error) ** 2)
-        rmspe_list.append(rmspe_val)
-    # Choose minimal error from all permutations
-    return np.min(rmspe_list)
+        mspe_angle = (1 / len(p_doa)) * (np.linalg.norm(error_angle) ** 2)
+        mspe_distance = (1 / len(p_distance)) * (np.linalg.norm(error_distance) ** 2)
+        mspe_val = balance_factor * mspe_angle + (1 - balance_factor) * mspe_distance
+        mspe_list.append(mspe_val)
+        mspe_angle_list.append(mspe_angle)
+        mspe_distance_list.append(mspe_distance)
+    if is_separted:
+        mspe, min_idx = np.min(mspe_list), np.argmin(mspe_list)
+        mspe_angle = mspe_angle_list[min_idx]
+        mspe_distance = mspe_distance_list[min_idx]
+        res = mspe, mspe_angle, mspe_distance
+    else:
+        res = np.min(mspe_list)
+    return res
 
 
 def set_criterions(criterion_name: str):
@@ -359,11 +386,15 @@ def set_criterions(criterion_name: str):
     Raises:
         Exception: If the criterion name is not defined.
     """
-    if criterion_name.startswith("rmse"):
+    if criterion_name.startswith("rmspe"):
         criterion = RMSPELoss()
         subspace_criterion = RMSPE
-    elif criterion_name.startswith("mse"):
+        # subspace_criterion = RMSPELoss()
+    elif criterion_name.startswith("mspe"):
         criterion = MSPELoss()
+        subspace_criterion = MSPE
+    elif criterion_name.startswith("mse"):
+        criterion = nn.MSELoss()
         subspace_criterion = MSPE
     else:
         raise Exception(f"criterions.set_criterions: Criterion {criterion_name} is not defined")
