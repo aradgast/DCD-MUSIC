@@ -74,7 +74,7 @@ class Samples(SystemModel):
             M = self.params.M
             while True:
                 # DOA = np.round(np.random.rand(M) * 180, decimals=2) - 90
-                DOA = np.random.randint(-60, 0, M) * 2 + 60
+                DOA = np.random.randint(-80, 0, M) * 2 + 80
                 DOA.sort()
                 diff_angles = np.array(
                     [np.abs(DOA[i + 1] - DOA[i]) for i in range(M - 1)]
@@ -103,7 +103,7 @@ class Samples(SystemModel):
         """
 
         def choose_distances(distance_min_gap: float = 0.5, distance_max_gap: int = 10,
-                             min_val: float = 3, max_val: int = 6.5) -> np.ndarray:
+                             min_val: float = 2, max_val: int = 7.5) -> np.ndarray:
 
             distances = np.zeros(self.params.M)
             idx = 0
@@ -159,8 +159,7 @@ class Samples(SystemModel):
                 A = np.array([self.steering_vec(theta) for theta in self.doa]).T
                 samples = (A @ signal) + noise
             elif self.params.field_type.startswith("Near"):
-                A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=True, generate_search_grid=True)
-                A = A[:, np.arange(A.shape[1]), np.arange(A.shape[1])]
+                A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=True, generate_search_grid=False)
                 samples = (A @ signal) + noise
             else:
                 raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")

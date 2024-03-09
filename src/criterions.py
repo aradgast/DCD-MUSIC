@@ -87,7 +87,7 @@ class RMSELoss(nn.MSELoss):
         super(RMSELoss, self).__init__(*args)
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        mse_loss = super(RMSELoss, self).forward(input, target)
+        mse_loss = super(RMSELoss, self).forward(input.to(device), target.to(device))
         return torch.sqrt(mse_loss)
 
 
@@ -115,7 +115,7 @@ class RMSPELoss(nn.Module):
 
     def __init__(self):
         super(RMSPELoss, self).__init__()
-        self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(device)
+        self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(device).to(torch.float64)
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
                 distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
@@ -170,9 +170,9 @@ class RMSPELoss(nn.Module):
                     rmspe_distance_val = (1 / np.sqrt(len(targets_distance))) * torch.linalg.norm(distance_err)
                     # Sum the rmpse with a balance factor
                     rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
-                    rmspe_list.append(rmspe_val.item())
-                    rmspe_angle_list.append(rmspe_angle_val.item())
-                    rmspe_distance_list.append(rmspe_distance_val.item())
+                    rmspe_list.append(rmspe_val)
+                    rmspe_angle_list.append(rmspe_angle_val)
+                    rmspe_distance_list.append(rmspe_distance_val)
                 rmspe_tensor = torch.stack(rmspe_list, dim=0)
                 rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
                 rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
@@ -388,8 +388,7 @@ def set_criterions(criterion_name: str):
     """
     if criterion_name.startswith("rmspe"):
         criterion = RMSPELoss()
-        subspace_criterion = RMSPE
-        # subspace_criterion = RMSPELoss()
+        subspace_criterion = RMSPELoss()
     elif criterion_name.startswith("mspe"):
         criterion = MSPELoss()
         subspace_criterion = MSPE

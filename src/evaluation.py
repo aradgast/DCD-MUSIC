@@ -37,10 +37,30 @@ from src.criterions import RMSPELoss, MSPELoss, RMSELoss
 from src.criterions import RMSPE, MSPE
 from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
-from src.models import SubspaceNet, MUSIC
+from src.models import SubspaceNet, MUSIC, RootMusic, Esprit
 from src.plotting import plot_spectrum
+from src.system_model import SystemModel
 
 
+def get_model_based_method(method_name: str, system_model: SystemModel):
+    """
+
+    Parameters
+    ----------
+    method_name
+
+    Returns
+    -------
+
+    """
+    if method_name.lower() == "music_1d":
+        return MUSIC(system_model=system_model, estimation_parameter="angle")
+    if method_name.lower() == "music_2d":
+        return MUSIC(system_model=system_model, estimation_parameter="angle, range")
+    if method_name.lower() == "root_music":
+        return RootMusic(system_model)
+    if method_name.lower() == "esprit":
+        return Esprit(system_model)
 def evaluate_dnn_model(
         model,
         dataset: list,
@@ -141,7 +161,7 @@ def evaluate_dnn_model(
             else:
                 if model.system_model.params.field_type.endswith("Near"):
                     if model.diff_method.angels is None:
-                        eval_loss = criterion(RANGE.to(torch.float32), RANGE_predictions)
+                        eval_loss = criterion(RANGE.to(torch.float64), RANGE_predictions)
                     else:
                         eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
                         if is_separted:
@@ -297,10 +317,7 @@ def evaluate_model_based(
     loss_list = []
     loss_list_angle = []
     loss_list_distance = []
-    if algorithm.endswith("2D"):
-        music_2d_ = MUSIC(system_model, estimation_parameter="angle, range")
-        music_2d = MUSIC_2D(system_model)
-        tmp_rmspe = RMSPELoss()
+    model_based = get_model_based_method(algorithm, system_model)
 
     for i, data in enumerate(dataset):
         X, doa = data
@@ -333,34 +350,24 @@ def evaluate_model_based(
                     figures=figures,
                 )
         # MUSIC algorithms
-        elif algorithm.endswith("music"):
-            music = MUSIC(system_model)
+        elif algorithm.endswith("music_1d"):
             if algorithm.startswith("bb"):
                 # Broadband MUSIC
-                predictions, spectrum, M = music.broadband(X=X)
+                predictions, spectrum, M = model_based(X=X)
             elif algorithm.startswith("sps"):
                 # Spatial smoothing
-                predictions, spectrum, M = music.narrowband(
+                predictions, spectrum, M = model_based(
                     X=X, mode="spatial_smoothing"
                 )
             elif algorithm.startswith("music"):
                 # Conventional
-                predictions, spectrum, M = music.narrowband(X=X, mode="sample")
+                Rx = torch.from_numpy(np.cov(X.detach().numpy()))[None, :, :]
+                predictions = model_based(Rx, is_soft=False)
             # If the amount of predictions is less than the amount of sources
-            predictions = add_random_predictions(M, predictions, algorithm)
+            # predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
-            loss = criterion(predictions, doa * R2D)
+            loss = criterion(predictions, doa)
             loss_list.append(loss)
-            # Plot spectrum
-            if plot_spec and i == len(dataset.dataset) - 1:
-                plot_spectrum(
-                    predictions=predictions,
-                    true_DOA=doa * R2D,
-                    system_model=system_model,
-                    spectrum=spectrum,
-                    algorithm=algorithm.upper(),
-                    figures=figures,
-                )
 
         # ESPRIT algorithms
         elif "esprit" in algorithm:
@@ -397,14 +404,11 @@ def evaluate_model_based(
             doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
 
             Rx = torch.from_numpy(np.cov(X.detach().numpy()))[None, :, :]
-            doa_prediction_, distance_prediction_ = music_2d_(Rx, is_soft=False)
-            doa_prediction, distance_prediction, spectra, _ = music_2d.narrowband(X)
-
+            doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
                                                                is_separted)
-                rmspe_, rmspe_angle_, rmspe_distance_ = tmp_rmspe(doa_prediction_, doa, distance_prediction_, distances,
-                                                               is_separted)
+
                 loss_list_angle.append(rmspe_angle.item())
                 loss_list_distance.append(rmspe_distance.item())
             else:
@@ -494,7 +498,7 @@ def evaluate(
     if not isinstance(subspace_methods, list):
         subspace_methods = [
             # "esprit",
-            # "music",
+            # "music_1d",
             # "r-music",
             # "mvdr",
             # "sps-r-music",

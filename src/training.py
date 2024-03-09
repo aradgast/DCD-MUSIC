@@ -209,7 +209,11 @@ class TrainingParams(object):
         self
         """
         # Load model from given path
-        self.model.load_state_dict(torch.load(loading_path, map_location=device))
+        try:
+            self.model.load_state_dict(torch.load(loading_path, map_location=device))
+        except FileNotFoundError as e:
+            print(e)
+            print("#" * 40 + "Nothing will be loaded" + "#" * 40)
         return self
 
     def set_optimizer(self, optimizer: str, learning_rate: float, weight_decay: float):
@@ -448,7 +452,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
                 elif training_params.training_objective == "range":
-                    train_loss = training_params.criterion(RANGE_predictions, RANGE.to(torch.float32))
+                    train_loss = training_params.criterion(RANGE_predictions, RANGE.to(torch.float64))
                     train_loss_angle = 0.0
                     train_loss_distance = train_loss
                 elif training_params.training_objective == "angle, range":

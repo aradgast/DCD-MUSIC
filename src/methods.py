@@ -499,7 +499,7 @@ class MUSIC_2D(MUSIC):
         spectrum, _ = self.spectrum_calculation(noise_eig_vecs=Un)
         # Find spectrum peaks
         doa_predictions, distance_predictions = self.get_predictions(spectrum, number_of_sources=M, is_soft=False)
-        return doa_predictions, distance_predictions, spectrum, M
+        return doa_predictions, distance_predictions, spectrum, Un
 
 
 class RootMUSIC(SubspaceMethod):

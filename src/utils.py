@@ -29,8 +29,8 @@ import scipy
 # Constants
 R2D = 180 / np.pi
 D2R = 1 / R2D
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = "cpu"
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = "cpu"
 
 
 # Functions
@@ -171,7 +171,7 @@ def set_unified_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    # torch.use_deterministic_algorithms(True)
+    torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 

@@ -263,42 +263,33 @@ class SystemModel(object):
         # define uniform deviation in spacing (for each sensor)
         if not nominal:
             raise Exception("Currently support only nominal sensor array")
-        if not known_angles:
-            if not generate_search_grid:
-                time_delay = np.zeros((len(self.array), len(theta)))
-                for idx, (doa, dist) in enumerate(zip(theta, distance)):
-                    first_order = self.array * np.sin(doa) * self.dist_array_elems[self.params.signal_type]
-                    second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.array * self.dist_array_elems[self.params.signal_type], 2), dist)
-                    time_delay[:, idx] = first_order + second_order
 
-                return np.exp(-1j
-                              * 2
-                              * np.pi
-                              * time_delay)
-            else:
-                theta = np.atleast_1d(theta)[:, np.newaxis]
-                distance = np.atleast_1d(distance)[:, np.newaxis]
-                array = self.array[:, np.newaxis]
-                array_square = np.power(array, 2)
+        theta = np.atleast_1d(theta)[:, np.newaxis]
+        distance = np.atleast_1d(distance)[:, np.newaxis]
+        array = self.array[:, np.newaxis]
+        array_square = np.power(array, 2)
 
-                first_order = np.einsum("nm, na -> na", array, np.tile(np.sin(theta), (1, self.params.N)).T * self.dist_array_elems[self.params.signal_type])
-                first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
+        first_order = np.einsum("nm, na -> na", array, np.tile(np.sin(theta), (1, self.params.N)).T * self.dist_array_elems[self.params.signal_type])
+        first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
 
-                second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist_array_elems[self.params.signal_type], 2),
-                                                distance.T)
-                second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
-                second_order = np.einsum("ij, ikl -> ilk", array_square, np.transpose(second_order, (2, 1, 0)))
+        second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist_array_elems[self.params.signal_type], 2),
+                                        distance.T)
+        second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
+        second_order = np.einsum("ij, ikl -> ikl", array_square, np.transpose(second_order, (2, 1, 0))).transpose(0, 2, 1)
 
-                time_delay = first_order + second_order
+        time_delay = first_order + second_order
 
-                return np.exp(2
-                              * -1j
-                              * np.pi
-                              * time_delay
-                              / 1
-                              # need to divide here by the wavelength, seems that for the narrowband scenario,
-                              # wavelength = 1.
-                )
+        if not generate_search_grid:
+            time_delay = np.diagonal(time_delay, axis1=1, axis2=2)
+
+        return np.exp(2
+                      * -1j
+                      * np.pi
+                      * time_delay
+                      / 1
+                      # need to divide here by the wavelength, seems that for the narrowband scenario,
+                      # wavelength = 1.
+        )
 
 
     def __str__(self):

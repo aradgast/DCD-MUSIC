@@ -109,7 +109,7 @@ def create_dataset(
                 samples_model.samples_creation(
                     noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1
                 )[0],
-                dtype=torch.complex64,
+                dtype=torch.complex128,
             )
             if model_type.startswith("SubspaceNet"):
                 # Generate auto-correlation tensor
