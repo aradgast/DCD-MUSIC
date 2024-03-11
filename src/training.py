@@ -487,6 +487,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         loss_train_list.append(overall_train_loss)
         # Update schedular
         training_params.schedular.step()
+        model.adjust_diffmethod_temperature(epoch)
+
         # Calculate evaluation loss
         valid_loss = evaluate_dnn_model(
             model,

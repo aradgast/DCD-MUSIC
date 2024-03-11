@@ -398,6 +398,18 @@ class SubspaceNet(nn.Module):
         """
         return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
 
+    def adjust_diffmethod_temperature(self, epoch):
+        if isinstance(self.diff_method, MUSIC):
+            if self.diff_method.angels is None:
+                if epoch % 10 == 0:
+                    self.diff_method.adjust_cell_size()
+                    print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
+
+    def get_diffmethod_temperature(self):
+        if isinstance(self.diff_method, MUSIC):
+            if self.diff_method.angels is None:
+                return self.diff_method.cell_size
+
     def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
         """
         Performs the forward pass of the SubspaceNet.
@@ -823,6 +835,8 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
+        self.cell_size = int(self.distances.shape[0] * 0.40)
+        # self.cell_size = 11
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
         if self.system_model.params.field_type.startswith("Near"):
@@ -835,7 +849,8 @@ class MUSIC(SubspaceMethod):
         # kernel = torch.exp(-torch.arange(self.kernel_size).float() ** 2 / (2 * sigma ** 2))
         # self.gaussian_kernel = kernel / kernel.sum()
         self.noise_subspace = None
-
+        self.mask = nn.Parameter(torch.ones(self.distances.shape[0], 1)).to(torch.float64).to(device)
+        self.mask.requires_grad_(True)
     def forward(self, cov, known_angles=None, known_distances=None, is_soft: bool = True):
         """
 
@@ -876,6 +891,11 @@ class MUSIC(SubspaceMethod):
         params = self.peak_finder(is_soft)
         return params
 
+    def adjust_cell_size(self):
+        if self.estimation_params == "range":
+            if self.cell_size > int(self.distances.shape[0] * 0.05):
+                # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
+                self.cell_size = int(0.90 * self.cell_size)
     def get_inverse_spectrum(self, noise_subspace: torch.Tensor):
         """
 
@@ -1005,14 +1025,22 @@ class MUSIC(SubspaceMethod):
                 return self._maskpeak_1D(self.distances)
 
     def _maskpeak_1D(self, search_space):
-        cell_size = 70  # for distances
-        top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
-        cell_idx = (top_indxs - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
-        cell_idx %= self.music_spectrum.shape[1]
-        cell_idx = cell_idx.unsqueeze(-1)
-        metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
-        soft_max = torch.softmax(metrix_thr, dim=1)
-        soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max)
+        flag = True
+        if flag:
+            top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
+            cell_idx = (top_indxs - self.cell_size + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
+            cell_idx %= self.music_spectrum.shape[1]
+            cell_idx = cell_idx.unsqueeze(-1)
+            metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
+            soft_max = torch.softmax(metrix_thr, dim=1)
+            soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max)
+        else:
+            top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
+            shift = self.music_spectrum.shape[1] // 2 - top_indxs
+            a = torch.stack([torch.roll(row, s.item(), dims=0) for row, s in zip(self.music_spectrum, shift)])
+            masked_a = torch.einsum("mk, bm -> bm", self.mask, a)
+            soft_max = torch.softmax(masked_a, dim=1)
+            soft_decision = torch.einsum("m, bm -> b", search_space, soft_max)
 
         return soft_decision
 
@@ -1108,7 +1136,7 @@ class MUSIC(SubspaceMethod):
             if self.estimation_params.startswith("angle"):
                 self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device, dtype=torch.float64).requires_grad_(True)
             if self.estimation_params.endswith("range"):
-                self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .001, device=device, dtype=torch.float64) \
+                self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .1, device=device, dtype=torch.float64) \
                     .requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"

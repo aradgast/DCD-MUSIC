@@ -43,8 +43,8 @@ plt.close("all")
 
 
 if __name__ == "__main__":
-    scenrio_dict = {"coherent": [],
-                    "non-coherent" : [10] }
+    scenrio_dict = {"coherent": [10],
+                    "non-coherent" : [] }
     for mode, snr_list in scenrio_dict.items():
         for snr in snr_list:
             # Initialize seed
