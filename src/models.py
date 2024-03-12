@@ -401,7 +401,7 @@ class SubspaceNet(nn.Module):
     def adjust_diffmethod_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC):
             if self.diff_method.angels is None:
-                if epoch % 10 == 0:
+                if epoch % 20 == 0:
                     self.diff_method.adjust_cell_size()
                     print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
 
@@ -835,8 +835,7 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
-        self.cell_size = int(self.distances.shape[0] * 0.40)
-        # self.cell_size = 11
+        self.cell_size = int(self.distances.shape[0] * 0.3)
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
         if self.system_model.params.field_type.startswith("Near"):
@@ -849,8 +848,7 @@ class MUSIC(SubspaceMethod):
         # kernel = torch.exp(-torch.arange(self.kernel_size).float() ** 2 / (2 * sigma ** 2))
         # self.gaussian_kernel = kernel / kernel.sum()
         self.noise_subspace = None
-        self.mask = nn.Parameter(torch.ones(self.distances.shape[0], 1)).to(torch.float64).to(device)
-        self.mask.requires_grad_(True)
+        self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
     def forward(self, cov, known_angles=None, known_distances=None, is_soft: bool = True):
         """
 
@@ -876,7 +874,7 @@ class MUSIC(SubspaceMethod):
                 else:
                     params = torch.zeros((cov.shape[0], self.system_model.params.M), dtype=torch.float64)
                     for source in range(self.system_model.params.M):
-                        params_source = self.forward(cov, known_angles=known_angles[:, source][:, None])
+                        params_source = self.forward(cov, known_angles=known_angles[:, source][:, None], is_soft=is_soft)
                         params[:, source] = params_source.squeeze()
                     return params
         _, Un = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
@@ -893,9 +891,11 @@ class MUSIC(SubspaceMethod):
 
     def adjust_cell_size(self):
         if self.estimation_params == "range":
-            if self.cell_size > int(self.distances.shape[0] * 0.05):
+            if self.cell_size > int(self.distances.shape[0] * 0.02):
                 # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
-                self.cell_size = int(0.90 * self.cell_size)
+                self.cell_size = int(0.95 * self.cell_size)
+                if self.cell_size % 2 == 0:
+                    self.cell_size -= 1
     def get_inverse_spectrum(self, noise_subspace: torch.Tensor):
         """
 
@@ -1028,6 +1028,19 @@ class MUSIC(SubspaceMethod):
         flag = True
         if flag:
             top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
+            peaks = torch.zeros_like(top_indxs)
+            for batch in range(peaks.shape[0]):
+                music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
+                # Find spectrum peaks
+                peaks_tmp = list(sc.signal.find_peaks(music_spectrum)[0])
+                # Sort the peak by their amplitude
+                peaks_tmp.sort(key=lambda x: music_spectrum[x], reverse=True)
+                if len(peaks_tmp) == 0:
+                    peaks_tmp = torch.randint(self.distances.shape[0], (1,))
+                else:
+                    peaks_tmp = peaks_tmp[0]
+                peaks[batch] = peaks_tmp
+            top_indxs = peaks
             cell_idx = (top_indxs - self.cell_size + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
             cell_idx %= self.music_spectrum.shape[1]
             cell_idx = cell_idx.unsqueeze(-1)
@@ -1035,12 +1048,7 @@ class MUSIC(SubspaceMethod):
             soft_max = torch.softmax(metrix_thr, dim=1)
             soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max)
         else:
-            top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
-            shift = self.music_spectrum.shape[1] // 2 - top_indxs
-            a = torch.stack([torch.roll(row, s.item(), dims=0) for row, s in zip(self.music_spectrum, shift)])
-            masked_a = torch.einsum("mk, bm -> bm", self.mask, a)
-            soft_max = torch.softmax(masked_a, dim=1)
-            soft_decision = torch.einsum("m, bm -> b", search_space, soft_max)
+            soft_decision = self.filter(self.music_spectrum, search_space)
 
         return soft_decision
 
@@ -1086,8 +1094,10 @@ class MUSIC(SubspaceMethod):
             peaks.sort(key=lambda x: music_spectrum[x], reverse=True)
             tmp = search_space[peaks[0:num_peaks]]
             if tmp.nelement() == 0:
-                tmp = self._maskpeak_1D(search_space)
-                print("_peak_finder_1D: No peaks were found!")
+                rand_idx = torch.randint(self.distances.shape[0], (1,))
+                tmp = self.distances[rand_idx]
+                # tmp = self._maskpeak_1D(search_space)
+                # print("_peak_finder_1D: No peaks were found!")
             else:
                 pass
             predict_param[batch] = tmp
@@ -1577,3 +1587,33 @@ def maskpeaks_2d(spectrum: torch.Tensor, number_of_sources: int, theta_range: to
             soft_col[batch, i] = (distance_range[max_col_cell_idx] @ torch.sum(soft_max, dim=0)).requires_grad_(True)
 
     return soft_row, soft_col
+
+class Filter(nn.Module):
+    def __init__(self, min_cell_size, max_cell_size, number_of_filter=10):
+        super(Filter, self).__init__()
+        self.number_of_filters = number_of_filter
+        self.cell_sizes = torch.linspace(min_cell_size, max_cell_size, number_of_filter).to(torch.int32).to(device)
+        self.cell_bank = {}
+        for cell_size in enumerate(self.cell_sizes.data):
+            cell_size = cell_size[1]
+            self.cell_bank[cell_size] = torch.arange(-cell_size, cell_size, 1, dtype=torch.long, device=device)
+        self.fc = nn.Linear(self.number_of_filters, 1)
+        self.fc.weight.data = torch.randn(1, number_of_filter) / 100 + (1 / number_of_filter)
+        self.fc.weight.data = self.fc.weight.data.to(torch.float64)
+        self.fc.bias.data = torch.Tensor([0])
+        self.fc.bias.data = self.fc.bias.data.to(torch.float64)
+        self.fc.bias.requires_grad_(False)
+        self.relu = nn.ReLU()
+    def forward(self, x, search_space):
+        top_1 = torch.topk(x, 1, dim=1)[1]
+        output = torch.zeros(x.shape[0], self.number_of_filters).to(device).to(torch.float64)
+        for idx, cell in enumerate(self.cell_bank.values()):
+            tmp_cell = top_1 + cell
+            tmp_cell %= x.shape[1]
+            tmp_cell = tmp_cell.unsqueeze(-1)
+            metrix_thr = torch.gather(x.unsqueeze(-1).expand(-1, -1, tmp_cell.size(-1)), 1, tmp_cell)
+            soft_max = torch.softmax(metrix_thr, dim=1)
+            output[:, idx] = torch.einsum("bkm, bkm -> bm", search_space[tmp_cell], soft_max).squeeze()
+        output = self.fc(output)
+        output = self.relu(output)
+        return output

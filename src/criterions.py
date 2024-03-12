@@ -387,7 +387,7 @@ def set_criterions(criterion_name: str):
         Exception: If the criterion name is not defined.
     """
     if criterion_name.startswith("rmspe"):
-        criterion = RMSPELoss()
+        criterion = RMSELoss()
         subspace_criterion = RMSPELoss()
     elif criterion_name.startswith("mspe"):
         criterion = MSPELoss()

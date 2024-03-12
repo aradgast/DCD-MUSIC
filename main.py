@@ -43,8 +43,8 @@ plt.close("all")
 
 
 if __name__ == "__main__":
-    scenrio_dict = {"coherent": [10],
-                    "non-coherent" : [] }
+    scenrio_dict = {"coherent": [],
+                    "non-coherent" : [5] }
     for mode, snr_list in scenrio_dict.items():
         for snr in snr_list:
             # Initialize seed
@@ -70,7 +70,7 @@ if __name__ == "__main__":
             # Operations commands
             commands = {"SAVE_TO_FILE": False,  # Saving results to file or present them over CMD
                         "CREATE_DATA": True,  # Creating new dataset
-                        "LOAD_MODEL": False,  # Load specific model for training
+                        "LOAD_MODEL": True,  # Load specific model for training
                         "TRAIN_MODEL": True,  # Applying training operation
                         "SAVE_MODEL": False,  # Saving tuned model
                         "EVALUATE_MODE": True,  # Evaluating desired algorithms
@@ -178,8 +178,8 @@ if __name__ == "__main__":
                 simulation_parameters = (
                     TrainingParams()
                     .set_training_objective("range")
-                    .set_batch_size(128)
-                    .set_epochs(150)
+                    .set_batch_size(32)
+                    .set_epochs(1)
                     .set_model(model=model_config)
                     .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                     .set_training_dataset(train_dataset)

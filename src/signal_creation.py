@@ -74,7 +74,7 @@ class Samples(SystemModel):
             M = self.params.M
             while True:
                 # DOA = np.round(np.random.rand(M) * 180, decimals=2) - 90
-                DOA = np.random.randint(-80, 0, M) * 2 + 80
+                DOA = np.random.randint(-60, 0, M) * 2 + 60
                 DOA.sort()
                 diff_angles = np.array(
                     [np.abs(DOA[i + 1] - DOA[i]) for i in range(M - 1)]
@@ -103,7 +103,7 @@ class Samples(SystemModel):
         """
 
         def choose_distances(distance_min_gap: float = 0.5, distance_max_gap: int = 10,
-                             min_val: float = 2, max_val: int = 7.5) -> np.ndarray:
+                             min_val: float = 2, max_val: int = 7) -> np.ndarray:
 
             distances = np.zeros(self.params.M)
             idx = 0
