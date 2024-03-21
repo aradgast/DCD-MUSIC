@@ -403,7 +403,7 @@ def evaluate_model_based(
             y = doa[0]
             doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
 
-            Rx = torch.from_numpy(np.cov(X.detach().numpy()))[None, :, :]
+            Rx = torch.cov(X)[None, :, :]
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,

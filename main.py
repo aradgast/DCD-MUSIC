@@ -44,7 +44,7 @@ plt.close("all")
 
 if __name__ == "__main__":
     scenrio_dict = {"coherent": [],
-                    "non-coherent" : [5] }
+                    "non-coherent" : [30] }
     for mode, snr_list in scenrio_dict.items():
         for snr in snr_list:
             # Initialize seed
@@ -104,7 +104,7 @@ if __name__ == "__main__":
                 .set_model(system_model_params)
             )
             # Define samples size
-            samples_size = 1024  # Overall dateset size
+            samples_size = 10000  # Overall dateset size
             train_test_ratio = .1  # training and testing datasets ratio
             # Sets simulation filename
             simulation_filename = get_simulation_filename(
@@ -178,12 +178,12 @@ if __name__ == "__main__":
                 simulation_parameters = (
                     TrainingParams()
                     .set_training_objective("range")
-                    .set_batch_size(32)
-                    .set_epochs(1)
+                    .set_batch_size(256)
+                    .set_epochs(200)
                     .set_model(model=model_config)
-                    .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
+                    .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
                     .set_training_dataset(train_dataset)
-                    .set_schedular(step_size=100, gamma=0.5)
+                    .set_schedular(step_size=50, gamma=0.5)
                     .set_criterion()
 
                 )

@@ -891,9 +891,10 @@ class MUSIC(SubspaceMethod):
 
     def adjust_cell_size(self):
         if self.estimation_params == "range":
-            if self.cell_size > int(self.distances.shape[0] * 0.02):
+            # if self.cell_size > int(self.distances.shape[0] * 0.02):
+            if self.cell_size > 5 or self.cell_size > int(self.distances.shape[0] * 0.02):
                 # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
-                self.cell_size = int(0.95 * self.cell_size)
+                self.cell_size = int(0.9 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
     def get_inverse_spectrum(self, noise_subspace: torch.Tensor):
@@ -915,8 +916,8 @@ class MUSIC(SubspaceMethod):
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
-                var1 = torch.einsum("ijk, bkl -> bijl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace)
-                inverse_spectrum = torch.real(torch.norm(var1, dim=-1)).transpose(1, 2)
+                var1 = torch.einsum("adk, bkl -> badl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace)
+                inverse_spectrum = torch.real(torch.norm(var1, dim=-1) ** 2).transpose(1, 2)
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("ban, nam -> abm", self.search_grid.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
@@ -1027,8 +1028,9 @@ class MUSIC(SubspaceMethod):
     def _maskpeak_1D(self, search_space):
         flag = True
         if flag:
-            top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
-            peaks = torch.zeros_like(top_indxs)
+
+            # top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
+            peaks = torch.zeros(self.music_spectrum.shape[0], 1).to(torch.int64)
             for batch in range(peaks.shape[0]):
                 music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
                 # Find spectrum peaks
@@ -1138,13 +1140,13 @@ class MUSIC(SubspaceMethod):
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device, dtype=torch.float64).requires_grad_(True)
+            self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 360, device=device, dtype=torch.float64).requires_grad_(True)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 90, device=device, dtype=torch.float64).requires_grad_(True)
+                self.angels = torch.linspace(-1 * torch.pi / 2, torch.pi / 2, 360, device=device, dtype=torch.float64).requires_grad_(True)
             if self.estimation_params.endswith("range"):
                 self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .1, device=device, dtype=torch.float64) \
                     .requires_grad_(True)
@@ -1604,16 +1606,33 @@ class Filter(nn.Module):
         self.fc.bias.data = self.fc.bias.data.to(torch.float64)
         self.fc.bias.requires_grad_(False)
         self.relu = nn.ReLU()
-    def forward(self, x, search_space):
-        top_1 = torch.topk(x, 1, dim=1)[1]
-        output = torch.zeros(x.shape[0], self.number_of_filters).to(device).to(torch.float64)
+    def forward(self, input, search_space):
+        peaks = torch.zeros(input.shape[0], 1).to(torch.int64)
+        for batch in range(peaks.shape[0]):
+            music_spectrum = input[batch].cpu().detach().numpy().squeeze()
+            # Find spectrum peaks
+            peaks_tmp = list(sc.signal.find_peaks(music_spectrum)[0])
+            # Sort the peak by their amplitude
+            peaks_tmp.sort(key=lambda x: music_spectrum[x], reverse=True)
+            if len(peaks_tmp) == 0:
+                peaks_tmp = torch.randint(search_space.shape[0], (1,))
+            else:
+                peaks_tmp = peaks_tmp[0]
+            peaks[batch] = peaks_tmp
+        top_1 = peaks
+        output = torch.zeros(input.shape[0], self.number_of_filters).to(device).to(torch.float64)
         for idx, cell in enumerate(self.cell_bank.values()):
             tmp_cell = top_1 + cell
-            tmp_cell %= x.shape[1]
+            tmp_cell %= input.shape[1]
             tmp_cell = tmp_cell.unsqueeze(-1)
-            metrix_thr = torch.gather(x.unsqueeze(-1).expand(-1, -1, tmp_cell.size(-1)), 1, tmp_cell)
+            metrix_thr = torch.gather(input.unsqueeze(-1).expand(-1, -1, tmp_cell.size(-1)), 1, tmp_cell)
             soft_max = torch.softmax(metrix_thr, dim=1)
             output[:, idx] = torch.einsum("bkm, bkm -> bm", search_space[tmp_cell], soft_max).squeeze()
         output = self.fc(output)
         output = self.relu(output)
+        self.clip_weights_values()
         return output
+
+    def clip_weights_values(self):
+        self.fc.weight.data = torch.clip(self.fc.weight.data, 0.1, 1)
+        self.fc.weight.data /= torch.sum(self.fc.weight.data)
