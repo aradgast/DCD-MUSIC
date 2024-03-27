@@ -43,9 +43,12 @@ plt.close("all")
 
 
 if __name__ == "__main__":
+    # torch.set_printoptions(precision=12)
     scenrio_dict = {"coherent": [],
-                    "non-coherent" : [30] }
+                    "non-coherent" : [-5, -2]}
+    res = {}
     for mode, snr_list in scenrio_dict.items():
+        res[mode] = {}
         for snr in snr_list:
             # Initialize seed
             set_unified_seed()
@@ -72,7 +75,7 @@ if __name__ == "__main__":
                         "CREATE_DATA": True,  # Creating new dataset
                         "LOAD_MODEL": True,  # Load specific model for training
                         "TRAIN_MODEL": True,  # Applying training operation
-                        "SAVE_MODEL": False,  # Saving tuned model
+                        "SAVE_MODEL": True,  # Saving tuned model
                         "EVALUATE_MODE": True,  # Evaluating desired algorithms
                         }
             commands["LOAD_DATA"] = not (commands["CREATE_DATA"])  # Loading data from exist dataset
@@ -104,7 +107,7 @@ if __name__ == "__main__":
                 .set_model(system_model_params)
             )
             # Define samples size
-            samples_size = 10000  # Overall dateset size
+            samples_size = 16  # Overall dateset size
             train_test_ratio = .1  # training and testing datasets ratio
             # Sets simulation filename
             simulation_filename = get_simulation_filename(
@@ -171,7 +174,6 @@ if __name__ == "__main__":
                         phase="test",
                     )
 
-
             # Training stage
             if commands["TRAIN_MODEL"]:
                 # Assign the training parameters object
@@ -179,17 +181,17 @@ if __name__ == "__main__":
                     TrainingParams()
                     .set_training_objective("range")
                     .set_batch_size(256)
-                    .set_epochs(200)
+                    .set_epochs(2)
                     .set_model(model=model_config)
-                    .set_optimizer(optimizer="Adam", learning_rate=0.001, weight_decay=1e-9)
+                    .set_optimizer(optimizer="Adam", learning_rate=0.0001, weight_decay=1e-9)
                     .set_training_dataset(train_dataset)
-                    .set_schedular(step_size=50, gamma=0.5)
+                    .set_schedular(step_size=100, gamma=0.5)
                     .set_criterion()
 
                 )
                 if commands["LOAD_MODEL"]:
                     try:
-                        simulation_parameters.load_model(loading_path=saving_path / "final_models" / simulation_filename)
+                        simulation_parameters.load_model(loading_path=saving_path / "final_models" / get_model_filename(system_model_params, model_config))
                     except Exception as e:
                         print(e)
                         print("Model not found.")
@@ -211,7 +213,7 @@ if __name__ == "__main__":
                 if commands["SAVE_MODEL"]:
                     torch.save(
                         model.state_dict(),
-                        saving_path / "final_models" / Path(simulation_filename),
+                        saving_path / "final_models" / Path(get_model_filename(model_config=model_config, system_model_params=system_model_params)),
                     )
                 # Plots saving
                 if commands["SAVE_TO_FILE"]:
@@ -268,7 +270,7 @@ if __name__ == "__main__":
                     parameters=simulation_parameters,
                 )
                 # Evaluate DNN models, augmented and subspace methods
-                evaluate(
+                loss = evaluate(
                     model=model,
                     model_type=model_config.model_type,
                     model_test_dataset=model_test_dataset,
@@ -281,3 +283,25 @@ if __name__ == "__main__":
                 )
             plt.show()
             print("end")
+
+            res[mode][snr] = loss
+    for mode, snr_dict in res.items():
+        if snr_dict:
+            plt.figure()
+            snr_values = snr_dict.keys()
+            plt_res = {}
+            for snr, results in snr_dict.items():
+                for method, res in results.items():
+                    if method not in plt_res:
+                        plt_res[method] = []
+                    plt_res[method].append(res["Overall"])
+
+            plt.title(f"{system_model_params.M} {mode} sources results")
+            for method, res in plt_res.items():
+                plt.scatter(snr_values, res, label=method)
+            plt.legend()
+            plt.grid()
+            plt.xlabel("SNR [dB]")
+            plt.ylabel("RMSE [m]")
+            plt.show()
+

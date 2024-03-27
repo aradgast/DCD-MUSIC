@@ -29,6 +29,7 @@ class SystemModelParams:
         N (int): Number of sensors.
         T (int): Number of observations.
         signal_type (str): Signal type ("NarrowBand" or "Broadband").
+        field_type (str): field type ("Far" or "Near")
         freq_values (list): Frequency values for Broadband signal.
         signal_nature (str): Signal nature ("non-coherent" or "coherent").
         snr (float): Signal-to-noise ratio.
@@ -40,17 +41,17 @@ class SystemModelParams:
         None
     """
 
-    M = None                            # Number of sources
-    N = None                            # Number of sensors
-    T = None                            # Number of observations
-    field_type = "Far"                  # field type ("Far" or "Near")
-    signal_type = "NarrowBand"          # Signal type ("NarrowBand" or "Broadband")
-    freq_values = [0, 500]              # Frequency values for Broadband signal
-    signal_nature = "non-coherent"      # Signal nature ("non-coherent" or "coherent")
-    snr = 10                            # Signal-to-noise ratio
-    eta = 0                             # Sensor location deviation
-    bias = 0                            # Sensor bias deviation
-    sv_noise_var = 0                    # Steering vector added noise variance
+    M = None
+    N = None
+    T = None
+    field_type = "Far"
+    signal_type = "NarrowBand"
+    freq_values = [0, 500]
+    signal_nature = "non-coherent"
+    snr = 10
+    eta = 0
+    bias = 0
+    sv_noise_var = 0
 
     def set_parameter(self, name: str, value):
         """

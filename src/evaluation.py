@@ -485,6 +485,7 @@ def evaluate(
     Returns:
         None
     """
+    res = {}
     # Set default methods for SubspaceNet augmentation
     if not isinstance(augmented_methods, list) and model_type.startswith("SubspaceNet"):
         augmented_methods = [
@@ -517,6 +518,7 @@ def evaluate(
         model_type=model_type,
         is_separted=True
     )
+    res[model_type] = model_test_loss
     print(f"{model_type} Test loss = {model_test_loss}")
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
@@ -542,3 +544,5 @@ def evaluate(
             is_separted=True
         )
         print("{} test loss = {}".format(algorithm.lower(), loss))
+        res[algorithm] = loss
+    return res

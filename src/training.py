@@ -136,12 +136,12 @@ class TrainingParams(object):
 
     # TODO: add option to get a Model instance also
     def set_model(
-        self,
-        system_model: SystemModel = None,
-        tau: int = None,
-        diff_method: str = "root_music",
-        model_type: str = "SubspaceNet",
-        model: ModelGenerator = None,
+            self,
+            system_model: SystemModel = None,
+            tau: int = None,
+            diff_method: str = "root_music",
+            model_type: str = "SubspaceNet",
+            model: ModelGenerator = None,
     ):
         """
         Sets the model for training.
@@ -322,10 +322,10 @@ class TrainingParams(object):
 
 
 def train(
-    training_parameters: TrainingParams,
-    model_name: str,
-    plot_curves: bool = True,
-    saving_path: Path = None,
+        training_parameters: TrainingParams,
+        model_name: str,
+        plot_curves: bool = True,
+        saving_path: Path = None,
 ):
     """
     Wrapper function for training the model.
@@ -435,11 +435,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 if training_params.training_objective.endswith("angle"):
                     DOA_predictions = model_output[0]
                 elif training_params.training_objective.startswith("range"):
-                        RANGE_predictions = model_output[0]
-                        DOA_predictions = DOA
+                    RANGE_predictions = model_output[0]
+                    DOA_predictions = DOA
                 else:
-                        DOA_predictions = model_output[0]
-                        RANGE_predictions = model_output[1]
+                    DOA_predictions = model_output[0]
+                    RANGE_predictions = model_output[1]
             else:
                 # Deep Augmented MUSIC or DeepCNN
                 DOA_predictions = model_output
@@ -457,10 +457,10 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     train_loss_distance = train_loss
                 elif training_params.training_objective == "angle, range":
                     train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
-                                                                                              DOA,
-                                                                                              RANGE_predictions,
-                                                                                              RANGE,
-                                                                                              True)
+                                                                                                  DOA,
+                                                                                                  RANGE_predictions,
+                                                                                                  RANGE,
+                                                                                                  True)
             # Back-propagation stage
             try:
                 train_loss.backward(retain_graph=True)
@@ -553,29 +553,20 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list):
 
 
 def simulation_summary(
-    system_model_params: SystemModelParams,
-    model_type: str,
-    parameters: TrainingParams = None,
-    phase="training",
+        system_model_params: SystemModelParams,
+        model_type: str,
+        parameters: TrainingParams = None,
+        phase="training",
 ):
     """
     Prints a summary of the simulation parameters.
 
-    Args:
-    -----
-        model_type (str): The type of the model.
-        M (int): The number of sources.
-        N (int): The number of sensors.
-        T (float): The number of observations.
-        SNR (int): The signal-to-noise ratio.
-        signal_type (str): The signal_type of the signals.
-        mode (str): The nature of the sources.
-        eta (float): The spacing deviation.
-        bias (float): Value of bias deviation from nominal spacing.
-        geo_noise_var (float): The geometry noise variance.
-        parameters (TrainingParams): instance of the training parameters object
-        phase (str, optional): The phase of the simulation. Defaults to "training", optional: "evaluation".
-        tau (int, optional): The number of lags for auto-correlation (relevant only for SubspaceNet model).
+    Parameters
+    ----------
+    system_model_params
+    model_type
+    parameters
+    phase
 
     """
     print("\n--- New Simulation ---\n")
@@ -609,15 +600,49 @@ def simulation_summary(
 
 
 def get_simulation_filename(
-    system_model_params: SystemModelParams, model_config: ModelGenerator
+        system_model_params: SystemModelParams, model_config: ModelGenerator
 ):
+    """
+
+    Parameters
+    ----------
+    system_model_params
+    model_config
+
+    Returns
+    -------
+    File name to a simulation ran.
+    """
     return (
-        f"{model_config.model_type}_M={system_model_params.M}_"
-        + f"T={system_model_params.T}_SNR_{system_model_params.snr}_"
-        + f"tau={model_config.tau}_{system_model_params.signal_type}_"
-        + f"diff_method={model_config.diff_method}_"
-        + f"{system_model_params.field_type}_field_"
-        + f"{system_model_params.signal_nature}_eta={system_model_params.eta}_"
-        + f"bias={system_model_params.bias}_"
-        + f"sv_noise={system_model_params.sv_noise_var}"
+            f"{model_config.model_type}_M={system_model_params.M}_"
+            + f"T={system_model_params.T}_SNR_{system_model_params.snr}_"
+            + f"tau={model_config.tau}_{system_model_params.signal_type}_"
+            + f"diff_method={model_config.diff_method}_"
+            + f"{system_model_params.field_type}_field_"
+            + f"{system_model_params.signal_nature}_eta={system_model_params.eta}_"
+            + f"bias={system_model_params.bias}_"
+            + f"sv_noise={system_model_params.sv_noise_var}"
+    )
+
+
+def get_model_filename(system_model_params: SystemModelParams, model_config: ModelGenerator):
+    """
+
+    Parameters
+    ----------
+    system_model_params
+    model_config
+
+    Returns
+    -------
+    file name to the wieghts of a network.
+    different from get_simulation_filename by not considering parameters that are not relevant to the network itself.
+    """
+    return (
+            f"{model_config.model_type}_"
+            f"tau={model_config.tau}_"
+            + f"{system_model_params.signal_type}_"
+            + f"diff_method={model_config.diff_method}_"
+            + f"{system_model_params.field_type}_field_"
+            + f"{system_model_params.signal_nature}"
     )
