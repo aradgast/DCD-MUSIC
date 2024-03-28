@@ -903,7 +903,7 @@ class MUSIC(SubspaceMethod):
             # if self.cell_size > int(self.distances.shape[0] * 0.02):
             if self.cell_size > 5 or self.cell_size > int(self.distances.shape[0] * 0.02):
                 # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
-                self.cell_size = int(0.9 * self.cell_size)
+                self.cell_size = int(0.95 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
 

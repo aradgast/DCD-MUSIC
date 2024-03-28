@@ -640,7 +640,8 @@ def get_model_filename(system_model_params: SystemModelParams, model_config: Mod
     """
     return (
             f"{model_config.model_type}_"
-            f"tau={model_config.tau}_"
+            + f"N={system_model_params.N}_"
+            + f"tau={model_config.tau}_"
             + f"{system_model_params.signal_type}_"
             + f"diff_method={model_config.diff_method}_"
             + f"{system_model_params.field_type}_field_"
