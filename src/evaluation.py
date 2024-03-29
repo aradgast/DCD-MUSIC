@@ -486,28 +486,6 @@ def evaluate(
         None
     """
     res = {}
-    # Set default methods for SubspaceNet augmentation
-    if not isinstance(augmented_methods, list) and model_type.startswith("SubspaceNet"):
-        augmented_methods = [
-            # "mvdr",
-            # "r-music",
-            # "esprit",
-            # "music",
-            # "music_2D",
-        ]
-    # Set default model-based subspace methods
-    if not isinstance(subspace_methods, list):
-        subspace_methods = [
-            # "esprit",
-            # "music_1d",
-            # "r-music",
-            # "mvdr",
-            # "sps-r-music",
-            # "sps-esprit",
-            # "sps-music"
-            # "bb-music",
-            "music_2D"
-        ]
     # Evaluate SubspaceNet + differentiable algorithm performances
     model_test_loss = evaluate_dnn_model(
         model=model,
@@ -519,7 +497,6 @@ def evaluate(
         is_separted=True
     )
     res[model_type] = model_test_loss
-    print(f"{model_type} Test loss = {model_test_loss}")
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(
@@ -531,7 +508,7 @@ def evaluate(
             plot_spec=plot_spec,
             figures=figures,
         )
-        print("augmented {} test loss = {}".format(algorithm, loss))
+        res["augmented" + algorithm] = loss
     # Evaluate classical subspace methods
     for algorithm in subspace_methods:
         loss = evaluate_model_based(
@@ -543,6 +520,7 @@ def evaluate(
             figures=figures,
             is_separted=True
         )
-        print("{} test loss = {}".format(algorithm.lower(), loss))
         res[algorithm] = loss
+    for method, loss_ in res.items():
+        print("{} test loss = {}".format(method.lower(), loss_["Overall"]))
     return res

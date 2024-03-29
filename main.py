@@ -41,84 +41,77 @@ warnings.simplefilter("ignore")
 os.system("cls||clear")
 plt.close("all")
 
-
-
 if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
-    now = datetime.now()
-    plot_path = Path.cwd() / "plots"
-    plot_path.mkdir(parents=True, exist_ok=True)
-    dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
-    # torch.set_printoptions(precision=12)
-    scenrio_dict = {"coherent": [5, 10, 15, 20, 25],
-                    "non-coherent": [-5, 0, 5, 10, 15]}
-    res = {}
-    for mode, snr_list in scenrio_dict.items():
-        res[mode] = {}
-        for snr in snr_list:
-            system_model_params = {
-                "N": 5,
-                "M": 2,
-                "T": 100,
-                "snr": snr,
-                "field_type": "Near",
-                "signal_nature": mode,
-                "eta": 0,
-                "bias": 0,
-                "sv_noise_var": 0
-            }
-            model_config = {
-                "model_type": "SubspaceNet",
-                "diff_method": "music_1D",
-                "tau": 8
-            }
-            training_params = {
-                "samples_size": 50000,
-                "train_test_ratio": 0.1,
-                "training_objective": "range",
-                "batch_size": 256,
-                "epochs": 150,
-                "optimizer": "Adam",
-                "learning_rate": 0.0001,
-                "weight_decay": 1e-9,
-                "step_size": 70,
-                "gamma": 0.5
-            }
-            evaluation_params = {
-                "criterion": "rmspe"
-            }
-            simulation_commands = {
-                "SAVE_TO_FILE": False,
-                "CREATE_DATA": True,
-                "LOAD_MODEL": False,
-                "TRAIN_MODEL": True,
-                "SAVE_MODEL": False,
-                "EVALUATE_MODE": True
-            }
 
-            res[mode][snr] = run_simulation(simulation_commands,
-                                            system_model_params,
-                                            model_config,
-                                            training_params,
-                                            evaluation_params)
-    for mode, snr_dict in res.items():
-        if snr_dict:
-            plt.figure()
-            snr_values = snr_dict.keys()
-            plt_res = {}
-            for snr, results in snr_dict.items():
-                for method, res in results.items():
-                    if method not in plt_res:
-                        plt_res[method] = []
-                    plt_res[method].append(res["Overall"])
+    scenario_dict = {
+        "coherent": [],
+        "non-coherent": [-5, 0]
+    }
 
-            plt.title(f"{system_model_params["M"]} {mode} sources results")
-            for method, res in plt_res.items():
-                plt.scatter(snr_values, res, label=method)
-            plt.legend()
-            plt.grid()
-            plt.xlabel("SNR [dB]")
-            plt.ylabel("RMSE [m]")
-            plt.savefig(os.path.join(plot_path, f"{mode}_sources_results_{dt_string_for_save}.png"))
-            plt.show()
+    system_model_params = {
+        "N": 5,
+        "M": 2,
+        "T": 100,
+        "snr": None,            # if defined, values in scenario_dict will be ignored
+        "field_type": "Near",
+        "signal_nature": None,  # if defined, values in scenario_dict will be ignored
+        "eta": 0,
+        "bias": 0,
+        "sv_noise_var": 0
+    }
+    model_config = {
+        "model_type": "SubspaceNet",
+        "diff_method": "music_1D",
+        "tau": 8
+    }
+    training_params = {
+        "samples_size": 1024,
+        "train_test_ratio": 0.1,
+        "training_objective": "range",
+        "batch_size": 16,
+        "epochs": 55,
+        "optimizer": "Adam",
+        "learning_rate": 0.0001,
+        "weight_decay": 1e-9,
+        "step_size": 70,
+        "gamma": 0.5
+    }
+    evaluation_params = {
+        "criterion": "rmspe",
+        "augmented_methods": [
+            # "mvdr",
+            # "r-music",
+            # "esprit",
+            # "music",
+            # "music_2D",
+        ],
+        "subspace_methods": [
+            # "esprit",
+            # "music_1d",
+            # "r-music",
+            # "mvdr",
+            # "sps-r-music",
+            # "sps-esprit",
+            # "sps-music"
+            # "bb-music",
+            "music_2D"
+        ]
+    }
+    simulation_commands = {
+        "SAVE_TO_FILE": False,
+        "CREATE_DATA": True,
+        "LOAD_MODEL": False,
+        "TRAIN_MODEL": True,
+        "SAVE_MODEL": False,
+        "EVALUATE_MODE": True,
+        "PLOT_RESULTS": False
+    }
+
+    loss = run_simulation(simulation_commands=simulation_commands,
+                          system_model_params=system_model_params,
+                          model_config=model_config,
+                          training_params=training_params,
+                          evaluation_params=evaluation_params,
+                          scenario_dict=scenario_dict)
 
