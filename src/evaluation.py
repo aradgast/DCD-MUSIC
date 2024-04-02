@@ -172,7 +172,7 @@ def evaluate_dnn_model(
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
-            overall_loss += eval_loss.item() / len(dataset)
+            overall_loss += eval_loss.item() / test_length
 
     # Plot spectrum for SubspaceNet model
     if plot_spec and model_type.startswith("SubspaceNet"):
@@ -385,7 +385,7 @@ def evaluate_model_based(
             if doa.shape[1] != predictions.shape[1]:
                 y = doa[0]
                 doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
-            loss = criterion(predictions, doa * R2D)
+            loss = criterion(predictions, doa)
             loss_list.append(loss)
 
         # MVDR algorithm

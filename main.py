@@ -54,7 +54,7 @@ if __name__ == "__main__":
         "M": 2,
         "T": 100,
         "snr": 10,                         # if defined, values in scenario_dict will be ignored
-        "field_type": "Near",
+        "field_type": "Far",
         "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
         "eta": 0,
         "bias": 0,
@@ -67,11 +67,11 @@ if __name__ == "__main__":
         "field_type": "Far"
     }
     training_params = {
-        "samples_size": 1024 * 50,
+        "samples_size": 1024,
         "train_test_ratio": .1,
         "training_objective": "angle",
-        "batch_size": 1024,
-        "epochs": 150,
+        "batch_size": 256,
+        "epochs": 2,
         "optimizer": "Adam",
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             # "music_2D",
         ],
         "subspace_methods": [
-            # "esprit",
+            "esprit",
             # "music_1d",
             # "r-music",
             # "mvdr",
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         "CREATE_DATA": True,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
-        "SAVE_MODEL": True,
+        "SAVE_MODEL": False,
         "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }
