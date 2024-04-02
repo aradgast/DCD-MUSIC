@@ -37,7 +37,7 @@ from src.criterions import RMSPELoss, MSPELoss, RMSELoss
 from src.criterions import RMSPE, MSPE
 from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
-from src.models import SubspaceNet, MUSIC, RootMusic, Esprit
+from src.models import SubspaceNet, MUSIC, RootMusic, Esprit_torch
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel
 
@@ -60,7 +60,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower() == "root_music":
         return RootMusic(system_model)
     if method_name.lower() == "esprit":
-        return Esprit(system_model)
+        return Esprit_torch(system_model)
 def evaluate_dnn_model(
         model,
         dataset: list,
@@ -113,7 +113,7 @@ def evaluate_dnn_model(
             X = X.to(device)
             DOA = DOA.to(device)
             # Get model output
-            if model_type.startswith("SubspaceNet") and model.system_model.params.field_type.endswith("Near"):
+            if model_type.startswith("SubspaceNet") and model.field_type.endswith("Near"):
                 if model.diff_method.estimation_params == "range":
                     model_output = model(X, is_soft=False, known_angles=DOA)
                 else:
@@ -141,14 +141,14 @@ def evaluate_dnn_model(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
                     )
             elif model_type.startswith("SubspaceNet"):
-                if model.system_model.params.field_type.endswith("Near"):
+                if model.field_type.endswith("Near"):
                     if model.diff_method.estimation_params == "range":
                         RANGE_predictions = model_output[0]
                         DOA_predictions = DOA
                     else:
                         RANGE_predictions = model_output[1]
                         DOA_predictions = model_output[0]
-                elif model.system_model.params.field_type.endswith("Far"):
+                elif model.field_type.endswith("Far"):
                     # Default - SubSpaceNet
                     DOA_predictions = model_output[0]
             else:
@@ -159,7 +159,7 @@ def evaluate_dnn_model(
             if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
-                if model.system_model.params.field_type.endswith("Near"):
+                if model.field_type.endswith("Near"):
                     if model.diff_method.angels is None:
                         eval_loss = criterion(RANGE.to(torch.float64), RANGE_predictions)
                     else:
@@ -232,7 +232,7 @@ def evaluate_augmented_model(
     methods = {
         "mvdr": MVDR(system_model),
         "music": MUSIC(system_model, estimation_parameter="angle"),
-        "esprit": Esprit(system_model),
+        "esprit": Esprit_torch(system_model),
         "r-music": RootMUSIC(system_model),
         "music_2D": MUSIC(system_model, estimation_parameter="angle, range")
     }
@@ -381,6 +381,9 @@ def evaluate_model_based(
             # If the amount of predictions is less than the amount of sources
             predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
+            if doa.shape[1] != M:
+                y = doa[0]
+                doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
             loss = criterion(predictions, doa * R2D)
             loss_list.append(loss)
 
@@ -522,5 +525,5 @@ def evaluate(
         )
         res[algorithm] = loss
     for method, loss_ in res.items():
-        print("{} test loss = {}".format(method.lower(), loss_["Overall"]))
+        print("{} test loss = {}".format(method.lower(), loss_))
     return res

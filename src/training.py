@@ -417,7 +417,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                 RANGE = Variable(RANGE, requires_grad=True).to(device)
             else:
-                DOA = true_label
+                if model_name.startswith("SubspaceNet"):
+                    if model.field_type != model.system_model.params.field_type:
+                        DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                    else:
+                        DOA = true_label
 
             train_length += DOA.shape[0]
             # Cast observations and DoA to Variables

@@ -189,7 +189,8 @@ class ModelGenerator(object):
             self.model = SubspaceNet(tau=self.tau,
                                      N=system_model_params.N,
                                      diff_method=self.diff_method,
-                                     system_model=self.system_model)
+                                     system_model=self.system_model,
+                                     field_type=self.field_type)
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
 
@@ -323,7 +324,7 @@ class SubspaceNet(nn.Module):
     """
 
     def __init__(self, tau: int, N: int, diff_method: str = "root_music",
-                 system_model: SystemModel = None):
+                 system_model: SystemModel = None, field_type: str = "Far"):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -355,7 +356,7 @@ class SubspaceNet(nn.Module):
         self.DropOut = nn.Dropout(self.p)
         self.ReLU = nn.ReLU()
         self.diff_method = None
-        self.field_type = None
+        self.field_type = field_type
         self.system_model = system_model
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
@@ -372,7 +373,7 @@ class SubspaceNet(nn.Module):
         -------
             Exception: Method diff_method is not defined for SubspaceNet
         """
-        if self.system_model.params.field_type == "Far":
+        if self.field_type == "Far":
             if diff_method.startswith("root_music"):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
@@ -380,8 +381,8 @@ class SubspaceNet(nn.Module):
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
-                                f"{self.system_model.params.field_type} scenario")
-        elif self.system_model.params.field_type == "Near":
+                                f"{self.field_type} scenario")
+        elif self.field_type == "Near":
             if diff_method.startswith("music_2D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
             elif diff_method.startswith("music_1D"):
@@ -389,7 +390,7 @@ class SubspaceNet(nn.Module):
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
-                                f"{self.system_model.params.field_type} Field scenario")
+                                f"{self.field_type} Field scenario")
 
     def anti_rectifier(self, X):
         """Applies the anti-rectifier operation to the input tensor.
@@ -407,15 +408,16 @@ class SubspaceNet(nn.Module):
 
     def adjust_diffmethod_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC):
-            if self.diff_method.angels is None:
-                if epoch % 20 == 0:
-                    self.diff_method.adjust_cell_size()
-                    print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
+            if epoch % 10 == 0:
+                self.diff_method.adjust_cell_size()
+                print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
 
     def get_diffmethod_temperature(self):
         if isinstance(self.diff_method, MUSIC):
-            if self.diff_method.angels is None:
+            if self.diff_method.estimation_params == "range":
                 return self.diff_method.cell_size
+            elif self.diff_method.estimation_params == "angle, range":
+                return {"angle_cell_size" : self.diff_method.cell_size_angle, "distance_cell_size" : self.diff_method.cell_size_distance}
 
     def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
         """
@@ -482,7 +484,7 @@ class SubspaceNet(nn.Module):
         )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
 
-        if self.system_model.params.field_type == "Far":
+        if self.field_type == "Far":
             method_output = self.diff_method(Rz, self.system_model.params.M, self.batch_size)
             if isinstance(method_output, tuple):
                 # Root MUSIC output
@@ -493,7 +495,7 @@ class SubspaceNet(nn.Module):
                 doa_all_predictions, roots = None, None
             return doa_prediction, doa_all_predictions, roots, Rz
 
-        elif self.system_model.params.field_type == "Near":
+        elif self.field_type == "Near":
             if known_angles is None:
                 doa_prediction, distance_prediction = self.diff_method(Rz, is_soft=is_soft)
                 return doa_prediction, distance_prediction, Rz
@@ -842,7 +844,11 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
-        self.cell_size = int(self.distances.shape[0] * 0.3)
+        if estimation_parameter == "range":
+            self.cell_size = int(self.distances.shape[0] * 0.3)
+        elif estimation_parameter == "angle, range":
+            self.cell_size_angle = int(self.angels.shape[0] * 0.3)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.3)
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
         if self.system_model.params.field_type.startswith("Near"):
@@ -906,6 +912,15 @@ class MUSIC(SubspaceMethod):
                 self.cell_size = int(0.95 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
+        elif self.estimation_params == "angle, range":
+            if self.cell_size_angle > 5:
+                self.cell_size_angle = int(0.95 * self.cell_size_angle)
+                if self.cell_size_angle % 2 == 0:
+                    self.cell_size_angle -= 1
+            if self.cell_size_distance > 5:
+                self.cell_size_distance = int(0.95 * self.cell_size_distance)
+                if self.cell_size_distance % 2 == 0:
+                    self.cell_size_distance -= 1
 
     def get_inverse_spectrum(self, noise_subspace: torch.Tensor):
         """
@@ -1072,20 +1087,28 @@ class MUSIC(SubspaceMethod):
         batch_size = self.music_spectrum.shape[0]
         soft_row = torch.zeros((batch_size, self.system_model.params.M))
         soft_col = torch.zeros((batch_size, self.system_model.params.M))
-        cell_size_col = 7  # for distances
-        cell_size_row = 5  # for angles
-        flat_spectrum = self.music_spectrum.reshape(self.music_spectrum.shape[0], -1)
-        top_indxs = torch.topk(flat_spectrum, self.system_model.params.M, dim=1)[1]
-        max_row = torch.div(top_indxs, self.music_spectrum.shape[2], rounding_mode="floor")
-        max_col = torch.fmod(top_indxs, self.music_spectrum.shape[2]).int()
+        max_row = torch.zeros((self.music_spectrum.shape[0], self.system_model.params.M), dtype=torch.int64)
+        max_col = torch.zeros((self.music_spectrum.shape[0], self.system_model.params.M), dtype=torch.int64)
+        for batch in range(self.music_spectrum.shape[0]):
+            music_spectrum = self.music_spectrum[batch].detach().cpu().numpy().squeeze()
+            # Flatten the spectrum
+            spectrum_flatten = music_spectrum.flatten()
+            # Find spectrum peaks
+            peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
+            # Sort the peak by their amplitude
+            peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
+            # convert the peaks to 2d indices
+            original_idx = torch.from_numpy(np.array(np.unravel_index(peaks, music_spectrum.shape)))
+            max_row[batch] = original_idx[0][0:self.system_model.params.M]
+            max_col[batch] = original_idx[1][0:self.system_model.params.M]
         for source in range(self.system_model.params.M):
-            max_row_cell_idx = (max_row[:, source][:, None] - cell_size_row + torch.arange(2 * cell_size_row + 1,
+            max_row_cell_idx = (max_row[:, source][:, None] - self.cell_size_angle + torch.arange(2 * self.cell_size_angle + 1,
                                                                                            dtype=torch.int32,
                                                                                            device=device))
             max_row_cell_idx %= self.music_spectrum.shape[1]
             max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
 
-            max_col_cell_idx = (max_col[:, source][:, None] - cell_size_col + torch.arange(2 * cell_size_col + 1,
+            max_col_cell_idx = (max_col[:, source][:, None] - self.cell_size_distance + torch.arange(2 * self.cell_size_distance + 1,
                                                                                            dtype=torch.long,
                                                                                            device=device))
             max_col_cell_idx %= self.music_spectrum.shape[2]
@@ -1252,7 +1275,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
 
-class Esprit(SubspaceMethod):
+class Esprit_torch(SubspaceMethod):
     def __init__(self, system_model: SystemModel):
         super().__init__(system_model)
 

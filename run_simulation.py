@@ -91,7 +91,7 @@ def __run_simulation(**kwargs):
             model_config = (
                 ModelGenerator(system_model)
                 .set_model_type(MODEL_CONFIG["model_type"])
-                .set_field_type(system_model_params.field_type)
+                .set_field_type(MODEL_CONFIG["field_type"])
                 .set_diff_method(MODEL_CONFIG["diff_method"])
                 .set_tau(MODEL_CONFIG["tau"])
                 .set_model(system_model_params)
