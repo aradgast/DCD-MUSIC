@@ -286,6 +286,49 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
     return Kx_Out
 
 
+def calculate_covariance_tensor(sampels: torch.Tensor, method: str = "simple"):
+    if method == "simple":
+        Rx = torch.cov(sampels)[None, :, :]
+    elif method == "sps":
+        Rx = _spatial_smoothing_covariance(sampels)[None, :, :]
+    else:
+        raise ValueError(f"calculate_covariance_tensor: method {method} is not recognized for covariance calculation.")
+
+    return Rx
+
+
+def _spatial_smoothing_covariance(sampels: torch.Tensor):
+    """
+    Calculates the covariance matrix using spatial smoothing technique.
+
+    Args:
+    -----
+        X (np.ndarray): Input samples matrix.
+
+    Returns:
+    --------
+        covariance_mat (np.ndarray): Covariance matrix.
+    """
+    X = sampels.squeeze()
+    N = X.shape[0]
+    # Define the sub-arrays size
+    sub_array_size = int(N / 2) + 1
+    # Define the number of sub-arrays
+    number_of_sub_arrays = N - sub_array_size + 1
+    # Initialize covariance matrix
+    covariance_mat = torch.zeros((sub_array_size, sub_array_size), dtype=torch.complex128)
+
+    for j in range(number_of_sub_arrays):
+        # Run over all sub-arrays
+        x_sub = X[j: j + sub_array_size, :]
+        # Calculate sample covariance matrix for each sub-array
+        sub_covariance = torch.cov(x_sub)
+        # Aggregate sub-arrays covariances
+        covariance_mat += sub_covariance / number_of_sub_arrays
+    # Divide overall matrix by the number of sources
+    return covariance_mat
+
+
 if __name__ == "__main__":
     # sum_of_diag example
     matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])

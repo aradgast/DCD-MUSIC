@@ -69,9 +69,9 @@ if __name__ == "__main__":
     training_params = {
         "samples_size": 1024 * 10,
         "train_test_ratio": 0.1,
-        "training_objective": "angle",
-        "batch_size": 1024,
-        "epochs": 100,
+        "training_objective": "range",
+        "batch_size": 32,
+        "epochs": 2,
         "optimizer": "Adam",
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             # "mvdr",
             # "sps-r-music",
             # "sps-esprit",
-            # "sps-music"
+            "sps-music_1d"
             # "bb-music",
             # "music_2D"
         ]
@@ -102,9 +102,9 @@ if __name__ == "__main__":
     simulation_commands = {
         "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
-        "LOAD_MODEL": True,
-        "TRAIN_MODEL": True,
-        "SAVE_MODEL": True,
+        "LOAD_MODEL": False,
+        "TRAIN_MODEL": False,
+        "SAVE_MODEL": False,
         "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }

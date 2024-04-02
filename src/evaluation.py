@@ -47,13 +47,14 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
 
     Parameters
     ----------
-    method_name
+    method_name(str): the method to use - music_1d, music_2d, root_music, esprit...
+    system_model(SystemModel) : the system model to use as an argument to the method class.
 
     Returns
     -------
-
+    an instance of the method.
     """
-    if method_name.lower() == "music_1d":
+    if method_name.lower().endswith("music_1d"):
         return MUSIC(system_model=system_model, estimation_parameter="angle")
     if method_name.lower() == "music_2d":
         return MUSIC(system_model=system_model, estimation_parameter="angle, range")
@@ -356,12 +357,11 @@ def evaluate_model_based(
                 predictions, spectrum, M = model_based(X=X)
             elif algorithm.startswith("sps"):
                 # Spatial smoothing
-                predictions, spectrum, M = model_based(
-                    X=X, mode="spatial_smoothing"
-                )
+                Rx = calculate_covariance_tensor(X, method="sps")
+                predictions = model_based(Rx)
             elif algorithm.startswith("music"):
                 # Conventional
-                Rx = torch.from_numpy(np.cov(X.detach().numpy()))[None, :, :]
+                Rx = calculate_covariance_tensor(X, method="simple")
                 predictions = model_based(Rx, is_soft=False)
             # If the amount of predictions is less than the amount of sources
             # predictions = add_random_predictions(M, predictions, algorithm)
@@ -405,8 +405,7 @@ def evaluate_model_based(
         elif algorithm.endswith("2D"):
             y = doa[0]
             doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
-
-            Rx = torch.cov(X)[None, :, :]
+            Rx = calculate_covariance_tensor(X, method="sps")
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
@@ -490,16 +489,16 @@ def evaluate(
     """
     res = {}
     # Evaluate SubspaceNet + differentiable algorithm performances
-    model_test_loss = evaluate_dnn_model(
-        model=model,
-        dataset=model_test_dataset,
-        criterion=criterion,
-        plot_spec=plot_spec,
-        figures=figures,
-        model_type=model_type,
-        is_separted=True
-    )
-    res[model_type] = model_test_loss
+    # model_test_loss = evaluate_dnn_model(
+    #     model=model,
+    #     dataset=model_test_dataset,
+    #     criterion=criterion,
+    #     plot_spec=plot_spec,
+    #     figures=figures,
+    #     model_type=model_type,
+    #     is_separted=True
+    # )
+    # res[model_type] = model_test_loss
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(

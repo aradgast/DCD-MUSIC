@@ -844,11 +844,12 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
-        if estimation_parameter == "range":
+        if self.estimation_parameter == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
-        elif estimation_parameter == "angle, range":
+        elif self.estimation_parameter == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.3)
             self.cell_size_distance = int(self.distances.shape[0] * 0.3)
+
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
         if self.system_model.params.field_type.startswith("Near"):

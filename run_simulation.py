@@ -213,63 +213,63 @@ def __run_simulation(**kwargs):
                 else:
                     plt.show()
 
-                # Evaluation stage
-                if evaluate_mode:
-                    # Initialize figures dict for plotting
-                    figures = initialize_figures()
-                    # Define loss measure for evaluation
-                    criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"])
-                    # Load datasets for evaluation
-                    if not (create_data or load_data):
-                        test_dataset, generic_test_dataset, samples_model = load_datasets(
-                            system_model_params=system_model_params,
-                            model_type=model_config.model_type,
-                            samples_size=samples_size,
-                            datasets_path=datasets_path,
-                            train_test_ratio=train_test_ratio,
-                        )
-
-                    # Generate DataLoader objects
-                    model_test_dataset = torch.utils.data.DataLoader(
-                        test_dataset, batch_size=1, shuffle=False, drop_last=False
-                    )
-                    generic_test_dataset = torch.utils.data.DataLoader(
-                        generic_test_dataset, batch_size=1, shuffle=False, drop_last=False
-                    )
-                    # Load pre-trained model
-                    if not train_model:
-                        # Define an evaluation parameters instance
-                        simulation_parameters = (
-                            TrainingParams()
-                            .set_model(model=model_config)
-                            .load_model(
-                                loading_path=saving_path
-                                             / "final_models"
-                                             / simulation_filename
-                            )
-                        )
-                        model = simulation_parameters.model
-                    # print simulation summary details
-                    simulation_summary(
+            # Evaluation stage
+            if evaluate_mode:
+                # Initialize figures dict for plotting
+                figures = initialize_figures()
+                # Define loss measure for evaluation
+                criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"])
+                # Load datasets for evaluation
+                if not (create_data or load_data):
+                    test_dataset, generic_test_dataset, samples_model = load_datasets(
                         system_model_params=system_model_params,
                         model_type=model_config.model_type,
-                        phase="evaluation",
-                        parameters=simulation_parameters,
+                        samples_size=samples_size,
+                        datasets_path=datasets_path,
+                        train_test_ratio=train_test_ratio,
                     )
-                    # Evaluate DNN models, augmented and subspace methods
-                    loss = evaluate(
-                        model=model,
-                        model_type=model_config.model_type,
-                        model_test_dataset=model_test_dataset,
-                        generic_test_dataset=generic_test_dataset,
-                        criterion=criterion,
-                        subspace_criterion=subspace_criterion,
-                        system_model=samples_model,
-                        figures=figures,
-                        plot_spec=False,
-                        augmented_methods=EVALUATION_PARAMS["augmented_methods"],
-                        subspace_methods=EVALUATION_PARAMS["subspace_methods"]
+
+                # Generate DataLoader objects
+                model_test_dataset = torch.utils.data.DataLoader(
+                    test_dataset, batch_size=1, shuffle=False, drop_last=False
+                )
+                generic_test_dataset = torch.utils.data.DataLoader(
+                    generic_test_dataset, batch_size=1, shuffle=False, drop_last=False
+                )
+                # Load pre-trained model
+                if not train_model:
+                    # Define an evaluation parameters instance
+                    simulation_parameters = (
+                        TrainingParams()
+                        .set_model(model=model_config)
+                        .load_model(
+                            loading_path=saving_path
+                                         / "final_models"
+                                         / simulation_filename
+                        )
                     )
+                    model = simulation_parameters.model
+                # print simulation summary details
+                simulation_summary(
+                    system_model_params=system_model_params,
+                    model_type=model_config.model_type,
+                    phase="evaluation",
+                    parameters=simulation_parameters,
+                )
+                # Evaluate DNN models, augmented and subspace methods
+                loss = evaluate(
+                    model=model,
+                    model_type=model_config.model_type,
+                    model_test_dataset=model_test_dataset,
+                    generic_test_dataset=generic_test_dataset,
+                    criterion=criterion,
+                    subspace_criterion=subspace_criterion,
+                    system_model=samples_model,
+                    figures=figures,
+                    plot_spec=False,
+                    augmented_methods=EVALUATION_PARAMS["augmented_methods"],
+                    subspace_methods=EVALUATION_PARAMS["subspace_methods"]
+                )
                 plt.show()
                 print("end")
                 res[mode][snr] = loss
