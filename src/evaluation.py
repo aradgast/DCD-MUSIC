@@ -377,11 +377,12 @@ def evaluate_model_based(
                 predictions, M = esprit.narrowband(X=X, mode="spatial_smoothing")
             else:
                 # Conventional
-                predictions, M = esprit.narrowband(X=X, mode="sample")
+                Rx = calculate_covariance_tensor(X, method="simple")
+                predictions = model_based(Rx)
             # If the amount of predictions is less than the amount of sources
-            predictions = add_random_predictions(M, predictions, algorithm)
+            # predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
-            if doa.shape[1] != M:
+            if doa.shape[1] != predictions.shape[1]:
                 y = doa[0]
                 doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
             loss = criterion(predictions, doa * R2D)
@@ -405,7 +406,7 @@ def evaluate_model_based(
         elif algorithm.endswith("2D"):
             y = doa[0]
             doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
-            Rx = calculate_covariance_tensor(X, method="sps")
+            Rx = calculate_covariance_tensor(X, method="simple")
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
@@ -489,16 +490,16 @@ def evaluate(
     """
     res = {}
     # Evaluate SubspaceNet + differentiable algorithm performances
-    # model_test_loss = evaluate_dnn_model(
-    #     model=model,
-    #     dataset=model_test_dataset,
-    #     criterion=criterion,
-    #     plot_spec=plot_spec,
-    #     figures=figures,
-    #     model_type=model_type,
-    #     is_separted=True
-    # )
-    # res[model_type] = model_test_loss
+    model_test_loss = evaluate_dnn_model(
+        model=model,
+        dataset=model_test_dataset,
+        criterion=criterion,
+        plot_spec=plot_spec,
+        figures=figures,
+        model_type=model_type,
+        is_separted=True
+    )
+    res[model_type] = model_test_loss
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(

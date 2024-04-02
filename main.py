@@ -63,15 +63,15 @@ if __name__ == "__main__":
     model_config = {
         "model_type": "SubspaceNet",
         "diff_method": "esprit",
-        "tau": 3,
+        "tau": 8,
         "field_type": "Far"
     }
     training_params = {
-        "samples_size": 1024 * 10,
-        "train_test_ratio": 0.1,
-        "training_objective": "range",
-        "batch_size": 32,
-        "epochs": 2,
+        "samples_size": 1024 * 50,
+        "train_test_ratio": .1,
+        "training_objective": "angle",
+        "batch_size": 1024,
+        "epochs": 150,
         "optimizer": "Adam",
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -88,13 +88,13 @@ if __name__ == "__main__":
             # "music_2D",
         ],
         "subspace_methods": [
-            "esprit",
+            # "esprit",
             # "music_1d",
             # "r-music",
             # "mvdr",
             # "sps-r-music",
             # "sps-esprit",
-            "sps-music_1d"
+            # "sps-music_1d"
             # "bb-music",
             # "music_2D"
         ]
@@ -103,8 +103,8 @@ if __name__ == "__main__":
         "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
         "LOAD_MODEL": False,
-        "TRAIN_MODEL": False,
-        "SAVE_MODEL": False,
+        "TRAIN_MODEL": True,
+        "SAVE_MODEL": True,
         "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }

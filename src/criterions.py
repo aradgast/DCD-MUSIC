@@ -401,7 +401,7 @@ def set_criterions(criterion_name: str):
     """
     if criterion_name.startswith("rmspe"):
         criterion = RMSPELoss()
-        subspace_criterion = RMSPE
+        subspace_criterion = RMSPELoss()
     elif criterion_name.startswith("mspe"):
         criterion = MSPELoss()
         subspace_criterion = MSPE

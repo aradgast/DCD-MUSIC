@@ -340,16 +340,6 @@ class SubspaceNet(nn.Module):
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
-        # self.conv4 = nn.Conv2d(128, 128, kernel_size=2)
-        # self.fc1 = nn.Sequential(nn.Linear(128 * (2 * N - 3) * (N - 3), 128),
-        #                          nn.ReLU(), nn.Dropout(self.p))
-        # self.fc2 = nn.Sequential(nn.Linear(256, 128),
-        #                          nn.LeakyReLU(), nn.Dropout(self.p))
-        # self.fc5 = nn.Sequential(nn.Linear(128, 256),
-        #                          nn.ReLU(), nn.Dropout(self.p))
-        # self.fc6 = nn.Sequential(nn.Linear(128, 128 * (2 * N - 3) * (N - 3)),
-        #                          nn.LeakyReLU(), nn.Dropout(self.p))
-        # self.deconv1 = nn.ConvTranspose2d(256, 64, kernel_size=2)
         self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
         self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2)
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
@@ -377,7 +367,7 @@ class SubspaceNet(nn.Module):
             if diff_method.startswith("root_music"):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
-                self.diff_method = esprit
+                self.diff_method = Esprit_torch(system_model=system_model)
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
@@ -417,7 +407,8 @@ class SubspaceNet(nn.Module):
             if self.diff_method.estimation_params == "range":
                 return self.diff_method.cell_size
             elif self.diff_method.estimation_params == "angle, range":
-                return {"angle_cell_size" : self.diff_method.cell_size_angle, "distance_cell_size" : self.diff_method.cell_size_distance}
+                return {"angle_cell_size": self.diff_method.cell_size_angle,
+                        "distance_cell_size": self.diff_method.cell_size_distance}
 
     def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
         """
@@ -450,20 +441,6 @@ class SubspaceNet(nn.Module):
         x = self.conv3(x)
         x = self.anti_rectifier(x)
 
-        # CNN block #4
-        # x = self.conv4(x)
-        # x = self.anti_rectifier(x)
-        #
-        # # fully connected
-        # old_shape = x.shape
-        # x = self.fc1(x.view(x.shape[0], -1))
-        # x = self.fc2(x)
-        # x = self.fc5(x)
-        # x = self.fc6(x).view(old_shape)
-        # # DCNN block #1
-        # x = self.deconv1(x)
-        # x = self.anti_rectifier(x)
-        # DCNN block #2
         x = self.deconv2(x)
         x = self.anti_rectifier(x)
         # DCNN block #3
@@ -485,7 +462,7 @@ class SubspaceNet(nn.Module):
         # Feed surrogate covariance to the differentiable subspace algorithm
 
         if self.field_type == "Far":
-            method_output = self.diff_method(Rz, self.system_model.params.M, self.batch_size)
+            method_output = self.diff_method(Rz)
             if isinstance(method_output, tuple):
                 # Root MUSIC output
                 doa_prediction, doa_all_predictions, roots = method_output
@@ -502,6 +479,72 @@ class SubspaceNet(nn.Module):
             else:  # the angles are known
                 distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
                 return distance_prediction, Rz
+
+
+class CascadedSubspaceNet(SubspaceNet):
+    """
+    The CascadedSubspaceNet is a suggested solution for localization in near-field.
+    It uses 2 SubspaceNet:
+    The first, is SubspaceNet+Esprit/RootMusic, to get the angle from the input tensor.
+    The second, uses the first to extract the distance.
+    """
+
+    def __init__(self, tau: int, N: int, diff_method: str = "root_music",
+                 system_model: SystemModel = None, field_type: str = "Near", state_path: str=""):
+        super(SubspaceNet, self).__init__(tau, N, diff_method, system_model, field_type)
+        self.angle_extractor = None
+        self._init_angle_extractor(path=state_path)
+
+    def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
+        if known_angles is None:
+            known_angles = self.angle_extractor(Rx_tau)
+        # Rx_tau shape: [Batch size, tau, 2N, N]
+        self.N = Rx_tau.shape[-1]
+        self.batch_size = Rx_tau.shape[0]
+        ############################
+        ## Architecture flow ##
+        # CNN block #1
+        x = self.conv1(Rx_tau)
+        x = self.anti_rectifier(x)
+        # CNN block #2
+        x = self.conv2(x)
+        x = self.anti_rectifier(x)
+        # CNN block #3
+        x = self.conv3(x)
+        x = self.anti_rectifier(x)
+
+        x = self.deconv2(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #3
+        x = self.deconv3(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #4
+        x = self.DropOut(x)
+        Rx = self.deconv4(x)
+        # Reshape Output shape: [Batch size, 2N, N]
+        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
+        # Real and Imaginary Reconstruction
+        Rx_real = Rx_View[:, :self.N, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
+        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
+        # Apply Gram operation diagonal loading
+        Rz = gram_diagonal_overload(
+            Kx=Kx_tag, eps=1, batch_size=self.batch_size
+        )  # Shape: [Batch size, N, N]
+        # Feed surrogate covariance to the differentiable subspace algorithm
+        distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
+        return distance_prediction, Rz
+
+    def _init_angle_extractor(self, path: str):
+        self.angle_extractor = SubspaceNet(tau=self.tau,
+                                           N=self.N,
+                                           diff_method="esprit",
+                                           system_model=self.system_model,
+                                           field_type="Far")
+        self.__load_state_for_angle_extractor(path)
+
+    def __load_state_for_angle_extractor(self, path: str):
+        self.angle_extractor.load_state_dict(torch.load(path, map_location=device))
 
 
 class SubspaceNetEsprit(SubspaceNet):
@@ -1103,15 +1146,17 @@ class MUSIC(SubspaceMethod):
             max_row[batch] = original_idx[0][0:self.system_model.params.M]
             max_col[batch] = original_idx[1][0:self.system_model.params.M]
         for source in range(self.system_model.params.M):
-            max_row_cell_idx = (max_row[:, source][:, None] - self.cell_size_angle + torch.arange(2 * self.cell_size_angle + 1,
-                                                                                           dtype=torch.int32,
-                                                                                           device=device))
+            max_row_cell_idx = (
+                        max_row[:, source][:, None] - self.cell_size_angle + torch.arange(2 * self.cell_size_angle + 1,
+                                                                                          dtype=torch.int32,
+                                                                                          device=device))
             max_row_cell_idx %= self.music_spectrum.shape[1]
             max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
 
-            max_col_cell_idx = (max_col[:, source][:, None] - self.cell_size_distance + torch.arange(2 * self.cell_size_distance + 1,
-                                                                                           dtype=torch.long,
-                                                                                           device=device))
+            max_col_cell_idx = (max_col[:, source][:, None] - self.cell_size_distance + torch.arange(
+                2 * self.cell_size_distance + 1,
+                dtype=torch.long,
+                device=device))
             max_col_cell_idx %= self.music_spectrum.shape[2]
             max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
 
@@ -1284,9 +1329,9 @@ class Esprit_torch(SubspaceMethod):
         # get the signal subspace
         signal_subspace, _ = self.subspace_separation(cov, number_of_sources=self.system_model.params.M)
         # create 2 overlapping matrices
-        upper = signal_subspace[:, :-1, :-1]
-        lower = signal_subspace[:, 1:, 1:]
-        phi = torch.linalg.lstsq(upper, lower)  # identical to pinv(A) @ B but faster and stable.
+        upper = signal_subspace[:, :-1]
+        lower = signal_subspace[:, 1:]
+        phi = torch.linalg.lstsq(upper, lower)[0]  # identical to pinv(A) @ B but faster and stable.
         eigvalues, _ = torch.linalg.eig(phi)
         eigvals_phase = torch.angle(eigvalues)
         prediction = -1 * torch.arcsin((1 / torch.pi) * eigvals_phase)

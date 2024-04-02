@@ -396,9 +396,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     # Set initial time for start training
     since = time.time()
     grad_diff_norm = {}
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            grad_diff_norm[name] = 0.0
+    # for name, param in model.named_parameters():
+    #     if param.requires_grad:
+    #         grad_diff_norm[name] = 0.0
 
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
@@ -413,15 +413,18 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model = model.to(device)
         for data in tqdm(training_params.train_dataset):
             Rx, true_label = data
-            if training_params.training_objective in ["range", "angle, range"]:
-                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                RANGE = Variable(RANGE, requires_grad=True).to(device)
+            if isinstance(model, SubspaceNet):
+                # in this case there are 2 labels - angles and distances.
+                if model.field_type.lower() == "near":
+                    DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                    RANGE = Variable(RANGE, requires_grad=True).to(device)
+                elif model.field_type != model.system_model.params.field_type:
+                    # if the data_model and the model are not synced.
+                    DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                else:
+                    DOA = true_label
             else:
-                if model_name.startswith("SubspaceNet"):
-                    if model.field_type != model.system_model.params.field_type:
-                        DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                    else:
-                        DOA = true_label
+                DOA = true_label
 
             train_length += DOA.shape[0]
             # Cast observations and DoA to Variables
@@ -435,7 +438,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             else:
                 model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
-            if training_params.model_type.startswith("SubspaceNet"):
+            if isinstance(model, SubspaceNet):
                 if training_params.training_objective.endswith("angle"):
                     DOA_predictions = model_output[0]
                 elif training_params.training_objective.startswith("range"):
@@ -452,7 +455,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 train_loss = training_params.criterion(
                     DOA_predictions.float(), DOA.float()
                 )
-            elif training_params.model_type.startswith("SubspaceNet"):
+            elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
                 elif training_params.training_objective == "range":
@@ -464,7 +467,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                                                                                   DOA,
                                                                                                   RANGE_predictions,
                                                                                                   RANGE,
-                                                                                                  True)
+                                                                                                  is_separted=True)
             # Back-propagation stage
             try:
                 train_loss.backward(retain_graph=True)

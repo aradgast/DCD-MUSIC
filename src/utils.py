@@ -287,7 +287,7 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
 
 
 def calculate_covariance_tensor(sampels: torch.Tensor, method: str = "simple"):
-    if method == "simple":
+    if method in ["simple", "sample"]:
         Rx = torch.cov(sampels)[None, :, :]
     elif method == "sps":
         Rx = _spatial_smoothing_covariance(sampels)[None, :, :]
