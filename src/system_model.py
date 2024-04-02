@@ -148,7 +148,7 @@ class SystemModel(object):
 
     def create_array(self):
         """create an array of sensors locations, around to origin."""
-        self.array = np.linspace(0, self.params.N, self.params.N)
+        self.array = np.linspace(0, self.params.N, self.params.N, endpoint=False)
 
     def calc_fresnel_fraunhofer_distance(self) -> tuple:
         """

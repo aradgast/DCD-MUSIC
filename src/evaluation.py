@@ -109,7 +109,7 @@ def evaluate_dnn_model(
                     DOA = true_label
             else:
                 DOA = true_label
-            test_length += DOA.shape[0]
+            test_length += DOA.shape[1]
             # Convert observations and DoA to device
             X = X.to(device)
             DOA = DOA.to(device)
@@ -172,7 +172,7 @@ def evaluate_dnn_model(
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
-            overall_loss += eval_loss.item() / test_length
+            overall_loss += eval_loss.item() / len(dataset)
 
     # Plot spectrum for SubspaceNet model
     if plot_spec and model_type.startswith("SubspaceNet"):

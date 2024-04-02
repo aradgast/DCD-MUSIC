@@ -484,11 +484,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 overall_train_loss += train_loss.item() * len(data[0])
             else:
                 # RMSPE is summed
-                overall_train_loss += train_loss.item()
+                overall_train_loss += train_loss.item() / len(training_params.train_dataset)
                 # overall_train_loss_angle += train_loss_angle.item()
                 # overall_train_loss_distance += train_loss_distance.item()
         # Average the epoch training loss
-        overall_train_loss = overall_train_loss / train_length
+        # overall_train_loss = overall_train_loss / train_length
         # overall_train_loss_angle /= train_length
         # overall_train_loss_distance /= train_length
         loss_train_list.append(overall_train_loss)

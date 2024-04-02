@@ -54,7 +54,7 @@ if __name__ == "__main__":
         "M": 2,
         "T": 100,
         "snr": 10,                         # if defined, values in scenario_dict will be ignored
-        "field_type": "Far",
+        "field_type": "Near",
         "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
         "eta": 0,
         "bias": 0,
@@ -62,16 +62,16 @@ if __name__ == "__main__":
     }
     model_config = {
         "model_type": "SubspaceNet",
-        "diff_method": "esprit",
+        "diff_method": "music_1D",
         "tau": 8,
-        "field_type": "Far"
+        "field_type": "Near"
     }
     training_params = {
-        "samples_size": 1024,
+        "samples_size": 1024 * 32,
         "train_test_ratio": .1,
-        "training_objective": "angle",
-        "batch_size": 256,
-        "epochs": 2,
+        "training_objective": "range",
+        "batch_size": 1024,
+        "epochs": 150,
         "optimizer": "Adam",
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             # "music_2D",
         ],
         "subspace_methods": [
-            "esprit",
+            # "esprit",
             # "music_1d",
             # "r-music",
             # "mvdr",
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             # "sps-esprit",
             # "sps-music_1d"
             # "bb-music",
-            # "music_2D"
+            "music_2D"
         ]
     }
     simulation_commands = {

@@ -198,10 +198,10 @@ class RMSPELoss(nn.Module):
                 rmspe_min = torch.min(rmspe_tensor)
                 rmspe.append(rmspe_min)
 
-        result = torch.sum(torch.stack(rmspe, dim=0))
+        result = torch.mean(torch.stack(rmspe, dim=0))
         if is_separted:
-            result_angle = torch.sum(torch.Tensor(rmspe_angle), dim=0)
-            result_distance = torch.sum(torch.Tensor(rmspe_distance), dim=0)
+            result_angle = torch.mean(torch.Tensor(rmspe_angle), dim=0)
+            result_distance = torch.mean(torch.Tensor(rmspe_distance), dim=0)
             return result, result_angle, result_distance
         else:
             return result

@@ -398,7 +398,7 @@ class SubspaceNet(nn.Module):
 
     def adjust_diffmethod_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC):
-            if epoch % 10 == 0:
+            if epoch % 20 == 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
 
@@ -887,9 +887,9 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
-        if self.estimation_parameter == "range":
+        if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
-        elif self.estimation_parameter == "angle, range":
+        elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.3)
             self.cell_size_distance = int(self.distances.shape[0] * 0.3)
 
@@ -1018,13 +1018,13 @@ class MUSIC(SubspaceMethod):
 
     def set_search_grid(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         if self.system_model.params.field_type.startswith("Far"):
-            self.__set_search_grid_near_field()
+            self.__set_search_grid_far_field()
         elif self.system_model.params.field_type.startswith("Near"):
-            self.__set_search_grid_far_field(known_angles=known_angles, known_distances=known_distances)
+            self.__set_search_grid_near_field(known_angles=known_angles, known_distances=known_distances)
         else:
             raise ValueError(f"set_search_grid: Unrecognized field type: {self.system_model.params.field_type}")
 
-    def __set_search_grid_near_field(self):
+    def __set_search_grid_far_field(self):
         array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
         theta = self.angels[:, None]
         time_delay = torch.einsum("nm, na -> na",
@@ -1033,7 +1033,7 @@ class MUSIC(SubspaceMethod):
                                   * self.system_model.dist_array_elems["NarrowBand"])
         self.search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
 
-    def __set_search_grid_far_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
+    def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         """
 
         Returns:
