@@ -433,8 +433,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Get model output
             # t1 = time.time()
             if training_params.training_objective == "range":
+                DOA_noisy = model.extract_angles(Rx)
                 # noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
-                model_output = model(Rx, known_angles=DOA)
+                model_output = model(Rx, known_angles=DOA_noisy)
             else:
                 model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")

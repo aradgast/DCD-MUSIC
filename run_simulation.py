@@ -245,7 +245,7 @@ def __run_simulation(**kwargs):
                         .load_model(
                             loading_path=saving_path
                                          / "final_models"
-                                         / simulation_filename
+                                         / get_model_filename(system_model_params, model_config)
                         )
                     )
                     model = simulation_parameters.model

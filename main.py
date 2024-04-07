@@ -46,16 +46,16 @@ if __name__ == "__main__":
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
         "coherent": [],
-        "non-coherent": []
+        "non-coherent": [20]
     }
 
     system_model_params = {
         "N": 5,
         "M": 2,
         "T": 100,
-        "snr": 10,                         # if defined, values in scenario_dict will be ignored
+        "snr": None,                         # if defined, values in scenario_dict will be ignored
         "field_type": "Near",
-        "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
+        "signal_nature": None,  # if defined, values in scenario_dict will be ignored
         "eta": 0,
         "bias": 0,
         "sv_noise_var": 0
@@ -67,11 +67,11 @@ if __name__ == "__main__":
         "field_type": "Near"
     }
     training_params = {
-        "samples_size": 1024 * 32,
+        "samples_size": 1024 * 64,
         "train_test_ratio": .1,
         "training_objective": "range",
         "batch_size": 1024,
-        "epochs": 150,
+        "epochs": 50,
         "optimizer": "Adam",
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -101,10 +101,10 @@ if __name__ == "__main__":
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,
-        "CREATE_DATA": True,
+        "CREATE_DATA": False,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
-        "SAVE_MODEL": False,
+        "SAVE_MODEL": True,
         "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }

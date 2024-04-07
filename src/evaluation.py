@@ -116,7 +116,8 @@ def evaluate_dnn_model(
             # Get model output
             if model_type.startswith("SubspaceNet") and model.field_type.endswith("Near"):
                 if model.diff_method.estimation_params == "range":
-                    model_output = model(X, is_soft=False, known_angles=DOA)
+                    DOA_noisy = model.extract_angles(X)
+                    model_output = model(X, is_soft=False, known_angles=DOA_noisy)
                 else:
                     model_output = model(X, is_soft=False)
             else:

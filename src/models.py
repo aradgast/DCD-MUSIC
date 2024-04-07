@@ -48,7 +48,7 @@ from src.utils import sum_of_diags_torch, find_roots_torch
 import time
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
-from src.system_model import SystemModel
+from src.system_model import SystemModel, SystemModelParams
 
 warnings.simplefilter("ignore")
 
@@ -164,6 +164,28 @@ class ModelGenerator(object):
         self.model_type = model_type
         return self
 
+    def get_model_filename(self, system_model_params: SystemModelParams):
+        """
+
+        Parameters
+        ----------
+        system_model_params
+
+        Returns
+        -------
+        file name to the wieghts of a network.
+        different from get_simulation_filename by not considering parameters that are not relevant to the network itself.
+        """
+        return (
+                f"{self.model_type}_"
+                + f"N={system_model_params.N}_"
+                + f"tau={self.tau}_"
+                + f"{system_model_params.signal_type}_"
+                + f"diff_method=esprit_"
+                + f"{system_model_params.field_type}_field_"
+                + f"{system_model_params.signal_nature}"
+        )
+
     def set_model(self, system_model_params):
         """
         Set the model based on the model type and system model parameters.
@@ -186,11 +208,17 @@ class ModelGenerator(object):
         elif self.model_type.startswith("DeepCNN"):
             self.model = DeepCNN(N=system_model_params.N, grid_size=361)
         elif self.model_type.startswith("SubspaceNet"):
-            self.model = SubspaceNet(tau=self.tau,
-                                     N=system_model_params.N,
-                                     diff_method=self.diff_method,
-                                     system_model=self.system_model,
-                                     field_type=self.field_type)
+            if self.field_type == "Near" and self.diff_method == "music_1D":
+                self.model = CascadedSubspaceNet(tau=self.tau,
+                                                 N=system_model_params.N,
+                                                 system_model=self.system_model,
+                                                 state_path=self.get_model_filename(system_model_params))
+            else:
+                self.model = SubspaceNet(tau=self.tau,
+                                             N=system_model_params.N,
+                                             diff_method=self.diff_method,
+                                             system_model=self.system_model,
+                                             field_type=self.field_type)
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
 
@@ -489,51 +517,10 @@ class CascadedSubspaceNet(SubspaceNet):
     The second, uses the first to extract the distance.
     """
 
-    def __init__(self, tau: int, N: int, diff_method: str = "root_music",
-                 system_model: SystemModel = None, field_type: str = "Near", state_path: str=""):
-        super(SubspaceNet, self).__init__(tau, N, diff_method, system_model, field_type)
+    def __init__(self, tau: int, N: int, system_model: SystemModel = None, state_path: str=""):
+        super(CascadedSubspaceNet, self).__init__(tau, N, "music_1D", system_model, "Near")
         self.angle_extractor = None
         self._init_angle_extractor(path=state_path)
-
-    def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
-        if known_angles is None:
-            known_angles = self.angle_extractor(Rx_tau)
-        # Rx_tau shape: [Batch size, tau, 2N, N]
-        self.N = Rx_tau.shape[-1]
-        self.batch_size = Rx_tau.shape[0]
-        ############################
-        ## Architecture flow ##
-        # CNN block #1
-        x = self.conv1(Rx_tau)
-        x = self.anti_rectifier(x)
-        # CNN block #2
-        x = self.conv2(x)
-        x = self.anti_rectifier(x)
-        # CNN block #3
-        x = self.conv3(x)
-        x = self.anti_rectifier(x)
-
-        x = self.deconv2(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #3
-        x = self.deconv3(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #4
-        x = self.DropOut(x)
-        Rx = self.deconv4(x)
-        # Reshape Output shape: [Batch size, 2N, N]
-        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
-        # Real and Imaginary Reconstruction
-        Rx_real = Rx_View[:, :self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
-        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
-        # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(
-            Kx=Kx_tag, eps=1, batch_size=self.batch_size
-        )  # Shape: [Batch size, N, N]
-        # Feed surrogate covariance to the differentiable subspace algorithm
-        distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
-        return distance_prediction, Rz
 
     def _init_angle_extractor(self, path: str):
         self.angle_extractor = SubspaceNet(tau=self.tau,
@@ -541,11 +528,19 @@ class CascadedSubspaceNet(SubspaceNet):
                                            diff_method="esprit",
                                            system_model=self.system_model,
                                            field_type="Far")
+        path = r"C:\git_clones\SubspaceNet\data\weights\SubspaceNet_M=2_T=100_SNR_20_tau=8_NarrowBand_diff_method=esprit_Near_field_non-coherent_eta=0_bias=0_sv_noise=0"
         self.__load_state_for_angle_extractor(path)
 
     def __load_state_for_angle_extractor(self, path: str):
         self.angle_extractor.load_state_dict(torch.load(path, map_location=device))
 
+    def extract_angles(self, Rx_tau: torch.Tensor):
+        with torch.no_grad():
+            self.angle_extractor.eval()
+            known_angles = self.angle_extractor(Rx_tau)[0]
+            self.angle_extractor.train()
+        known_angles = torch.sort(known_angles, dim=1)[0]
+        return known_angles
 
 class SubspaceNetEsprit(SubspaceNet):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,
