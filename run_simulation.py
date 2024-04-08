@@ -277,7 +277,8 @@ def __run_simulation(**kwargs):
                 plt.show()
                 print("end")
                 res[mode][snr] = loss
-                sys.stdout.close()
+                if save_to_file:
+                    sys.stdout.close()
     if res is not None:
         if SIMULATION_COMMANDS["PLOT_RESULTS"] == True:
             for signal_nature, snr_dict in res.items():
@@ -313,7 +314,8 @@ def __run_simulation(**kwargs):
                         print(f"SNR = {snr} [dB]: ")
                         for method, loss in results.items():
                             print(f"\t{method.upper()}: {loss['Overall']}")
-            sys.stdout.close()
+            if save_to_file:
+                sys.stdout.close()
         return res
 
 

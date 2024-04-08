@@ -442,7 +442,7 @@ class SubspaceNet(nn.Module):
 
     def adjust_diffmethod_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC):
-            if epoch % 20 == 0:
+            if epoch % 20 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
 

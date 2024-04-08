@@ -103,6 +103,8 @@ def evaluate_dnn_model(
             if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
                     DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                     RANGE.to(device)
+            if true_label.shape[1] != model.system_model.params.M:
+                DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
             else:
                 DOA = true_label
             test_length += DOA.shape[1]
@@ -517,5 +519,5 @@ def evaluate(
         )
         res[algorithm] = loss
     for method, loss_ in res.items():
-        print("{} test loss = {}".format(method.uper(), loss_))
+        print("{} test loss = {}".format(method.upper(), loss_))
     return res
