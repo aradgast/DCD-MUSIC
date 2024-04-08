@@ -34,7 +34,7 @@ import torch
 from itertools import permutations
 from src.utils import *
 
-BALANCE_FACTOR = 0.0
+BALANCE_FACTOR = 0.1
 
 
 def add_line_to_file(file_name, line_to_add):
@@ -119,15 +119,18 @@ class RMSPELoss(nn.Module):
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
                 distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
-        """Compute the RMSPE loss between the predictions and target values.
-        The forward method takes two input tensors: doa_predictions and doa.
-        The predicted values and target values are expected to be in radians.
+        """
+        Compute the RMSPE loss between the predictions and target values.
+        The forward method takes two input tensors: doa_predictions and doa,
+        and possibly distance_predictions and distance.
+        The predicted values and target values are expected to be in radians for the DOA values.
         The method iterates over the batch dimension and calculates the RMSPE loss for each sample in the batch.
         It utilizes the permute_prediction function to generate all possible permutations of the predicted values
         to consider all possible alignments. For each permutation, it calculates the error between the prediction
-        and target values, applies modulo pi to ensure the error is within the range [-pi/2, pi/2], and then calculates the RMSPE.
-        The minimum RMSPE value among all permutations is selected for each sample.
-        Finally, the method sums up the RMSPE values for all samples in the batch and returns the result as the computed loss.
+        and target values, applies modulo pi to ensure the error is within the range [-pi/2, pi/2], and then calculates the RMSE.
+        The minimum RMSE value among all permutations is selected for each sample,
+         including the RMSE for the distance values with the same permutation.
+        Finally, the method averged the RMSE values for all samples in the batch and returns the result as the computed loss.
 
         Args:
             doa_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
@@ -143,19 +146,39 @@ class RMSPELoss(nn.Module):
         Raises:
             None
         """
-        rmspe = []
-        rmspe_angle = []
-        rmspe_distance = []
-        for iter in range(doa_predictions.shape[0]):
-            rmspe_list = []
-
-            batch_predictions_doa = doa_predictions[iter].to(device)
-            targets_doa = doa[iter].to(device)
-            prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
-
-            if distance is not None:
+        # Calculate RMSPE loss for only DOA
+        if distance is None:
+            rmspe = []
+            for iter in range(doa_predictions.shape[0]):
+                rmspe_list = []
+                batch_predictions_doa = doa_predictions[iter].to(device)
+                targets_doa = doa[iter].to(device)
+                prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
+                for prediction_doa in prediction_perm_doa:
+                    # Calculate error with modulo pi
+                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
+                    # Calculate RMSE over all permutations
+                    rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
+                    rmspe_list.append(rmspe_val)
+                rmspe_tensor = torch.stack(rmspe_list, dim=0)
+                rmspe_min = torch.min(rmspe_tensor)
+                rmspe.append(rmspe_min)
+            result = torch.sum(torch.stack(rmspe, dim=0))
+            return result
+        # Calculate RMSPE loss for both DOA and distance
+        else:
+            rmspe = []
+            rmspe_angle = []
+            rmspe_distance = []
+            for iter in range(doa_predictions.shape[0]):
+                rmspe_list = []
                 rmspe_angle_list = []
                 rmspe_distance_list = []
+
+                batch_predictions_doa = doa_predictions[iter].to(device)
+                targets_doa = doa[iter].to(device)
+                prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
+
                 batch_predictions_distance = distance_predictions[iter].to(device)
                 targets_distance = distance[iter].to(device)
                 prediction_perm_distance = permute_prediction(batch_predictions_distance).to(device)
@@ -187,24 +210,13 @@ class RMSPELoss(nn.Module):
                     rmspe_distance.append(rmspe_distnace_tensor[min_idx])
                 rmspe.append(rmspe_min)
 
+            result = torch.mean(torch.stack(rmspe, dim=0))
+            if is_separted:
+                result_angle = torch.mean(torch.Tensor(rmspe_angle), dim=0)
+                result_distance = torch.mean(torch.Tensor(rmspe_distance), dim=0)
+                return result, result_angle, result_distance
             else:
-                for prediction_doa in prediction_perm_doa:
-                    # Calculate error with modulo pi
-                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
-                    # Calculate RMSE over all permutations
-                    rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
-                    rmspe_list.append(rmspe_val)
-                rmspe_tensor = torch.stack(rmspe_list, dim=0)
-                rmspe_min = torch.min(rmspe_tensor)
-                rmspe.append(rmspe_min)
-
-        result = torch.mean(torch.stack(rmspe, dim=0))
-        if is_separted:
-            result_angle = torch.mean(torch.Tensor(rmspe_angle), dim=0)
-            result_distance = torch.mean(torch.Tensor(rmspe_distance), dim=0)
-            return result, result_angle, result_distance
-        else:
-            return result
+                return result
 
 
 class MSPELoss(nn.Module):

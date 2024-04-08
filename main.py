@@ -45,8 +45,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [],
-        "non-coherent": [10]
+        "coherent": [10, 15, 20],
+        "non-coherent": [0, 5, 15]
     }
 
     system_model_params = {
@@ -61,17 +61,17 @@ if __name__ == "__main__":
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "CascadedSubspaceNet",        # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
-        "diff_method": "music_1D",            # esprit, music_1D, music_2D
+        "model_type": "SubspaceNet",        # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
+        "diff_method": "esprit",            # esprit, music_1D, music_2D
         "tau": 8,
-        "field_type": "Near"                 # Near, Far
+        "field_type": "Far"                 # Near, Far
     }
     training_params = {
-        "samples_size": 1024*8,
+        "samples_size": 1024 * 64,
         "train_test_ratio": .1,
-        "training_objective": "range",      # angle, range
-        "batch_size": 256,
-        "epochs": 100,
+        "training_objective": "angle",      # angle, range
+        "batch_size": 1024,
+        "epochs": 150,
         "optimizer": "Adam",                # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -96,11 +96,11 @@ if __name__ == "__main__":
             # "sps-esprit",
             # "sps-music_1d"
             # "bb-music",
-            "music_2D"
+            # "music_2D"
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": False,
+        "SAVE_TO_FILE": True,
         "CREATE_DATA": True,
         "LOAD_MODEL": True,
         "TRAIN_MODEL": True,

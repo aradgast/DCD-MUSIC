@@ -396,15 +396,16 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     min_valid_loss = np.inf
     # Set initial time for start training
     since = time.time()
-    grad_diff_norm = {}
-    # for name, param in model.named_parameters():
-    #     if param.requires_grad:
-    #         grad_diff_norm[name] = 0.0
-
+    traing_angle_extractor = False
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-
+        if epoch == int(training_params.epochs * 0.9):
+            traing_angle_extractor = not traing_angle_extractor
+            if traing_angle_extractor:
+                print("Switching to training angle extractor")
+            else:
+                print("turn off training angle extractor")
         train_length = 0
         overall_train_loss = 0.0
         overall_train_loss_angle = 0.0
@@ -432,15 +433,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             Rx = Variable(Rx, requires_grad=True).to(device)
             DOA = Variable(DOA, requires_grad=True).to(device)
             # Get model output
-            # t1 = time.time()
-            # if training_params.training_objective == "range":
-            #     DOA_noisy = model.extract_angles(Rx)
-            #     # noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
-            #     model_output = model(Rx, known_angles=DOA_noisy)
-            # else:
-            model_output = model(Rx)
-            # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
+            # This if condition is mainly to spearte the case which we want to train the angle extractor.
+            if isinstance(model, CascadedSubspaceNet):
+                model_output = model(Rx, train_angle_extractor=traing_angle_extractor)
+            else:
+                model_output = model(Rx)
             if isinstance(model, SubspaceNet):
+                # in this case there are 2 labels - angles and distances.
                 if isinstance(model, CascadedSubspaceNet) or training_params.training_objective == "angle, range":
                     DOA_predictions = model_output[0]
                     RANGE_predictions = model_output[1]
@@ -457,22 +456,14 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
-                # elif training_params.training_objective == "range":
                 else:
-                    # train_loss = training_params.criterion(RANGE_predictions, RANGE.to(torch.float64))
-                    # train_loss_angle = 0.0
-                    # train_loss_distance = train_loss
                     train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
                                                                                                   DOA,
                                                                                                   RANGE_predictions,
                                                                                                   RANGE,
                                                                                                   is_separted=True)
-                # elif training_params.training_objective == "angle, range":
-                #     train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
-                #                                                                                   DOA,
-                #                                                                                   RANGE_predictions,
-                #                                                                                   RANGE,
-                #                                                                                   is_separted=True)
+            else:
+                raise Exception(f"Model type {training_params.model_type} is not defined")
             # Back-propagation stage
             try:
                 train_loss.backward(retain_graph=True)
@@ -487,19 +478,20 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             if training_params.model_type.startswith("DeepCNN"):
                 # BCE is averaged
                 overall_train_loss += train_loss.item() * len(data[0])
-            else:
-                # RMSPE is summed
+            elif isinstance(training_params.criterion, RMSPELoss):
+                # RMSPE is averaged over the dataset size
                 overall_train_loss += train_loss.item() / len(training_params.train_dataset)
-                # overall_train_loss_angle += train_loss_angle.item()
-                # overall_train_loss_distance += train_loss_distance.item()
-        # Average the epoch training loss
-        # overall_train_loss = overall_train_loss / train_length
-        # overall_train_loss_angle /= train_length
-        # overall_train_loss_distance /= train_length
+                # overall_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
+                # overall_train_loss_distance += train_loss_distance.item() / len(training_params.train_dataset)
+            else:
+                raise Exception(f"Criterion type {training_params.criterion} is not defined")
+        # add epoch loss to the list
         loss_train_list.append(overall_train_loss)
         # Update schedular
         training_params.schedular.step()
-        model.adjust_diffmethod_temperature(epoch)
+        # Adjust temperature for differentiable subspace methods under SubspaceNet model
+        if isinstance(model, SubspaceNet):
+            model.adjust_diffmethod_temperature(epoch)
 
         # Calculate evaluation loss
         valid_loss = evaluate_dnn_model(
@@ -515,7 +507,6 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 epoch + 1, training_params.epochs, overall_train_loss, valid_loss
             )
         )
-        # print("RMSE ANGLE: {:.6f}, RMSE DISTANCE: {:.6f}".format(overall_train_loss_angle, overall_train_loss_distance))
         print("lr {}".format(training_params.optimizer.param_groups[0]["lr"]))
         # Save best model weights for early stoppings
         if min_valid_loss > valid_loss:

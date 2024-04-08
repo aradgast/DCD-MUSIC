@@ -541,7 +541,7 @@ class CascadedSubspaceNet(SubspaceNet):
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
 
-    def forward(self, Rx_tau: torch.Tensor, is_soft: bool=True):
+    def forward(self, Rx_tau: torch.Tensor, is_soft: bool=True, train_angle_extractor: bool=False):
         """
         Performs the forward pass of the CascadedSubspaceNet. Using the subspaceNet forward but,
         calling the angle extractor method first.
@@ -554,7 +554,7 @@ class CascadedSubspaceNet(SubspaceNet):
         Returns
             The distance prediction.
          """
-        angles = self.extract_angles(Rx_tau)
+        angles = self.extract_angles(Rx_tau, train_angle_extractor=train_angle_extractor)
         angles, distances, Rx = super().forward(Rx_tau, is_soft=is_soft, known_angles=angles)
         return angles, distances
 
@@ -574,7 +574,7 @@ class CascadedSubspaceNet(SubspaceNet):
         ref_path = os.path.join(cwd, "data", "weights", "final_models", path)
         self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
 
-    def extract_angles(self, Rx_tau: torch.Tensor, is_inference: bool = True):
+    def extract_angles(self, Rx_tau: torch.Tensor, train_angle_extractor: bool = False):
         """
 
         Args:
@@ -585,7 +585,7 @@ class CascadedSubspaceNet(SubspaceNet):
         Returns:
                 The angles from the first SubspaceNet model.
         """
-        if is_inference:
+        if not train_angle_extractor:
             with torch.no_grad():
                 self.angle_extractor.eval()
                 angles = self.angle_extractor(Rx_tau)[0]

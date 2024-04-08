@@ -70,7 +70,7 @@ def __run_simulation(**kwargs):
             # Saving simulation scores to external file
             if save_to_file:
                 file_path = (
-                        simulations_path / "results" / "scores" / Path(dt_string_for_save + ".txt")
+                        simulations_path / "results" / "scores" / Path(dt_string_for_save + f"_{mode}_SNR_{snr}" +".txt")
                 )
                 sys.stdout = open(file_path, "w")
             # Define system model parameters
@@ -277,6 +277,7 @@ def __run_simulation(**kwargs):
                 plt.show()
                 print("end")
                 res[mode][snr] = loss
+                sys.stdout.close()
     if res is not None:
         if SIMULATION_COMMANDS["PLOT_RESULTS"] == True:
             for signal_nature, snr_dict in res.items():
@@ -300,6 +301,11 @@ def __run_simulation(**kwargs):
                     plt.savefig(os.path.join(plot_path, f"{signal_nature}_sources_results_{dt_string_for_save}.png"))
                     plt.show()
         else:
+            if save_to_file:
+                file_path = (
+                        simulations_path / "results" / "scores" / Path(dt_string_for_save +"_summary" + ".txt")
+                )
+                sys.stdout = open(file_path, "w")
             for signal_nature, snr_dict in res.items():
                 if len(snr_dict.keys()) >= 1:
                     print("#" * 20, signal_nature.upper(), "#" * 20)
@@ -307,6 +313,7 @@ def __run_simulation(**kwargs):
                         print(f"SNR = {snr} [dB]: ")
                         for method, loss in results.items():
                             print(f"\t{method.upper()}: {loss['Overall']}")
+            sys.stdout.close()
         return res
 
 

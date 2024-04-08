@@ -100,12 +100,9 @@ def evaluate_dnn_model(
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
-            if model_type.endswith("SubspaceNet"):
-                if model.system_model.params.field_type.endswith("Near"):
+            if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
                     DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                     RANGE.to(device)
-                else:
-                    DOA = true_label
             else:
                 DOA = true_label
             test_length += DOA.shape[1]
@@ -113,12 +110,11 @@ def evaluate_dnn_model(
             X = X.to(device)
             DOA = DOA.to(device)
             # Get model output
-            if model_type.endswith("SubspaceNet") and model.field_type.endswith("Near"):
-                # if model.diff_method.estimation_params == "range":
-                #     DOA_noisy = model.extract_angles(X)
-                #     model_output = model(X, is_soft=False, known_angles=DOA_noisy)
-                # else:
-                model_output = model(X, is_soft=False)
+            if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
+                if isinstance(model, CascadedSubspaceNet):
+                    model_output = model(X, is_soft=False, train_angle_extractor=False)
+                else: # SubspaceNet with 2D MUSIC
+                    model_output = model(X, is_soft=False)
             else:
                 model_output = model(X)
             if model_type.startswith("DA-MUSIC"):
@@ -141,8 +137,9 @@ def evaluate_dnn_model(
                     raise Exception(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
                     )
-            elif model_type.endswith("SubspaceNet"):
+            elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
+                    # 2 possible outputs: DOA and RANGE
                     DOA_predictions = model_output[0]
                     RANGE_predictions = model_output[1]
                 elif model.field_type.endswith("Far"):
@@ -155,11 +152,8 @@ def evaluate_dnn_model(
             # Compute prediction loss
             if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
-            else:
+            elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
-                    # if isinstance(model, CascadedSubspaceNet):
-                    #     eval_loss = criterion(RANGE.to(torch.float64), RANGE_predictions)
-                    # else:
                     eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
                     if is_separted:
                         eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
@@ -167,6 +161,8 @@ def evaluate_dnn_model(
                         overall_loss_distance += eval_loss_distance.item() / len(dataset)
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
+            else:
+                raise Exception(f"evaluate_dnn_model: Model type is not defined: {model_type}")
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item() / len(dataset)
 
@@ -521,5 +517,5 @@ def evaluate(
         )
         res[algorithm] = loss
     for method, loss_ in res.items():
-        print("{} test loss = {}".format(method.lower(), loss_))
+        print("{} test loss = {}".format(method.uper(), loss_))
     return res
