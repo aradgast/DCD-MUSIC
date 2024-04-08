@@ -6,3 +6,5 @@ __pycache__/
 data/
 src/__pycache__/
 *.py
+!main.py
+!run_simulation.py
