@@ -111,7 +111,7 @@ def create_dataset(
                 )[0],
                 dtype=torch.complex128,
             )
-            if model_type.startswith("SubspaceNet"):
+            if model_type.endswith("SubspaceNet"):
                 # Generate auto-correlation tensor
                 X_model = create_autocorrelation_tensor(X, tau).to(torch.float)
             elif model_type.startswith("DeepCNN") and phase.startswith("test"):

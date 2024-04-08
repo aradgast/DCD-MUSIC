@@ -45,7 +45,7 @@ from sklearn.model_selection import train_test_split
 from src.utils import *
 from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams
-from src.models import SubspaceNet, DeepCNN, DeepAugmentedMUSIC, ModelGenerator
+from src.models import SubspaceNet, DeepCNN, DeepAugmentedMUSIC, ModelGenerator, CascadedSubspaceNet
 from src.evaluation import evaluate_dnn_model
 
 
@@ -210,7 +210,7 @@ class TrainingParams(object):
         """
         # Load model from given path
         try:
-            self.model.load_state_dict(torch.load(loading_path, map_location=device))
+            self.model.load_state_dict(torch.load(loading_path, map_location=device), strict=False)
         except FileNotFoundError as e:
             print(e)
             print("#" * 40 + "Nothing will be loaded" + "#" * 40)
@@ -291,6 +291,7 @@ class TrainingParams(object):
             self.criterion = RMSPELoss()
         elif self.training_objective.startswith("range"):
             self.criterion = RMSELoss()
+            self.criterion = RMSPELoss()
         return self
 
     def set_training_dataset(self, train_dataset: list):
@@ -432,22 +433,19 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             DOA = Variable(DOA, requires_grad=True).to(device)
             # Get model output
             # t1 = time.time()
-            if training_params.training_objective == "range":
-                DOA_noisy = model.extract_angles(Rx)
-                # noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
-                model_output = model(Rx, known_angles=DOA_noisy)
-            else:
-                model_output = model(Rx)
+            # if training_params.training_objective == "range":
+            #     DOA_noisy = model.extract_angles(Rx)
+            #     # noisy_DOA = DOA + (torch.randn(DOA.shape, device=device) / (250 ** 0.5)) # add error with var of 0.1 deg.
+            #     model_output = model(Rx, known_angles=DOA_noisy)
+            # else:
+            model_output = model(Rx)
             # print(f"forward time for {training_params.model_type} took {time.time() - t1} s")
             if isinstance(model, SubspaceNet):
-                if training_params.training_objective.endswith("angle"):
-                    DOA_predictions = model_output[0]
-                elif training_params.training_objective.startswith("range"):
-                    RANGE_predictions = model_output[0]
-                    DOA_predictions = DOA
-                else:
+                if isinstance(model, CascadedSubspaceNet) or training_params.training_objective == "angle, range":
                     DOA_predictions = model_output[0]
                     RANGE_predictions = model_output[1]
+                elif training_params.training_objective.endswith("angle"):
+                    DOA_predictions = model_output[0]
             else:
                 # Deep Augmented MUSIC or DeepCNN
                 DOA_predictions = model_output
@@ -459,16 +457,22 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
-                elif training_params.training_objective == "range":
-                    train_loss = training_params.criterion(RANGE_predictions, RANGE.to(torch.float64))
-                    train_loss_angle = 0.0
-                    train_loss_distance = train_loss
-                elif training_params.training_objective == "angle, range":
+                # elif training_params.training_objective == "range":
+                else:
+                    # train_loss = training_params.criterion(RANGE_predictions, RANGE.to(torch.float64))
+                    # train_loss_angle = 0.0
+                    # train_loss_distance = train_loss
                     train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
                                                                                                   DOA,
                                                                                                   RANGE_predictions,
                                                                                                   RANGE,
                                                                                                   is_separted=True)
+                # elif training_params.training_objective == "angle, range":
+                #     train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
+                #                                                                                   DOA,
+                #                                                                                   RANGE_predictions,
+                #                                                                                   RANGE,
+                #                                                                                   is_separted=True)
             # Back-propagation stage
             try:
                 train_loss.backward(retain_graph=True)

@@ -37,7 +37,7 @@ from src.criterions import RMSPELoss, MSPELoss, RMSELoss
 from src.criterions import RMSPE, MSPE
 from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
-from src.models import SubspaceNet, MUSIC, RootMusic, Esprit_torch
+from src.models import SubspaceNet, MUSIC, RootMusic, Esprit_torch, CascadedSubspaceNet
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel
 
@@ -97,11 +97,10 @@ def evaluate_dnn_model(
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
-
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
-            if model_type.startswith("SubspaceNet"):
+            if model_type.endswith("SubspaceNet"):
                 if model.system_model.params.field_type.endswith("Near"):
                     DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                     RANGE.to(device)
@@ -114,12 +113,12 @@ def evaluate_dnn_model(
             X = X.to(device)
             DOA = DOA.to(device)
             # Get model output
-            if model_type.startswith("SubspaceNet") and model.field_type.endswith("Near"):
-                if model.diff_method.estimation_params == "range":
-                    DOA_noisy = model.extract_angles(X)
-                    model_output = model(X, is_soft=False, known_angles=DOA_noisy)
-                else:
-                    model_output = model(X, is_soft=False)
+            if model_type.endswith("SubspaceNet") and model.field_type.endswith("Near"):
+                # if model.diff_method.estimation_params == "range":
+                #     DOA_noisy = model.extract_angles(X)
+                #     model_output = model(X, is_soft=False, known_angles=DOA_noisy)
+                # else:
+                model_output = model(X, is_soft=False)
             else:
                 model_output = model(X)
             if model_type.startswith("DA-MUSIC"):
@@ -142,14 +141,10 @@ def evaluate_dnn_model(
                     raise Exception(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
                     )
-            elif model_type.startswith("SubspaceNet"):
+            elif model_type.endswith("SubspaceNet"):
                 if model.field_type.endswith("Near"):
-                    if model.diff_method.estimation_params == "range":
-                        RANGE_predictions = model_output[0]
-                        DOA_predictions = DOA
-                    else:
-                        RANGE_predictions = model_output[1]
-                        DOA_predictions = model_output[0]
+                    DOA_predictions = model_output[0]
+                    RANGE_predictions = model_output[1]
                 elif model.field_type.endswith("Far"):
                     # Default - SubSpaceNet
                     DOA_predictions = model_output[0]
@@ -162,21 +157,21 @@ def evaluate_dnn_model(
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             else:
                 if model.field_type.endswith("Near"):
-                    if model.diff_method.angels is None:
-                        eval_loss = criterion(RANGE.to(torch.float64), RANGE_predictions)
-                    else:
-                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
-                        if is_separted:
-                            eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
-                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                    # if isinstance(model, CascadedSubspaceNet):
+                    #     eval_loss = criterion(RANGE.to(torch.float64), RANGE_predictions)
+                    # else:
+                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
+                    if is_separted:
+                        eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
+                        overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                        overall_loss_distance += eval_loss_distance.item() / len(dataset)
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item() / len(dataset)
 
     # Plot spectrum for SubspaceNet model
-    if plot_spec and model_type.startswith("SubspaceNet"):
+    if plot_spec and model_type.endswith("SubspaceNet"):
         DOA_all = model_output[1]
         roots = model_output[2]
         plot_spectrum(

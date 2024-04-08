@@ -34,7 +34,7 @@ import torch
 from itertools import permutations
 from src.utils import *
 
-BALANCE_FACTOR = 0.4
+BALANCE_FACTOR = 0.0
 
 
 def add_line_to_file(file_name, line_to_add):

@@ -178,6 +178,8 @@ def __run_simulation(**kwargs):
                     try:
                         simulation_parameters.load_model(
                             loading_path=saving_path / "final_models" / get_model_filename(system_model_params, model_config))
+                        if isinstance(simulation_parameters.model, CascadedSubspaceNet):
+                            simulation_parameters.model._load_state_for_angle_extractor()
                     except Exception as e:
                         print(e)
                         print("Model not found.")
@@ -249,6 +251,8 @@ def __run_simulation(**kwargs):
                         )
                     )
                     model = simulation_parameters.model
+                    if isinstance(model, CascadedSubspaceNet):
+                        model._load_state_for_angle_extractor()
                 # print simulation summary details
                 simulation_summary(
                     system_model_params=system_model_params,
