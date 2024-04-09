@@ -400,12 +400,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-        if epoch == int(training_params.epochs * 0.9):
-            traing_angle_extractor = not traing_angle_extractor
-            if traing_angle_extractor:
-                print("Switching to training angle extractor")
-            else:
-                print("turn off training angle extractor")
+        if isinstance(model, CascadedSubspaceNet):
+            if epoch == int(training_params.epochs * 0.9):
+                traing_angle_extractor = not traing_angle_extractor
+                if traing_angle_extractor:
+                    print("Switching to training angle extractor")
+                else:
+                    print("turn off training angle extractor")
         train_length = 0
         overall_train_loss = 0.0
         overall_train_loss_angle = 0.0

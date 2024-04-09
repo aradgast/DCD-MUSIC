@@ -1084,6 +1084,7 @@ class MUSIC(SubspaceMethod):
         Returns:
 
         """
+        dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
         if known_angles is None:
             theta = self.angels[:, None]
         else:
@@ -1100,18 +1101,19 @@ class MUSIC(SubspaceMethod):
         array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
         array_square = torch.pow(array, 2).to(torch.float64)
 
-        first_order = torch.einsum("nm, na -> na", array, torch.sin(theta).repeat(1, self.system_model.params.N).T *
-                                   self.system_model.dist_array_elems["NarrowBand"])
+        first_order = torch.einsum("nm, na -> na",
+                                   array,
+                                   torch.sin(theta).repeat(1, self.system_model.params.N).T * dist_array_elems)
 
-        second_order = -0.5 * torch.div(
-            torch.pow(torch.cos(theta) * self.system_model.dist_array_elems["NarrowBand"], 2),
-            distances.T)
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.T)
         second_order = second_order[:, :, None].repeat(1, 1, self.system_model.params.N)
         second_order = torch.einsum("nm, nda -> nda", array_square, torch.transpose(second_order, 2, 0)).transpose(1, 2)
+
         first_order = first_order[:, :, None].repeat(1, 1, second_order.shape[-1])
+
         time_delay = first_order + second_order
 
-        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay).requires_grad_(True)
+        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
 
     def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0, method: str = "heatmap"):
         if self.estimation_params == "angle, range":
