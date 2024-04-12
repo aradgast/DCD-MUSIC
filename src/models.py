@@ -1030,8 +1030,10 @@ class MUSIC(SubspaceMethod):
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
-                var1 = torch.einsum("adk, bkl -> badl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace)
-                inverse_spectrum = torch.real(torch.norm(var1, dim=-1) ** 2).transpose(1, 2)
+                # var1 = torch.einsum("adk, bkl -> badl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace) #TODO
+                var1 = torch.einsum("adk, bkl -> badl", torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1), noise_subspace)
+                # inverse_spectrum = torch.real(torch.norm(var1, dim=-1) ** 2).transpose(1, 2)
+                inverse_spectrum = torch.real(torch.norm(var1, dim=-1) ** 2)
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("ban, nam -> abm", self.search_grid.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
@@ -1193,26 +1195,26 @@ class MUSIC(SubspaceMethod):
             max_row[batch] = original_idx[0][0:self.system_model.params.M]
             max_col[batch] = original_idx[1][0:self.system_model.params.M]
         for source in range(self.system_model.params.M):
-            max_row_cell_idx = (
-                        max_row[:, source][:, None] - self.cell_size_angle + torch.arange(2 * self.cell_size_angle + 1,
-                                                                                          dtype=torch.int32,
-                                                                                          device=device))
+            max_row_cell_idx = (max_row[:, source][:, None]
+                                - self.cell_size_angle
+                                + torch.arange(2 * self.cell_size_angle + 1, dtype=torch.int32, device=device))
             max_row_cell_idx %= self.music_spectrum.shape[1]
             max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
 
-            max_col_cell_idx = (max_col[:, source][:, None] - self.cell_size_distance + torch.arange(
-                2 * self.cell_size_distance + 1,
-                dtype=torch.long,
-                device=device))
+            max_col_cell_idx = (max_col[:, source][:, None]
+                                - self.cell_size_distance
+                                + torch.arange(2 * self.cell_size_distance + 1, dtype=torch.long, device=device))
             max_col_cell_idx %= self.music_spectrum.shape[2]
             max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
 
             metrix_thr = self.music_spectrum.gather(1, max_row_cell_idx.expand(-1, -1, self.music_spectrum.shape[2]))
             metrix_thr = metrix_thr.gather(2, max_col_cell_idx.repeat(1, max_row_cell_idx.shape[-2], 1))
             soft_max = torch.softmax(metrix_thr.view(batch_size, -1), dim=1).reshape(metrix_thr.shape)
-            soft_row[:, source][:, None] = torch.einsum("bmc, bcm -> bm", self.angels[max_row_cell_idx].transpose(1, 2),
+            soft_row[:, source][:, None] = torch.einsum("bmc, bcm -> bm",
+                                                        self.angels[max_row_cell_idx].transpose(1, 2),
                                                         torch.sum(soft_max, dim=2).unsqueeze(-1))
-            soft_col[:, source][:, None] = torch.einsum("bmc, bcm -> bm", self.distances[max_col_cell_idx],
+            soft_col[:, source][:, None] = torch.einsum("bmc, bcm -> bm",
+                                                        self.distances[max_col_cell_idx],
                                                         torch.sum(soft_max, dim=1).unsqueeze(-1))
 
         return soft_row, soft_col
