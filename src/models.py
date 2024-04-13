@@ -1203,14 +1203,14 @@ class MUSIC(SubspaceMethod):
 
             max_col_cell_idx = (max_col[:, source][:, None]
                                 - self.cell_size_distance
-                                + torch.arange(2 * self.cell_size_distance + 1, dtype=torch.long, device=device))
+                                + torch.arange(2 * self.cell_size_distance + 1, dtype=torch.int32, device=device))
             max_col_cell_idx %= self.music_spectrum.shape[2]
             max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
 
             metrix_thr = self.music_spectrum.gather(1, max_row_cell_idx.expand(-1, -1, self.music_spectrum.shape[2]))
             metrix_thr = metrix_thr.gather(2, max_col_cell_idx.repeat(1, max_row_cell_idx.shape[-2], 1))
             soft_max = torch.softmax(metrix_thr.view(batch_size, -1), dim=1).reshape(metrix_thr.shape)
-            soft_row[:, source][:, None] = torch.einsum("bmc, bcm -> bm",
+            soft_row[:, source][:, None] = torch.einsum("bla, bad -> bl",
                                                         self.angels[max_row_cell_idx].transpose(1, 2),
                                                         torch.sum(soft_max, dim=2).unsqueeze(-1))
             soft_col[:, source][:, None] = torch.einsum("bmc, bcm -> bm",
@@ -1254,8 +1254,9 @@ class MUSIC(SubspaceMethod):
             peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
             # convert the peaks to 2d indices
             original_idx = np.array(np.unravel_index(peaks, music_spectrum.shape))
-            predict_theta[batch] = angels[original_idx[0]][0:self.system_model.params.M]
-            predict_dist[batch] = distances[original_idx[1]][0:self.system_model.params.M]
+            original_idx = original_idx[:, 0:self.system_model.params.M]
+            predict_theta[batch] = angels[original_idx[0]]
+            predict_dist[batch] = distances[original_idx[1]]
 
         return torch.from_numpy(predict_theta), torch.from_numpy(predict_dist)
 

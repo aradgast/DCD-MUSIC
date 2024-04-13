@@ -96,7 +96,7 @@ if __name__ == "__main__":
             # "sps-esprit",
             # "sps-music_1d"
             # "bb-music",
-            # "music_2D"
+            "music_2D"
         ]
     }
     simulation_commands = {
@@ -105,7 +105,7 @@ if __name__ == "__main__":
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
         "SAVE_MODEL": False,
-        "EVALUATE_MODE": False,
+        "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }
 
