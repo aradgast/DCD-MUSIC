@@ -2,7 +2,7 @@
 *.txt
 *.ini
 __pycache__/
-.venv/
+.venv*/
 data/
 src/__pycache__/
 *.py
