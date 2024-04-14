@@ -904,7 +904,7 @@ class SubspaceMethod(nn.Module):
             number_of_sources:
 
         Returns:
-
+            the signal ana noise subspaces, both as torch.Tensor().
         """
         eigenvalues, eigenvectors = torch.linalg.eig(covariance)
         sorted_idx = torch.argsort(torch.real(eigenvalues), descending=True)
@@ -939,8 +939,8 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.3)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.3)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.1)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.1)
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
@@ -982,7 +982,7 @@ class MUSIC(SubspaceMethod):
                         params[:, source] = params_source.squeeze()
                     return params
         _, Un = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
-        self.noise_subspace = Un.cpu().detach().numpy()
+        # self.noise_subspace = Un.cpu().detach().numpy()
         inverse_spectrum = self.get_inverse_spectrum(Un)
         self.music_spectrum = 1 / inverse_spectrum
         #####
@@ -996,17 +996,17 @@ class MUSIC(SubspaceMethod):
     def adjust_cell_size(self):
         if self.estimation_params == "range":
             # if self.cell_size > int(self.distances.shape[0] * 0.02):
-            if self.cell_size > 5 or self.cell_size > int(self.distances.shape[0] * 0.02):
+            if self.cell_size > 3 or self.cell_size > int(self.distances.shape[0] * 0.02):
                 # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
                 self.cell_size = int(0.95 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
         elif self.estimation_params == "angle, range":
-            if self.cell_size_angle > 5:
+            if self.cell_size_angle > 3:
                 self.cell_size_angle = int(0.95 * self.cell_size_angle)
                 if self.cell_size_angle % 2 == 0:
                     self.cell_size_angle -= 1
-            if self.cell_size_distance > 5:
+            if self.cell_size_distance > 3:
                 self.cell_size_distance = int(0.95 * self.cell_size_distance)
                 if self.cell_size_distance % 2 == 0:
                     self.cell_size_distance -= 1
@@ -1030,10 +1030,11 @@ class MUSIC(SubspaceMethod):
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
-                # var1 = torch.einsum("adk, bkl -> badl", torch.transpose(self.search_grid.conj(), 0, 2), noise_subspace) #TODO
-                var1 = torch.einsum("adk, bkl -> badl", torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1), noise_subspace)
-                # inverse_spectrum = torch.real(torch.norm(var1, dim=-1) ** 2).transpose(1, 2)
-                inverse_spectrum = torch.real(torch.norm(var1, dim=-1) ** 2)
+                var1 = torch.einsum("adk, bkl -> badl",
+                                    torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1),
+                                    noise_subspace)
+                # get the norm value for each element in the batch.
+                inverse_spectrum = torch.norm(var1, dim=-1)
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("ban, nam -> abm", self.search_grid.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))

@@ -70,7 +70,7 @@ if __name__ == "__main__":
         "samples_size": 1024,
         "train_test_ratio": .1,
         "training_objective": "angle, range",      # angle, range
-        "batch_size": 32,
+        "batch_size": 64,
         "epochs": 50,
         "optimizer": "Adam",                # Adam, SGD
         "learning_rate": 0.0001,
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,
-        "CREATE_DATA": False,
+        "CREATE_DATA": True,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
         "SAVE_MODEL": False,

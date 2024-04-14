@@ -269,14 +269,18 @@ class SystemModel(object):
         distance = np.atleast_1d(distance)[:, np.newaxis]
         array = self.array[:, np.newaxis]
         array_square = np.power(array, 2)
+        dist_array_elems = self.dist_array_elems[self.params.signal_type]
 
-        first_order = np.einsum("nm, na -> na", array, np.tile(np.sin(theta), (1, self.params.N)).T * self.dist_array_elems[self.params.signal_type])
+        first_order = np.einsum("nm, na -> na",
+                                array,
+                                np.tile(np.sin(theta), (1, self.params.N)).T * dist_array_elems)
         first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
 
-        second_order = -0.5 * np.divide(np.power(np.cos(theta) * self.dist_array_elems[self.params.signal_type], 2),
-                                        distance.T)
+        second_order = -0.5 * np.divide(np.power(np.cos(theta) * dist_array_elems, 2), distance.T)
         second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
-        second_order = np.einsum("ij, ikl -> ikl", array_square, np.transpose(second_order, (2, 1, 0))).transpose(0, 2, 1)
+        second_order = np.einsum("nm, nkl -> nkl",
+                                 array_square,
+                                 np.transpose(second_order, (2, 0, 1)))
 
         time_delay = first_order + second_order
 
