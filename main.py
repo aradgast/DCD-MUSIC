@@ -46,12 +46,12 @@ if __name__ == "__main__":
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
         "coherent": [],
-        "non-coherent": [20]
+        "non-coherent": [10]
     }
 
     system_model_params = {
         "N": 5,
-        "M": 2,
+        "M": 1,
         "T": 100,
         "snr": None,                                # if defined, values in scenario_dict will be ignored
         "field_type": "Near",                       # Near, Far
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         "samples_size": 4096,
         "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
-        "batch_size": 256,
+        "batch_size": 128,
         "epochs": 100,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
