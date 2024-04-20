@@ -493,6 +493,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         # Adjust temperature for differentiable subspace methods under SubspaceNet model
         if isinstance(model, SubspaceNet):
             model.adjust_diffmethod_temperature(epoch)
+        if isinstance(training_params.criterion, RMSPELoss):
+            training_params.criterion.adjust_balance_factor(epoch)
 
         # Calculate evaluation loss
         valid_loss = evaluate_dnn_model(

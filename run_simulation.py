@@ -141,8 +141,8 @@ def __run_simulation(**kwargs):
                         tau=model_config.tau,
                         save_datasets=True,
                         datasets_path=datasets_path,
-                        true_doa=None,
-                        true_range=None,
+                        true_doa=TRAINING_PARAMS["true_doa_train"],
+                        true_range=TRAINING_PARAMS["true_range_train"],
                         phase="train",
                     )
                 if create_testing_data:
@@ -154,8 +154,8 @@ def __run_simulation(**kwargs):
                         tau=model_config.tau,
                         save_datasets=True,
                         datasets_path=datasets_path,
-                        true_doa=None,
-                        true_range=None,
+                        true_doa=TRAINING_PARAMS["true_doa_test"],
+                        true_range=TRAINING_PARAMS["true_range_test"],
                         phase="test",
                     )
 

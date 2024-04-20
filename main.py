@@ -53,33 +53,37 @@ if __name__ == "__main__":
         "N": 5,
         "M": 2,
         "T": 100,
-        "snr": None,                         # if defined, values in scenario_dict will be ignored
-        "field_type": "Near",                # Near, Far
-        "signal_nature": None,               # if defined, values in scenario_dict will be ignored
+        "snr": None,                                # if defined, values in scenario_dict will be ignored
+        "field_type": "Near",                       # Near, Far
+        "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
         "eta": 0,
         "bias": 0,
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "SubspaceNet",        # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
-        "diff_method": "music_2D",            # esprit, music_1D, music_2D
+        "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
+        "diff_method": "music_2D",                  # esprit, music_1D, music_2D
         "tau": 8,
-        "field_type": "Near"                 # Near, Far
+        "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 1024,
+        "samples_size": 4096,
         "train_test_ratio": .1,
-        "training_objective": "angle, range",      # angle, range
-        "batch_size": 64,
-        "epochs": 50,
-        "optimizer": "Adam",                # Adam, SGD
+        "training_objective": "angle, range",       # angle, range
+        "batch_size": 256,
+        "epochs": 100,
+        "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
         "step_size": 70,
-        "gamma": 0.5
+        "gamma": 0.5,
+        "true_doa_train": None,                 # if set, this doa will be set to all samples in the train dataset
+        "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
+        "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
+        "true_range_test": None                   # if set, this range will be set to all samples in the train dataset
     }
     evaluation_params = {
-        "criterion": "rmspe",               # rmse, rmspe, mse, mspe
+        "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
         "augmented_methods": [
             # "mvdr",
             # "r-music",

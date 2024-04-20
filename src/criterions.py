@@ -34,7 +34,7 @@ import torch
 from itertools import permutations
 from src.utils import *
 
-BALANCE_FACTOR = 0.4
+BALANCE_FACTOR = 0.65
 
 
 def add_line_to_file(file_name, line_to_add):
@@ -218,6 +218,13 @@ class RMSPELoss(nn.Module):
             else:
                 return result
 
+    def adjust_balance_factor(self, epoch: int):
+        if epoch % 50 == 0 and epoch != 0:
+            self.balance_factor = 0.1
+            print(f"Balance factor for RMSPE updated --> {self.balance_factor}")
+        if epoch == 1:
+            self.balance_factor = 0.9
+            print(f"Balance factor for RMSPE updated --> {self.balance_factor}")
 
 class MSPELoss(nn.Module):
     """Mean Square Periodic Error (MSPE) loss function.
