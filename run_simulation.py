@@ -315,7 +315,7 @@ def __run_simulation(**kwargs):
                     for snr, results in snr_dict.items():
                         print(f"SNR = {snr} [dB]: ")
                         for method, loss in results.items():
-                            print(f"\t{method.upper()}: {loss['Overall']}")
+                            print(f"\t{method.upper(): <15}: {loss['Overall']}")
             if save_to_file:
                 sys.stdout.close()
         return res
