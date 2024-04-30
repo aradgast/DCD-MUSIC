@@ -1034,7 +1034,7 @@ class MUSIC(SubspaceMethod):
                                     torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1),
                                     noise_subspace)
                 # get the norm value for each element in the batch.
-                inverse_spectrum = torch.norm(var1, dim=-1)
+                inverse_spectrum = torch.norm(var1, dim=-1) ** 2
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("ban, nam -> abm", self.search_grid.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
@@ -1363,12 +1363,17 @@ class MUSIC(SubspaceMethod):
             ymin, ymax = np.min(self.angels.cpu().detach().numpy()), np.max(self.angels.cpu().detach().numpy())
             spectrum = self.music_spectrum[batch].cpu().detach().numpy()
             plt.imshow(spectrum, cmap="hot",
-                       extent=[xmin, xmax, np.rad2deg(ymin), np.rad2deg(ymax)], origin='lower', aspect="auto")
+                       extent=[xmin, xmax, ymin, ymax], origin='lower', aspect="auto")
             plt.colorbar()
             plt.title("MUSIC Spectrum heatmap")
             plt.xlabel("Distances [m]")
-            plt.ylabel("Angles")
+            plt.ylabel("Angles [rad]")
             plt.figaspect(2)
+
+            ticks = [-np.pi / 2, -np.pi / 3, -np.pi / 6, 0, np.pi / 6, np.pi / 3, np.pi / 2]
+            labels = [r'$-\frac{\pi}{2}$', r'$-\frac{\pi}{3}$', r'$-\frac{\pi}{6}$', '0', r'$\frac{\pi}{6}$',
+                      r'$\frac{\pi}{3}$', r'$\frac{\pi}{2}$']
+            plt.yticks(ticks, labels)
             plt.show()
 
 

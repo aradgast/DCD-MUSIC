@@ -34,7 +34,7 @@ import torch
 from itertools import permutations
 from src.utils import *
 
-BALANCE_FACTOR = 0.4
+BALANCE_FACTOR = 1
 
 
 def add_line_to_file(file_name, line_to_add):
@@ -185,7 +185,7 @@ class RMSPELoss(nn.Module):
 
                 for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
                     # Calculate error with modulo pi
-                    angle_err = ((((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - (np.pi / 2))
+                    angle_err = ((((prediction_doa - targets_doa) + (torch.pi / 2)) % torch.pi) - (torch.pi / 2))
                     # Calculate error for distance
                     distance_err = (prediction_distance - targets_distance)
                     # Calculate RMSE over all permutations for each element
@@ -218,13 +218,12 @@ class RMSPELoss(nn.Module):
             else:
                 return result
 
-    def adjust_balance_factor(self, epoch: int):
-        if epoch % 50 == 0 and epoch != 0:
-            self.balance_factor = 0.1
-            print(f"Balance factor for RMSPE updated --> {self.balance_factor}")
-        if epoch == 1:
-            self.balance_factor = 0.9
-            print(f"Balance factor for RMSPE updated --> {self.balance_factor}")
+    def adjust_balance_factor(self, loss):
+        if loss < 0.05:
+            self.balance_factor *= 0.95
+            print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+
+
 
 class MSPELoss(nn.Module):
     """Mean Square Periodic Error (MSPE) loss function.

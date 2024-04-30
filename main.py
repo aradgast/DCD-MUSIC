@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     system_model_params = {
         "N": 5,
-        "M": 1,
+        "M": 2,
         "T": 100,
         "snr": None,                                # if defined, values in scenario_dict will be ignored
         "field_type": "Near",                       # Near, Far
@@ -67,11 +67,11 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 4096,
+        "samples_size": 1024,
         "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
         "batch_size": 128,
-        "epochs": 100,
+        "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
