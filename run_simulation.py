@@ -167,11 +167,13 @@ def __run_simulation(**kwargs):
                     .set_batch_size(TRAINING_PARAMS["batch_size"])
                     .set_epochs(TRAINING_PARAMS["epochs"])
                     .set_model(model=model_config)
-                    .set_optimizer(optimizer=TRAINING_PARAMS["optimizer"], learning_rate=TRAINING_PARAMS["learning_rate"],
+                    .set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
+                                   learning_rate=TRAINING_PARAMS["learning_rate"],
                                    weight_decay=TRAINING_PARAMS["weight_decay"])
                     .set_training_dataset(train_dataset)
-                    .set_schedular(step_size=TRAINING_PARAMS["step_size"], gamma=TRAINING_PARAMS["gamma"])
-                    .set_criterion()
+                    .set_schedular(step_size=TRAINING_PARAMS["step_size"],
+                                   gamma=TRAINING_PARAMS["gamma"])
+                    .set_criterion(TRAINING_PARAMS["balance_factor"])
 
                 )
                 if load_model:
@@ -220,7 +222,7 @@ def __run_simulation(**kwargs):
                 # Initialize figures dict for plotting
                 figures = initialize_figures()
                 # Define loss measure for evaluation
-                criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"])
+                criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"], EVALUATION_PARAMS["balance_factor"])
                 # Load datasets for evaluation
                 if not (create_data or load_data):
                     test_dataset, generic_test_dataset, samples_model = load_datasets(

@@ -67,10 +67,10 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 1024,
+        "samples_size": 1024 * 64,
         "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
-        "batch_size": 128,
+        "batch_size": 1024,
         "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
@@ -80,10 +80,12 @@ if __name__ == "__main__":
         "true_doa_train": None,                 # if set, this doa will be set to all samples in the train dataset
         "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
-        "true_range_test": None                   # if set, this range will be set to all samples in the train dataset
+        "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
+        "balance_factor": None                  # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
         "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
+        "balance_factor": training_params["balance_factor"],
         "augmented_methods": [
             # "mvdr",
             # "r-music",
@@ -104,7 +106,7 @@ if __name__ == "__main__":
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": False,
+        "SAVE_TO_FILE": True,
         "CREATE_DATA": True,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,

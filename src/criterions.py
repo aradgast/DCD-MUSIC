@@ -34,7 +34,7 @@ import torch
 from itertools import permutations
 from src.utils import *
 
-BALANCE_FACTOR = 1
+BALANCE_FACTOR = 0.6
 
 
 def add_line_to_file(file_name, line_to_add):
@@ -113,9 +113,12 @@ class RMSPELoss(nn.Module):
         loss = criterion(predictions, targets)
     """
 
-    def __init__(self):
+    def __init__(self, balance_factor=None):
         super(RMSPELoss, self).__init__()
-        self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(device).to(torch.float64)
+        if balance_factor is None:
+            self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(device).to(torch.float64)
+        else:
+            self.balance_factor = nn.Parameter(torch.Tensor([balance_factor])).to(device).to(torch.float64)
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
                 distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
@@ -219,11 +222,16 @@ class RMSPELoss(nn.Module):
                 return result
 
     def adjust_balance_factor(self, loss):
-        if loss < 0.05:
-            self.balance_factor *= 0.95
-            print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
-
-
+        if self.balance_factor > 0.4:
+            if loss < 0.1 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]):
+                self.balance_factor *= 0.95
+                print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+            if loss < 0.01 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]) * 0.95:
+                self.balance_factor *= 0.9
+                print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+            if loss < 0.001:
+                self.balance_factor *= 0.85
+                print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
 
 class MSPELoss(nn.Module):
     """Mean Square Periodic Error (MSPE) loss function.
@@ -403,7 +411,7 @@ def MSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     return res
 
 
-def set_criterions(criterion_name: str):
+def set_criterions(criterion_name: str, balance_factor: float = 0.6):
     """
     Set the loss criteria based on the criterion name.
 
@@ -418,8 +426,8 @@ def set_criterions(criterion_name: str):
         Exception: If the criterion name is not defined.
     """
     if criterion_name.startswith("rmspe"):
-        criterion = RMSPELoss()
-        subspace_criterion = RMSPELoss()
+        criterion = RMSPELoss(balance_factor)
+        subspace_criterion = RMSPELoss(balance_factor)
     elif criterion_name.startswith("mspe"):
         criterion = MSPELoss()
         subspace_criterion = MSPE
@@ -430,7 +438,7 @@ def set_criterions(criterion_name: str):
         global BALANCE_FACTOR
         BALANCE_FACTOR = 0
         criterion = RMSELoss()
-        subspace_criterion = RMSPELoss()
+        subspace_criterion = RMSPELoss(balance_factor)
     else:
         raise Exception(f"criterions.set_criterions: Criterion {criterion_name} is not defined")
     print(f"Loss measure = {criterion_name}")

@@ -276,7 +276,7 @@ class TrainingParams(object):
         )
         return self
 
-    def set_criterion(self):
+    def set_criterion(self, balance_factor: float = None):
         """
         Sets the loss criterion for training.
 
@@ -287,11 +287,16 @@ class TrainingParams(object):
         # Define loss criterion
         if self.model_type.startswith("DeepCNN"):
             self.criterion = nn.BCELoss()
-        elif self.training_objective.startswith("angle"):
+        elif self.training_objective.endswith("angle"):
             self.criterion = RMSPELoss()
         elif self.training_objective.startswith("range"):
-            self.criterion = RMSELoss()
-            self.criterion = RMSPELoss()
+            self.criterion = RMSPELoss(balance_factor=0)
+        elif self.training_objective == "angle, range":
+            self.criterion = RMSPELoss(balance_factor=balance_factor)
+        else:
+            raise Exception(
+                f"TrainingParams.set_criterion: Training objective {self.training_objective} is not defined"
+            )
         return self
 
     def set_training_dataset(self, train_dataset: list):
@@ -490,11 +495,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         loss_train_list.append(overall_train_loss)
         # Update schedular
         training_params.schedular.step()
-        # Adjust temperature for differentiable subspace methods under SubspaceNet model
-        if isinstance(model, SubspaceNet):
-            model.adjust_diffmethod_temperature(epoch)
-        if isinstance(training_params.criterion, RMSPELoss):
-            training_params.criterion.adjust_balance_factor(overall_train_loss)
+
 
         # Calculate evaluation loss
         valid_loss = evaluate_dnn_model(
@@ -521,6 +522,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
             torch.save(model.state_dict(), checkpoint_path / model_name)
+        # Adjust temperature for differentiable subspace methods under SubspaceNet model
+        if isinstance(model, SubspaceNet):
+            model.adjust_diff_method_temperature(epoch)
+        # if isinstance(training_params.criterion, RMSPELoss):
+        #     training_params.criterion.adjust_balance_factor(overall_train_loss)
 
     time_elapsed = time.time() - since
     print("\n--- Training summary ---")

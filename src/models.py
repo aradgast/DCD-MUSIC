@@ -440,7 +440,7 @@ class SubspaceNet(nn.Module):
         """
         return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
 
-    def adjust_diffmethod_temperature(self, epoch):
+    def adjust_diff_method_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC):
             if epoch % 20 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
@@ -939,8 +939,8 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.1)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.1)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.3)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.3)
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
@@ -1275,14 +1275,14 @@ class MUSIC(SubspaceMethod):
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.arange(-1 * torch.pi / 2, torch.pi / 2, torch.pi / 180, device=device,
+            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 180, device=device,
                                        dtype=torch.float64).requires_grad_(True).to(torch.float64)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.arange(-1 * torch.pi / 2, torch.pi / 2, torch.pi / 180,
+                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 180,
                                            device=device).requires_grad_(True).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
