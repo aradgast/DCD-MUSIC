@@ -67,10 +67,10 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 1024 * 64,
+        "samples_size": 1024,
         "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
-        "batch_size": 1024,
+        "batch_size": 32,
         "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": True,
+        "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,

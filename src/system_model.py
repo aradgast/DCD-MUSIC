@@ -287,14 +287,9 @@ class SystemModel(object):
         if not generate_search_grid:
             time_delay = np.diagonal(time_delay, axis1=1, axis2=2)
 
-        return np.exp(2
-                      * -1j
-                      * np.pi
-                      * time_delay
-                      / 1
-                      # need to divide here by the wavelength, seems that for the narrowband scenario,
-                      # wavelength = 1.
-        )
+        # need to divide here by the wavelength, seems that for the narrowband scenario,
+        # wavelength = 1.
+        return np.exp(2 * -1j * np.pi * time_delay)
 
 
     def __str__(self):

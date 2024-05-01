@@ -43,6 +43,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import scipy as sc
+from scipy.spatial.distance import cdist
 import warnings
 from src.utils import gram_diagonal_overload, device
 from src.utils import sum_of_diags_torch, find_roots_torch
@@ -395,65 +396,6 @@ class SubspaceNet(nn.Module):
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
 
-    def set_diff_method(self, diff_method: str, system_model):
-        """Sets the differentiable subspace method for training subspaceNet.
-            Options: "root_music", "esprit"
-
-        Args:
-        -----
-            diff_method (str): differentiable subspace method.
-
-        Raises:
-        -------
-            Exception: Method diff_method is not defined for SubspaceNet
-        """
-        if self.field_type == "Far":
-            if diff_method.startswith("root_music"):
-                self.diff_method = root_music
-            elif diff_method.startswith("esprit"):
-                self.diff_method = Esprit_torch(system_model=system_model)
-            else:
-                raise Exception(f"SubspaceNet.set_diff_method:"
-                                f" Method {diff_method} is not defined for SubspaceNet in "
-                                f"{self.field_type} scenario")
-        elif self.field_type == "Near":
-            if diff_method.startswith("music_2D"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
-            elif diff_method.startswith("music_1D"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
-            else:
-                raise Exception(f"SubspaceNet.set_diff_method:"
-                                f" Method {diff_method} is not defined for SubspaceNet in "
-                                f"{self.field_type} Field scenario")
-
-    def anti_rectifier(self, X):
-        """Applies the anti-rectifier operation to the input tensor.
-
-        Args:
-        -----
-            X (torch.Tensor): Input tensor.
-
-        Returns:
-        --------
-            torch.Tensor: Output tensor after applying the anti-rectifier operation.
-
-        """
-        return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
-
-    def adjust_diff_method_temperature(self, epoch):
-        if isinstance(self.diff_method, MUSIC):
-            if epoch % 20 == 0 and epoch != 0:
-                self.diff_method.adjust_cell_size()
-                print(f"Model temepartue updated --> {self.get_diffmethod_temperature()}")
-
-    def get_diffmethod_temperature(self):
-        if isinstance(self.diff_method, MUSIC):
-            if self.diff_method.estimation_params == "range":
-                return self.diff_method.cell_size
-            elif self.diff_method.estimation_params == "angle, range":
-                return {"angle_cell_size": self.diff_method.cell_size_angle,
-                        "distance_cell_size": self.diff_method.cell_size_distance}
-
     def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
         """
         Performs the forward pass of the SubspaceNet.
@@ -461,6 +403,9 @@ class SubspaceNet(nn.Module):
         Args:
         -----
             Rx_tau (torch.Tensor): Input tensor of shape [Batch size, tau, 2N, N].
+            is_soft (bool): Determines if the model is using the softmask solution to find peaks,
+                            or the regular non deferentiable solution.
+            known_angles (torch.Tensor): The known angles for the near-field scenario.
 
         Returns:
         --------
@@ -524,15 +469,74 @@ class SubspaceNet(nn.Module):
                 distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
                 return known_angles, distance_prediction, Rz
 
+    def set_diff_method(self, diff_method: str, system_model):
+        """Sets the differentiable subspace method for training subspaceNet.
+            Options: "root_music", "esprit"
+
+        Args:
+        -----
+            diff_method (str): differentiable subspace method.
+
+        Raises:
+        -------
+            Exception: Method diff_method is not defined for SubspaceNet
+        """
+        if self.field_type == "Far":
+            if diff_method.startswith("root_music"):
+                self.diff_method = root_music
+            elif diff_method.startswith("esprit"):
+                self.diff_method = Esprit_torch(system_model=system_model)
+            else:
+                raise Exception(f"SubspaceNet.set_diff_method:"
+                                f" Method {diff_method} is not defined for SubspaceNet in "
+                                f"{self.field_type} scenario")
+        elif self.field_type == "Near":
+            if diff_method.startswith("music_2D"):
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
+            elif diff_method.startswith("music_1D"):
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
+            else:
+                raise Exception(f"SubspaceNet.set_diff_method:"
+                                f" Method {diff_method} is not defined for SubspaceNet in "
+                                f"{self.field_type} Field scenario")
+
+    def anti_rectifier(self, X):
+        """Applies the anti-rectifier operation to the input tensor.
+
+        Args:
+        -----
+            X (torch.Tensor): Input tensor.
+
+        Returns:
+        --------
+            torch.Tensor: Output tensor after applying the anti-rectifier operation.
+
+        """
+        return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
+
+    def adjust_diff_method_temperature(self, epoch):
+        if isinstance(self.diff_method, MUSIC):
+            if epoch % 20 == 0 and epoch != 0:
+                self.diff_method.adjust_cell_size()
+                print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
+
+    def get_diff_method_temperature(self):
+        if isinstance(self.diff_method, MUSIC):
+            if self.diff_method.estimation_params == "range":
+                return self.diff_method.cell_size
+            elif self.diff_method.estimation_params == "angle, range":
+                return {"angle_cell_size": self.diff_method.cell_size_angle,
+                        "distance_cell_size": self.diff_method.cell_size_distance}
+
+
+
 
 class CascadedSubspaceNet(SubspaceNet):
     """
     The CascadedSubspaceNet is a suggested solution for localization in near-field.
     It uses 2 SubspaceNet:
     The first, is SubspaceNet+Esprit/RootMusic, to get the angle from the input tensor.
-    The second, uses the first to extract the distance.
-    The use the function extract_angles to get the angles from the first SubspaceNet, with a bool arg to determine
-    if the model is in inference mode, or training mode.
+    The second, uses the first to extract the angles, and then uses the angles to get the distance.
     """
 
     def __init__(self, tau: int, N: int, system_model: SystemModel = None, state_path: str=""):
@@ -550,6 +554,8 @@ class CascadedSubspaceNet(SubspaceNet):
             Rx_tau: The input tensor.
             is_soft: Determines if the model is in using the sofmask solution to find peaks,
              or the regular non deferentiable solution.
+            train_angle_extractor: Determines if the angle extractor model is in inference mode(=True),
+                                    or training mode(=False).
 
         Returns
             The distance prediction.
@@ -595,76 +601,6 @@ class CascadedSubspaceNet(SubspaceNet):
             angles = self.angle_extractor(Rx_tau)[0]
             # angles = torch.sort(angles, dim=1)[0]
         return angles
-
-class SubspaceNetEsprit(SubspaceNet):
-    """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,
-        over subspace methods.
-        SubspaceNetEsprit is based on the ability to perform back-propagation using ESPRIT algorithm,
-        instead of RootMUSIC.
-
-    Attributes:
-    -----------
-        M (int): Number of sources.
-        tau (int): Number of auto-correlation lags.
-
-    Methods:
-    --------
-        forward(Rx_tau): Performs the forward pass of the SubspaceNet.
-
-    """
-
-    def __init__(self, tau: int, M: int):
-        super().__init__(tau, M)
-
-    def forward(self, Rx_tau: torch.Tensor):
-        """
-        Performs the forward pass of the SubspaceNet.
-
-        Args:
-        -----
-            Rx_tau (torch.Tensor): Input tensor of shape [Batch size, tau, 2N, N].
-
-        Returns:
-        --------
-            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
-            Rz (torch.Tensor): Surrogate covariance matrix.
-
-        """
-        # Rx_tau shape: [Batch size, tau, 2N, N]
-        self.N = Rx_tau.shape[-1]
-        self.batch_size = Rx_tau.shape[0]
-        ## Architecture flow ##
-        # CNN block #1
-        x = self.conv1(Rx_tau)
-        x = self.anti_rectifier(x)
-        # CNN block #2
-        x = self.conv2(x)
-        x = self.anti_rectifier(x)
-        # CNN block #3
-        x = self.conv3(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #1
-        x = self.deconv2(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #2
-        x = self.deconv3(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #3
-        x = self.DropOut(x)
-        Rx = self.deconv4(x)
-        # Reshape Output shape: [Batch size, 2N, N]
-        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
-        # Real and Imaginary Reconstruction
-        Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
-        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
-        # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(
-            Kx=Kx_tag, eps=1, batch_size=self.batch_size
-        )  # Shape: [Batch size, N, N]
-        # Feed surrogate covariance to Esprit algorithm
-        doa_prediction = esprit(Rz, self.M, self.batch_size)
-        return doa_prediction, Rz
 
 
 class DeepAugmentedMUSIC(nn.Module):
@@ -1110,7 +1046,9 @@ class MUSIC(SubspaceMethod):
 
         second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.T)
         second_order = second_order[:, :, None].repeat(1, 1, self.system_model.params.N)
-        second_order = torch.einsum("nm, nda -> nda", array_square, torch.transpose(second_order, 2, 0)).transpose(1, 2)
+        second_order = torch.einsum("nm, nda -> nda",
+                                    array_square,
+                                    torch.transpose(second_order, 2, 0)).transpose(1, 2)
 
         first_order = first_order[:, :, None].repeat(1, 1, second_order.shape[-1])
 
@@ -1188,13 +1126,15 @@ class MUSIC(SubspaceMethod):
             # Flatten the spectrum
             spectrum_flatten = music_spectrum.flatten()
             # Find spectrum peaks
-            peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
+            peaks = sc.signal.find_peaks(spectrum_flatten)[0]
             # Sort the peak by their amplitude
-            peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
+            sorted_peaks = peaks[np.argsort(spectrum_flatten[peaks])[::-1]]
             # convert the peaks to 2d indices
-            original_idx = torch.from_numpy(np.array(np.unravel_index(peaks, music_spectrum.shape)))
-            max_row[batch] = original_idx[0][0:self.system_model.params.M]
-            max_col[batch] = original_idx[1][0:self.system_model.params.M]
+            original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
+            if self.system_model.params.M > 1:
+                original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 35)
+            max_row[batch] = original_idx[0][0 : self.system_model.params.M]
+            max_col[batch] = original_idx[1][0 : self.system_model.params.M]
         for source in range(self.system_model.params.M):
             max_row_cell_idx = (max_row[:, source][:, None]
                                 - self.cell_size_angle
@@ -1275,14 +1215,14 @@ class MUSIC(SubspaceMethod):
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 180, device=device,
+            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360, device=device,
                                        dtype=torch.float64).requires_grad_(True).to(torch.float64)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 180,
+                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360,
                                            device=device).requires_grad_(True).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
@@ -1363,17 +1303,17 @@ class MUSIC(SubspaceMethod):
             ymin, ymax = np.min(self.angels.cpu().detach().numpy()), np.max(self.angels.cpu().detach().numpy())
             spectrum = self.music_spectrum[batch].cpu().detach().numpy()
             plt.imshow(spectrum, cmap="hot",
-                       extent=[xmin, xmax, ymin, ymax], origin='lower', aspect="auto")
+                       extent=[xmin, xmax, np.rad2deg(ymin), np.rad2deg(ymax)], origin='lower', aspect="auto")
+            for idx, dot in enumerate(highlight_coordinates):
+                x = self.distances.cpu().detach().numpy()[dot[1]]
+                y = np.rad2deg(self.angels.cpu().detach().numpy()[dot[0]])
+                plt.scatter(x, y, label=f"dot {idx}: ({x, y})")
             plt.colorbar()
             plt.title("MUSIC Spectrum heatmap")
             plt.xlabel("Distances [m]")
-            plt.ylabel("Angles [rad]")
+            plt.ylabel("Angles [deg]")
+            plt.legend()
             plt.figaspect(2)
-
-            ticks = [-np.pi / 2, -np.pi / 3, -np.pi / 6, 0, np.pi / 6, np.pi / 3, np.pi / 2]
-            labels = [r'$-\frac{\pi}{2}$', r'$-\frac{\pi}{3}$', r'$-\frac{\pi}{6}$', '0', r'$\frac{\pi}{6}$',
-                      r'$\frac{\pi}{3}$', r'$\frac{\pi}{2}$']
-            plt.yticks(ticks, labels)
             plt.show()
 
 
@@ -1559,183 +1499,6 @@ def esprit(Rz: torch.Tensor, M: int, batch_size: int):
 
     return torch.stack(doa_batches, dim=0)
 
-
-def music_nf_1d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, distance_range,
-                is_soft: bool = True) -> torch.Tensor:
-    """
-    This function is for 1D search over the distance range, and it is intended for the near-field scenario.
-    Args:
-        Rz:
-        number_of_sources:
-        search_grid:
-        distance_range:
-        is_soft:
-    Returns:
-        torch.Tensor: The predicted range, over all batches.
-
-    """
-    torch.autograd.set_detect_anomaly(True)
-    eigenvalues, eigenvectors = torch.linalg.eig(Rz)  # 1D search grid
-    sorted_idx = torch.argsort(torch.real(eigenvalues), descending=True)
-    Un = torch.gather(eigenvectors, 2, sorted_idx.unsqueeze(-1).expand(-1, -1, Rz.shape[-1]).transpose(1, 2))[:, :,
-         number_of_sources:]
-    var1 = torch.einsum("dbn, nbm -> bdm", search_grid.conj().transpose(0, 2), Un.transpose(0, 1))
-    inverse_spectrum = torch.norm(var1, dim=2)
-    music_spectrum = 1 / torch.real(inverse_spectrum)
-
-    if is_soft:
-        distances = maskpeaks_1d(music_spectrum, number_of_sources, distance_range)
-    else:
-        distances = find_spectrum_peaks_1d(music_spectrum, number_of_sources, distance_range)
-        if len(distances) == 0:
-            distances = distance_range[torch.argmax(music_spectrum, dim=1)]
-    torch.autograd.set_detect_anomaly(False)
-    return distances
-
-
-def music_2d(Rz: torch.Tensor, number_of_sources: int, search_grid: torch.Tensor, theta_range, distance_range,
-             is_soft: bool = True) -> tuple:
-    """
-
-        Args:
-            Rz:
-            number_of_sources:
-
-        Returns:
-
-        """
-    torch.autograd.set_detect_anomaly(True)
-    # using einsum
-    music_spectrum = torch.zeros(Rz.shape[0], len(theta_range), len(distance_range)).to(device)
-    # Extract eigenvalues and eigenvectors using EVD
-    eigenvalues, eigenvectors = torch.linalg.eig(Rz)
-    for batch in range(Rz.shape[0]):
-        # Assign noise subspace as the eigenvectors associated with the M-greatest eigenvalues
-        eigenvectors[batch] = eigenvectors[batch][:, torch.argsort(torch.real(eigenvalues[batch]), descending=True)]
-        Un = eigenvectors[batch][:, number_of_sources:]
-        var_1 = torch.einsum("ijk, kl -> ijl", torch.transpose(search_grid.conj(), 0, 2), Un)
-        inverse_spectrum = torch.real(torch.norm(var_1.T, dim=0))
-        # inverse_spectrum = torch.real(torch.einsum("ijk, kji -> ji", var_1, torch.transpose(var_1.conj(), 0, 2)))
-        music_spectrum[batch] = 1 / inverse_spectrum
-    if False:
-        plot_3d_spectrum(spectrum=music_spectrum[0].detach().numpy(),
-                         theta_range=theta_range.detach().numpy(),
-                         distance_range=distance_range.detach().numpy())
-    # var_1 = torch.einsum("dtn, bnm -> bdtm", torch.transpose(search_grid.conj(), 0, 2), Un)
-    # var_2 = torch.transpose(var_1.conj(), -3, -1)
-    # inverse_spectrum = torch.einsum("bijk, bkji -> bji", var_1, var_2)
-    # if not inverse_spectrum.isreal().all():
-    #     raise ValueError("Music spectrum must to be real!")
-    # music_spectrum = 1 / torch.real(inverse_spectrum)
-    if is_soft:
-        doa, distance = maskpeaks_2d(music_spectrum, number_of_sources, theta_range, distance_range)
-    else:
-        doa, distance = find_spectrum_peaks_2d(music_spectrum, number_of_sources, theta_range, distance_range)
-    torch.autograd.set_detect_anomaly(False)
-
-    return torch.Tensor(doa), torch.Tensor(distance)
-
-
-def find_spectrum_peaks_1d(music_spectrum, number_of_sources, distance_range) -> torch.Tensor:
-    predict_dist = torch.zeros(music_spectrum.shape[0], number_of_sources)
-    for batch in range(music_spectrum.shape[0]):
-        music_spectrum = music_spectrum[batch].cpu().detach().numpy().squeeze()
-        # Find spectrum peaks
-        peaks = list(sc.signal.find_peaks(music_spectrum)[0])
-        # Sort the peak by their amplitude
-        peaks.sort(key=lambda x: music_spectrum[x], reverse=True)
-        predict_dist = distance_range[peaks[0:number_of_sources]]
-
-    return torch.Tensor(predict_dist)
-
-
-def find_spectrum_peaks_2d(music_spectrum, number_of_sources, theta_range, distance_range) -> tuple:
-    predict_theta = np.zeros((music_spectrum.shape[0], number_of_sources))
-    predict_dist = np.zeros((music_spectrum.shape[0], number_of_sources))
-    for batch in range(music_spectrum.shape[0]):
-        music_spectrum = music_spectrum[batch].detach().cpu().numpy().squeeze()
-        # Flatten the spectrum
-        spectrum_flatten = music_spectrum.flatten()
-        # Find spectrum peaks
-        peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
-        # Sort the peak by their amplitude
-        peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
-        # convert the peaks to 2d indices
-        original_idx = np.unravel_index(peaks, music_spectrum.shape)
-        predict_theta[batch] = theta_range.cpu().numpy()[original_idx[0]][0:number_of_sources]
-        predict_dist[batch] = distance_range.cpu().numpy()[original_idx[1]][0:number_of_sources]
-
-    return torch.Tensor(predict_theta), torch.Tensor(predict_dist)
-
-
-def maskpeaks_1d(spectrum: torch.Tensor, number_of_sources: int, distance_range: torch.Tensor) -> torch.Tensor:
-    """
-Args:
-    spectrum:
-    number_of_sources:
-    distance_range:
-Returns:
-    torch.Tensor: The predicted range, over all batches.
-    """
-    cell_size = 25  # for distances
-    top_indxs = torch.topk(spectrum, number_of_sources, dim=1)[1]
-    cell_idx = (top_indxs - cell_size + torch.arange(2 * cell_size + 1, dtype=torch.long, device=device))
-    cell_idx %= spectrum.shape[1]
-    if number_of_sources == 1:
-        cell_idx = cell_idx.unsqueeze(-1)
-    metrix_thr = torch.gather(spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
-    soft_max = torch.softmax(metrix_thr, dim=1)
-    soft_decision = torch.einsum("bkm, bkm -> bm", distance_range[cell_idx], soft_max)
-
-    return soft_decision
-
-
-def maskpeaks_2d(spectrum: torch.Tensor, number_of_sources: int, theta_range: torch.Tensor,
-                 distance_range: torch.Tensor) -> tuple:
-    """
-
-        Args:
-            batch_size:
-            spectrum:
-            number_of_sources:
-
-        Returns:
-
-        """
-    # spectrum = Variable(spectrum, requires_grad=True)
-    # theta_range = Variable(theta_range, requires_grad=True)
-    # distance_range = Variable(distance_range, requires_grad=True)
-    soft_row = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-    soft_col = torch.zeros(spectrum.shape[0], number_of_sources, dtype=torch.float32).to(device)
-    cell_size_col = 5  # for distances
-    cell_size_row = 5  # for angles
-
-    for batch in range(spectrum.shape[0]):
-        flat_spectrum = spectrum[batch].flatten()
-        top_indxs = torch.topk(flat_spectrum, number_of_sources, dim=0)[1]
-        max_row = torch.div(top_indxs, spectrum.shape[2], rounding_mode="floor")
-        max_col = torch.fmod(top_indxs, spectrum.shape[2]).int()
-        for i, (max_r, max_c) in enumerate(zip(max_row, max_col)):
-            max_row_cell_idx = (
-                    max_r - cell_size_row + torch.arange(2 * cell_size_row + 1, dtype=torch.int32, device=device))
-            max_row_cell_idx = max_row_cell_idx[max_row_cell_idx >= 0]
-            max_row_cell_idx = max_row_cell_idx[max_row_cell_idx < spectrum.shape[1]].view(-1, 1)
-
-            max_col_cell_idx = (
-                    max_c - cell_size_col + torch.arange(2 * cell_size_col + 1, dtype=torch.long, device=device))
-            max_col_cell_idx = max_col_cell_idx[max_col_cell_idx >= 0]
-            max_col_cell_idx = max_col_cell_idx[max_col_cell_idx < spectrum.shape[2]].view(1, -1)
-
-            metrix_thr = spectrum[batch, max_row_cell_idx, max_col_cell_idx]
-            soft_max = torch.softmax(metrix_thr.view(1, -1), dim=1).reshape(metrix_thr.shape)
-            soft_row[batch, i] = (
-                    theta_range[max_row_cell_idx].reshape(1, -1) @ torch.sum(soft_max, dim=1)).requires_grad_(
-                True)
-            soft_col[batch, i] = (distance_range[max_col_cell_idx] @ torch.sum(soft_max, dim=0)).requires_grad_(True)
-
-    return soft_row, soft_col
-
-
 class Filter(nn.Module):
     def __init__(self, min_cell_size, max_cell_size, number_of_filter=10):
         super(Filter, self).__init__()
@@ -1783,3 +1546,91 @@ class Filter(nn.Module):
     def clip_weights_values(self):
         self.fc.weight.data = torch.clip(self.fc.weight.data, 0.1, 1)
         self.fc.weight.data /= torch.sum(self.fc.weight.data)
+
+class SubspaceNetEsprit(SubspaceNet):
+    """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,
+        over subspace methods.
+        SubspaceNetEsprit is based on the ability to perform back-propagation using ESPRIT algorithm,
+        instead of RootMUSIC.
+
+    Attributes:
+    -----------
+        M (int): Number of sources.
+        tau (int): Number of auto-correlation lags.
+
+    Methods:
+    --------
+        forward(Rx_tau): Performs the forward pass of the SubspaceNet.
+
+    """
+
+    def __init__(self, tau: int, M: int):
+        super().__init__(tau, M)
+
+    def forward(self, Rx_tau: torch.Tensor):
+        """
+        Performs the forward pass of the SubspaceNet.
+
+        Args:
+        -----
+            Rx_tau (torch.Tensor): Input tensor of shape [Batch size, tau, 2N, N].
+
+        Returns:
+        --------
+            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
+            Rz (torch.Tensor): Surrogate covariance matrix.
+
+        """
+        # Rx_tau shape: [Batch size, tau, 2N, N]
+        self.N = Rx_tau.shape[-1]
+        self.batch_size = Rx_tau.shape[0]
+        ## Architecture flow ##
+        # CNN block #1
+        x = self.conv1(Rx_tau)
+        x = self.anti_rectifier(x)
+        # CNN block #2
+        x = self.conv2(x)
+        x = self.anti_rectifier(x)
+        # CNN block #3
+        x = self.conv3(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #1
+        x = self.deconv2(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #2
+        x = self.deconv3(x)
+        x = self.anti_rectifier(x)
+        # DCNN block #3
+        x = self.DropOut(x)
+        Rx = self.deconv4(x)
+        # Reshape Output shape: [Batch size, 2N, N]
+        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
+        # Real and Imaginary Reconstruction
+        Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
+        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
+        # Apply Gram operation diagonal loading
+        Rz = gram_diagonal_overload(
+            Kx=Kx_tag, eps=1, batch_size=self.batch_size
+        )  # Shape: [Batch size, N, N]
+        # Feed surrogate covariance to Esprit algorithm
+        doa_prediction = esprit(Rz, self.M, self.batch_size)
+        return doa_prediction, Rz
+
+
+def keep_far_enough_points(tensor, M, D):
+    # Calculate pairwise distances between columns
+    distances = cdist(tensor.T, tensor.T, metric="euclidean")
+
+    # Keep the first M columns as far enough points
+    selected_cols = []
+    for i in range(tensor.shape[1]):
+        if len(selected_cols) >= M:
+            break
+        if all(distances[i, col] >= D for col in selected_cols):
+            selected_cols.append(i)
+
+    # Remove columns that are less than distance D from each other
+    filtered_tensor = tensor[:, selected_cols]
+
+    return filtered_tensor

@@ -522,12 +522,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
             torch.save(model.state_dict(), checkpoint_path / model_name)
-        # Adjust temperature for differentiable subspace methods under SubspaceNet model
-        if isinstance(model, SubspaceNet):
-            model.adjust_diff_method_temperature(epoch)
-        # if isinstance(training_params.criterion, RMSPELoss):
-        #     training_params.criterion.adjust_balance_factor(overall_train_loss)
-
+        if len(loss_train_list) > 1 and loss_train_list[-1] < np.mean(loss_train_list[-10:-2]) * 1.05:
+                # Adjust temperature for differentiable subspace methods under SubspaceNet model
+                if isinstance(model, SubspaceNet):
+                    model.adjust_diff_method_temperature(epoch)
+        if isinstance(training_params.criterion, RMSPELoss):
+            training_params.criterion.adjust_balance_factor(overall_train_loss)
+    # Training complete
     time_elapsed = time.time() - since
     print("\n--- Training summary ---")
     print(

@@ -122,8 +122,8 @@ def create_dataset(
             # Ground-truth creation
             Y = torch.tensor(samples_model.doa, dtype=torch.float64)
             if system_model_params.field_type.endswith("Near"):
-                y1 = torch.tensor(samples_model.distances, dtype=torch.float64)
-                Y = torch.cat((Y, y1), dim=0)
+                Y1 = torch.tensor(samples_model.distances, dtype=torch.float64)
+                Y = torch.cat((Y, Y1), dim=0)
             generic_dataset.append((X, Y))
             model_dataset.append((X_model, Y))
 
