@@ -285,22 +285,33 @@ def __run_simulation(**kwargs):
         if SIMULATION_COMMANDS["PLOT_RESULTS"] == True:
             for signal_nature, snr_dict in res.items():
                 if snr_dict:
-                    plt.figure()
+                    # plt.figure()
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
                     snr_values = snr_dict.keys()
                     plt_res = {}
                     for snr, results in snr_dict.items():
                         for method, loss_ in results.items():
                             if method not in plt_res:
-                                plt_res[method] = []
-                            plt_res[method].append(loss_["Overall"])
+                                plt_res[method] = {"Angle": [], "Distance": []}
+                            # plt_res[method].append(loss_["Overall"])
+                            plt_res[method]["Angle"].append(loss_["Angle"])
+                            plt_res[method]["Distance"].append(loss_["Distance"])
 
-                    plt.title(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
+                    fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
                     for method, loss_ in plt_res.items():
-                        plt.scatter(snr_values, loss_, label=method)
-                    plt.legend()
-                    plt.grid()
-                    plt.xlabel("SNR [dB]")
-                    plt.ylabel("RMSE [m]")
+                        # ax.scatter(snr_values, loss_, label=method)
+                        ax1.plot(snr_values, loss_["Angle"], label=method)
+                        ax2.plot(snr_values, loss_["Distance"], label=method)
+                    ax1.legend()
+                    ax2.legend()
+                    ax1.grid()
+                    ax2.grid()
+                    ax1.set_xlabel("SNR [dB]")
+                    ax2.set_xlabel("SNR [dB]")
+                    ax1.set_ylabel("RMSE [rad]")
+                    ax2.set_ylabel("RMSE [m]")
+                    ax1.set_title("Angle RMSE")
+                    ax2.set_title("Distance RMSE")
                     plt.savefig(os.path.join(plot_path, f"{signal_nature}_sources_results_{dt_string_for_save}.png"))
                     plt.show()
         else:

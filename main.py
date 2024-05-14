@@ -45,8 +45,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [],
-        "non-coherent": [10]
+        "coherent": [5, 10, 15, 20, 25],
+        "non-coherent": [0, 5, 10, 15, 20],
     }
 
     system_model_params = {
@@ -67,10 +67,10 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 1024,
-        "train_test_ratio": .1,
+        "samples_size": 100,
+        "train_test_ratio": 1,
         "training_objective": "angle, range",       # angle, range
-        "batch_size": 32,
+        "batch_size": 100,
         "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-        "balance_factor": None                  # if None, the balance factor will be set to the default value -> 0.6
+        "balance_factor": 0.8                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
         "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
@@ -108,11 +108,11 @@ if __name__ == "__main__":
     simulation_commands = {
         "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
-        "LOAD_MODEL": False,
-        "TRAIN_MODEL": True,
+        "LOAD_MODEL": True,
+        "TRAIN_MODEL": False,
         "SAVE_MODEL": False,
         "EVALUATE_MODE": True,
-        "PLOT_RESULTS": False
+        "PLOT_RESULTS": True
     }
 
     loss = run_simulation(simulation_commands=simulation_commands,

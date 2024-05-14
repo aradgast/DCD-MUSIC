@@ -166,7 +166,7 @@ class RMSPELoss(nn.Module):
                 rmspe_tensor = torch.stack(rmspe_list, dim=0)
                 rmspe_min = torch.min(rmspe_tensor)
                 rmspe.append(rmspe_min)
-            result = torch.sum(torch.stack(rmspe, dim=0))
+            result = torch.mean(torch.stack(rmspe, dim=0))
             return result
         # Calculate RMSPE loss for both DOA and distance
         else:
@@ -221,18 +221,18 @@ class RMSPELoss(nn.Module):
             else:
                 return result
 
-    def adjust_balance_factor(self, loss):
-        if self.balance_factor > 0.4:
-            if loss < 0.1 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]):
-                self.balance_factor *= 0.95
-                print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
-            if loss < 0.01 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]) * 0.95:
-                self.balance_factor *= 0.9
-                print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
-            if loss < 0.001:
-                self.balance_factor *= 0.85
-                print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
-
+    def adjust_balance_factor(self, loss=None):
+        # if self.balance_factor > 0.4:
+        #     if loss < 0.1 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]):
+        #         self.balance_factor *= 0.95
+        #         print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+        #     if loss < 0.01 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]) * 0.95:
+        #         self.balance_factor *= 0.9
+        #         print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+        #     if loss < 0.001:
+        #         self.balance_factor *= 0.85
+        #         print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+        self.balance_factor = 0.1
 class MSPELoss(nn.Module):
     """Mean Square Periodic Error (MSPE) loss function.
     This loss function calculates the MSPE between the predicted values and the target values.

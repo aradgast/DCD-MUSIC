@@ -290,7 +290,7 @@ class TrainingParams(object):
         elif self.training_objective.endswith("angle"):
             self.criterion = RMSPELoss()
         elif self.training_objective.startswith("range"):
-            self.criterion = RMSPELoss(balance_factor=0)
+            self.criterion = RMSPELoss(balance_factor=balance_factor)
         elif self.training_objective == "angle, range":
             self.criterion = RMSPELoss(balance_factor=balance_factor)
         else:
@@ -410,6 +410,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 traing_angle_extractor = not traing_angle_extractor
                 if traing_angle_extractor:
                     print("Switching to training angle extractor")
+                    if isinstance(training_params.criterion, RMSPELoss):
+                        training_params.criterion.adjust_balance_factor()
                 else:
                     print("turn off training angle extractor")
         train_length = 0
@@ -522,12 +524,12 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
             torch.save(model.state_dict(), checkpoint_path / model_name)
-        if len(loss_train_list) > 1 and loss_train_list[-1] < np.mean(loss_train_list[-10:-2]) * 1.05:
+        # if len(loss_train_list) > 1 and loss_train_list[-1] < np.mean(loss_train_list[-10:-2]) * 1.05:
                 # Adjust temperature for differentiable subspace methods under SubspaceNet model
-                if isinstance(model, SubspaceNet):
-                    model.adjust_diff_method_temperature(epoch)
-        if isinstance(training_params.criterion, RMSPELoss):
-            training_params.criterion.adjust_balance_factor(overall_train_loss)
+        if isinstance(model, SubspaceNet):
+            model.adjust_diff_method_temperature(epoch)
+        # if isinstance(training_params.criterion, RMSPELoss):
+        #     training_params.criterion.adjust_balance_factor(overall_train_loss)
     # Training complete
     time_elapsed = time.time() - since
     print("\n--- Training summary ---")
@@ -655,7 +657,9 @@ def get_model_filename(system_model_params: SystemModelParams, model_config: Mod
             f"{model_config.model_type}_"
             + f"N={system_model_params.N}_"
             + f"tau={model_config.tau}_"
+            + f"M={system_model_params.M}_"
             + f"{system_model_params.signal_type}_"
+            + f"SNR={system_model_params.snr}_"
             + f"diff_method={model_config.diff_method}_"
             + f"{system_model_params.field_type}_field_"
             + f"{system_model_params.signal_nature}"

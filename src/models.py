@@ -875,8 +875,8 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.3)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.3)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.05)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.05)
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
@@ -1227,8 +1227,9 @@ class MUSIC(SubspaceMethod):
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
                 self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .1, device=device,
-                                              dtype=torch.float64) \
-                    .requires_grad_(True)
+                                              dtype=torch.float64).requires_grad_(True)
+                self.distances = torch.arange(2, 6, .05, device=device,
+                                              dtype=torch.float64).requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"
                                  f" got {self.estimation_params}")
@@ -1304,15 +1305,17 @@ class MUSIC(SubspaceMethod):
             spectrum = self.music_spectrum[batch].cpu().detach().numpy()
             plt.imshow(spectrum, cmap="hot",
                        extent=[xmin, xmax, np.rad2deg(ymin), np.rad2deg(ymax)], origin='lower', aspect="auto")
-            for idx, dot in enumerate(highlight_coordinates):
-                x = self.distances.cpu().detach().numpy()[dot[1]]
-                y = np.rad2deg(self.angels.cpu().detach().numpy()[dot[0]])
-                plt.scatter(x, y, label=f"dot {idx}: ({x, y})")
+            if highlight_coordinates is not None:
+                for idx, dot in enumerate(highlight_coordinates):
+                    x = self.distances.cpu().detach().numpy()[dot[1]]
+                    y = np.rad2deg(self.angels.cpu().detach().numpy()[dot[0]])
+                    plt.scatter(x, y, label=f"dot {idx}: ({np.round(x, decimals=3), np.round(y, decimals=3)})")
+                plt.legend()
             plt.colorbar()
             plt.title("MUSIC Spectrum heatmap")
             plt.xlabel("Distances [m]")
             plt.ylabel("Angles [deg]")
-            plt.legend()
+
             plt.figaspect(2)
             plt.show()
 

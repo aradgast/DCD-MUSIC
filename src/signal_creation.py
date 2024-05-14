@@ -103,7 +103,7 @@ class Samples(SystemModel):
         """
 
         def choose_distances(distance_min_gap: float = 0.5, distance_max_gap: int = 10,
-                             min_val: float = 2, max_val: int = 7) -> np.ndarray:
+                             min_val: float = 2, max_val: int = 5) -> np.ndarray:
 
             distances = np.zeros(self.params.M)
             idx = 0
