@@ -45,18 +45,18 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [5, 10, 15, 20, 25],
+        "coherent": [25],
         "non-coherent": [0, 5, 10, 15, 20],
     }
 
     system_model_params = {
-        "N": 5,
-        "M": 2,
-        "T": 100,
+        "N": 15,                                    # number of antennas
+        "M": 2,                                     # number of sources
+        "T": 100,                                   # number of snapshots
         "snr": None,                                # if defined, values in scenario_dict will be ignored
         "field_type": "Near",                       # Near, Far
         "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
-        "eta": 0,
+        "eta": 0,                                   # steering vector error
         "bias": 0,
         "sv_noise_var": 0
     }
@@ -67,10 +67,10 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 100,
-        "train_test_ratio": 1,
+        "samples_size": 1024,
+        "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
-        "batch_size": 100,
+        "batch_size": 64,
         "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-        "balance_factor": 0.8                 # if None, the balance factor will be set to the default value -> 0.6
+        "balance_factor": 0.7                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
         "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
@@ -108,11 +108,11 @@ if __name__ == "__main__":
     simulation_commands = {
         "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
-        "LOAD_MODEL": True,
-        "TRAIN_MODEL": False,
+        "LOAD_MODEL": False,
+        "TRAIN_MODEL": True,
         "SAVE_MODEL": False,
         "EVALUATE_MODE": True,
-        "PLOT_RESULTS": True
+        "PLOT_RESULTS": False
     }
 
     loss = run_simulation(simulation_commands=simulation_commands,

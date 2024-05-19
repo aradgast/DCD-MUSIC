@@ -875,8 +875,8 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.05)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.05)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.2)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.2)
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
@@ -1132,7 +1132,7 @@ class MUSIC(SubspaceMethod):
             # convert the peaks to 2d indices
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
             if self.system_model.params.M > 1:
-                original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 35)
+                original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 85)
             max_row[batch] = original_idx[0][0 : self.system_model.params.M]
             max_col[batch] = original_idx[1][0 : self.system_model.params.M]
         for source in range(self.system_model.params.M):
@@ -1226,9 +1226,7 @@ class MUSIC(SubspaceMethod):
                                            device=device).requires_grad_(True).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
-                self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .1, device=device,
-                                              dtype=torch.float64).requires_grad_(True)
-                self.distances = torch.arange(2, 6, .05, device=device,
+                self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .5, device=device,
                                               dtype=torch.float64).requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"
