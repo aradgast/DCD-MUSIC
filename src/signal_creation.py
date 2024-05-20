@@ -120,8 +120,8 @@ class Samples(SystemModel):
             return distances
 
         if distance is None:
-            self.distances = choose_distances(min_val=self.fresnel, max_val=self.fraunhofer,
-                                              distance_min_gap=self.fresnel / 2, distance_max_gap=self.fraunhofer / 2)
+            self.distances = choose_distances(min_val=self.fresnel, max_val=self.fraunhofer*0.4,
+                                              distance_min_gap=0.5, distance_max_gap=self.fraunhofer)
         else:
             self.distances = distance
 

@@ -173,7 +173,7 @@ def __run_simulation(**kwargs):
                     .set_training_dataset(train_dataset)
                     .set_schedular(step_size=TRAINING_PARAMS["step_size"],
                                    gamma=TRAINING_PARAMS["gamma"])
-                    .set_criterion(TRAINING_PARAMS["balance_factor"])
+                    .set_criterion(TRAINING_PARAMS["criterion"], TRAINING_PARAMS["balance_factor"])
 
                 )
                 if load_model:

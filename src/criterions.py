@@ -410,6 +410,32 @@ def MSPE(doa_predictions: np.ndarray, doa: np.ndarray,
         res = np.min(mspe_list)
     return res
 
+class CartesianLoss(nn.Module):
+    def __init__(self):
+        super(CartesianLoss, self).__init__()
+
+    def forward(self, predictions_angle: torch.Tensor, targets_angle: torch.Tensor, predictions_distance: torch.Tensor,
+                targets_distance: torch.Tensor):
+        """
+        the input given is expected to contain angels and distances.
+        """
+        M = predictions_angle.shape[1]
+        number_of_samples = predictions_angle.shape[0]
+        true_x = torch.cos(targets_angle) * targets_distance
+        true_y = torch.sin(targets_angle) * targets_distance
+        coords_true = torch.stack((true_x, true_y), dim=2)
+        pred_x = torch.cos(predictions_angle) * predictions_distance
+        pred_y = torch.sin(predictions_angle) * predictions_distance
+        coords_pred = torch.stack((pred_x, pred_y), dim=2)
+        # need to consider all possible permutations for M sources
+        perm = list(permutations(range(M), M))
+        loss = []
+        for batch in range(number_of_samples):
+            loss_per_sample = []
+            for p in perm:
+                loss_per_sample.append(torch.sqrt(torch.sum((coords_true[batch] - coords_pred[batch, p, :]) ** 2, dim=1)).mean())
+            loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
+        return torch.mean(torch.stack(loss, dim=0))
 
 def set_criterions(criterion_name: str, balance_factor: float = 0.6):
     """
@@ -439,6 +465,9 @@ def set_criterions(criterion_name: str, balance_factor: float = 0.6):
         BALANCE_FACTOR = 0
         criterion = RMSELoss()
         subspace_criterion = RMSPELoss(balance_factor)
+    elif criterion_name.startswith("cartesian"):
+        criterion = CartesianLoss()
+        subspace_criterion = CartesianLoss()
     else:
         raise Exception(f"criterions.set_criterions: Criterion {criterion_name} is not defined")
     print(f"Loss measure = {criterion_name}")

@@ -276,7 +276,7 @@ class TrainingParams(object):
         )
         return self
 
-    def set_criterion(self, balance_factor: float = None):
+    def set_criterion(self, criterion:str, balance_factor: float = None):
         """
         Sets the loss criterion for training.
 
@@ -284,15 +284,18 @@ class TrainingParams(object):
         -------
         self
         """
+        criterion = criterion.lower()
         # Define loss criterion
-        if self.model_type.startswith("DeepCNN"):
+        if criterion.startswith("bce"):
             self.criterion = nn.BCELoss()
-        elif self.training_objective.endswith("angle"):
-            self.criterion = RMSPELoss()
-        elif self.training_objective.startswith("range"):
+        elif criterion.startswith("mse"):
+            self.criterion = nn.MSELoss()
+        elif criterion.startswith("mspe"):
+            self.criterion = MSPELoss()
+        elif criterion.startswith("rmspe"):
             self.criterion = RMSPELoss(balance_factor=balance_factor)
-        elif self.training_objective == "angle, range":
-            self.criterion = RMSPELoss(balance_factor=balance_factor)
+        elif criterion.startswith("cartesian") and self.training_objective == "angle, range":
+            self.criterion = CartesianLoss()
         else:
             raise Exception(
                 f"TrainingParams.set_criterion: Training objective {self.training_objective} is not defined"
@@ -464,12 +467,20 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
-                else:
-                    train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
-                                                                                                  DOA,
-                                                                                                  RANGE_predictions,
-                                                                                                  RANGE,
-                                                                                                  is_separted=True)
+                elif training_params.training_objective == "range":
+                    train_loss = training_params.criterion(RANGE_predictions, RANGE)
+                elif training_params.training_objective == "angle, range":
+                    if isinstance(training_params.criterion, RMSPELoss):
+                        train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
+                                                                                                      DOA,
+                                                                                                      RANGE_predictions,
+                                                                                                      RANGE,
+                                                                                                      is_separted=True)
+                    elif isinstance(training_params.criterion, CartesianLoss):
+                        train_loss = training_params.criterion(DOA_predictions,
+                                                               DOA,
+                                                               RANGE_predictions,
+                                                               RANGE)
             else:
                 raise Exception(f"Model type {training_params.model_type} is not defined")
             # Back-propagation stage
@@ -483,10 +494,10 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # reset gradients
             model.zero_grad()
             # add batch loss to overall epoch loss
-            if training_params.model_type.startswith("DeepCNN"):
+            if isinstance(training_params.criterion, nn.BCELoss):
                 # BCE is averaged
                 overall_train_loss += train_loss.item() * len(data[0])
-            elif isinstance(training_params.criterion, RMSPELoss):
+            elif isinstance(training_params.criterion, RMSPELoss) or isinstance(training_params.criterion, CartesianLoss):
                 # RMSPE is averaged over the dataset size
                 overall_train_loss += train_loss.item() / len(training_params.train_dataset)
                 # overall_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
@@ -524,8 +535,6 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
             torch.save(model.state_dict(), checkpoint_path / model_name)
-        # if len(loss_train_list) > 1 and loss_train_list[-1] < np.mean(loss_train_list[-10:-2]) * 1.05:
-                # Adjust temperature for differentiable subspace methods under SubspaceNet model
         if isinstance(model, SubspaceNet):
             model.adjust_diff_method_temperature(epoch)
         # if isinstance(training_params.criterion, RMSPELoss):

@@ -33,7 +33,7 @@ import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
 from src.utils import device
-from src.criterions import RMSPELoss, MSPELoss, RMSELoss
+from src.criterions import RMSPELoss, MSPELoss, RMSELoss, CartesianLoss
 from src.criterions import RMSPE, MSPE
 from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
@@ -156,11 +156,14 @@ def evaluate_dnn_model(
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
-                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
-                    if is_separted:
-                        eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
-                        overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                        overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                    if not (isinstance(criterion, nn.BCELoss) or isinstance(criterion, CartesianLoss)):
+                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
+                        if is_separted:
+                            eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
+                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                    else:
+                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             else:
@@ -402,9 +405,9 @@ def evaluate_model_based(
             doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
             Rx = calculate_covariance_tensor(X, method="simple")
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
-            if is_separted:
+            if isinstance(criterion, RMSPELoss) and is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
-                                                               is_separted)
+                                                                    is_separted)
 
                 loss_list_angle.append(rmspe_angle.item())
                 loss_list_distance.append(rmspe_distance.item())

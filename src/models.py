@@ -875,8 +875,8 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.2)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.2)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.1)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.1)
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
@@ -922,9 +922,8 @@ class MUSIC(SubspaceMethod):
         inverse_spectrum = self.get_inverse_spectrum(Un)
         self.music_spectrum = 1 / inverse_spectrum
         #####
-        # tensor = self.music_spectrum.view(self.music_spectrum.shape[0], 1, self.music_spectrum.shape[1])
-        # smoothed_tensor = nn.functional.conv1d(tensor, self.gaussian_kernel.view(1, 1, self.kernel_size), padding=(self.kernel_size - 1) // 2)
-        # self.music_spectrum = smoothed_tensor.view(self.music_spectrum.shape[0], self.music_spectrum.shape[1])
+        # self.music_spectrum = torch.div(self.music_spectrum, torch.max(torch.max(self.music_spectrum, dim=2).values, dim=1).values.unsqueeze(1).unsqueeze(2))
+        # self.music_spectrum = torch.pow(self.music_spectrum, 5)
         #####
         params = self.peak_finder(is_soft)
         return params
@@ -1132,7 +1131,7 @@ class MUSIC(SubspaceMethod):
             # convert the peaks to 2d indices
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
             if self.system_model.params.M > 1:
-                original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 85)
+                original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 30)
             max_row[batch] = original_idx[0][0 : self.system_model.params.M]
             max_col[batch] = original_idx[1][0 : self.system_model.params.M]
         for source in range(self.system_model.params.M):
@@ -1195,7 +1194,9 @@ class MUSIC(SubspaceMethod):
             peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
             # convert the peaks to 2d indices
             original_idx = np.array(np.unravel_index(peaks, music_spectrum.shape))
-            original_idx = original_idx[:, 0:self.system_model.params.M]
+            if self.system_model.params.M > 1:
+                original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 30)
+            # original_idx = original_idx[:, 0:self.system_model.params.M]
             predict_theta[batch] = angels[original_idx[0]]
             predict_dist[batch] = distances[original_idx[1]]
 
@@ -1226,7 +1227,7 @@ class MUSIC(SubspaceMethod):
                                            device=device).requires_grad_(True).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
-                self.distances = torch.arange(np.floor(fresnel), fraunhofer + 0.5, .5, device=device,
+                self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .5, device=device,
                                               dtype=torch.float64).requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"
@@ -1620,18 +1621,37 @@ class SubspaceNetEsprit(SubspaceNet):
 
 
 def keep_far_enough_points(tensor, M, D):
-    # Calculate pairwise distances between columns
-    distances = cdist(tensor.T, tensor.T, metric="euclidean")
+    # # Calculate pairwise distances between columns
+    # distances = cdist(tensor.T, tensor.T, metric="euclidean")
+    #
+    # # Keep the first M columns as far enough points
+    # selected_cols = []
+    # for i in range(tensor.shape[1]):
+    #     if len(selected_cols) >= M:
+    #         break
+    #     if all(distances[i, col] >= D for col in selected_cols):
+    #         selected_cols.append(i)
+    #
+    # # Remove columns that are less than distance D from each other
+    # filtered_tensor = tensor[:, selected_cols]
+    # retrun filtered_tensor
+    ##############################################
+    # Extract x_coords (first dimension)
+    x_coords = tensor[0, :]
 
-    # Keep the first M columns as far enough points
+    # Keep the first M columns that are far enough apart in x_coords
     selected_cols = []
     for i in range(tensor.shape[1]):
         if len(selected_cols) >= M:
             break
-        if all(distances[i, col] >= D for col in selected_cols):
+        if i == 0:
+            selected_cols.append(i)
+            continue
+        if all(abs(x_coords[i] - x_coords[col]) >= D for col in selected_cols):
             selected_cols.append(i)
 
-    # Remove columns that are less than distance D from each other
+    # Select the columns that meet the distance criterion
     filtered_tensor = tensor[:, selected_cols]
 
     return filtered_tensor
+
