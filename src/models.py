@@ -187,12 +187,13 @@ class ModelGenerator(object):
                 f"SubspaceNet_"
                 + f"N={system_model_params.N}_"
                 + f"tau={self.tau}_"
+                + f"M={system_model_params.M}_"
                 + f"{system_model_params.signal_type}_"
+                + f"SNR={system_model_params.snr}_"
                 + f"diff_method=esprit_"
                 + f"{system_model_params.field_type}_field_"
                 + f"{system_model_params.signal_nature}"
         )
-
         # return (
         #     f"SubspaceNet_M={system_model_params.M}_"
         #     + f"T={system_model_params.T}_SNR_{system_model_params.snr}_"
@@ -545,7 +546,7 @@ class CascadedSubspaceNet(SubspaceNet):
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
 
-    def forward(self, Rx_tau: torch.Tensor, is_soft: bool=True, train_angle_extractor: bool=False):
+    def forward(self, Rx_tau: torch.Tensor, is_soft: bool = True, train_angle_extractor: bool = False):
         """
         Performs the forward pass of the CascadedSubspaceNet. Using the subspaceNet forward but,
         calling the angle extractor method first.
@@ -874,9 +875,12 @@ class MUSIC(SubspaceMethod):
         self.__define_grid_params()
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
+            self.cell_size = 3
         elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.1)
+            self.cell_size_angle = 3
             self.cell_size_distance = int(self.distances.shape[0] * 0.1)
+            self.cell_size_distance = 3
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.

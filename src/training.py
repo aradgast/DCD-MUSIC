@@ -404,19 +404,21 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     min_valid_loss = np.inf
     # Set initial time for start training
     since = time.time()
-    traing_angle_extractor = False
+    training_angle_extractor = False
+    if training_params.training_objective.endswith("angle, range"):
+        training_angle_extractor = True
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-        if isinstance(model, CascadedSubspaceNet):
-            if epoch == int(training_params.epochs * 0.9):
-                traing_angle_extractor = not traing_angle_extractor
-                if traing_angle_extractor:
-                    print("Switching to training angle extractor")
-                    if isinstance(training_params.criterion, RMSPELoss):
-                        training_params.criterion.adjust_balance_factor()
-                else:
-                    print("turn off training angle extractor")
+        # if isinstance(model, CascadedSubspaceNet):
+        #     if epoch == int(training_params.epochs * 0.9):
+        #         training_angle_extractor = not training_angle_extractor
+        #         if training_angle_extractor:
+        #             print("Switching to training angle extractor")
+        #             if isinstance(training_params.criterion, RMSPELoss):
+        #                 training_params.criterion.adjust_balance_factor()
+        #         else:
+        #             print("turn off training angle extractor")
         train_length = 0
         overall_train_loss = 0.0
         overall_train_loss_angle = 0.0
@@ -446,7 +448,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # Get model output
             # This if condition is mainly to spearte the case which we want to train the angle extractor.
             if isinstance(model, CascadedSubspaceNet):
-                model_output = model(Rx, train_angle_extractor=traing_angle_extractor)
+                model_output = model(Rx, train_angle_extractor=training_angle_extractor)
             else:
                 model_output = model(Rx)
             if isinstance(model, SubspaceNet):
@@ -468,7 +470,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
                 elif training_params.training_objective == "range":
-                    train_loss = training_params.criterion(RANGE_predictions, RANGE)
+                    train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
                 elif training_params.training_objective == "angle, range":
                     if isinstance(training_params.criterion, RMSPELoss):
                         train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
