@@ -39,7 +39,7 @@ from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
 from src.models import SubspaceNet, MUSIC, RootMusic, Esprit_torch, CascadedSubspaceNet
 from src.plotting import plot_spectrum
-from src.system_model import SystemModel
+from src.system_model import SystemModel, SystemModelParams
 
 
 def get_model_based_method(method_name: str, system_model: SystemModel):
@@ -62,6 +62,8 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
         return RootMusic(system_model)
     if method_name.lower() == "esprit":
         return Esprit_torch(system_model)
+
+
 def evaluate_dnn_model(
         model,
         dataset: list,
@@ -101,8 +103,8 @@ def evaluate_dnn_model(
         for data in dataset:
             X, true_label = data
             if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
-                    DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                    RANGE.to(device)
+                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                RANGE.to(device)
             if true_label.shape[1] != model.system_model.params.M:
                 DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
             else:
@@ -115,7 +117,7 @@ def evaluate_dnn_model(
             if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
                 if isinstance(model, CascadedSubspaceNet):
                     model_output = model(X, is_soft=False, train_angle_extractor=False)
-                else: # SubspaceNet with 2D MUSIC
+                else:  # SubspaceNet with 2D MUSIC
                     model_output = model(X, is_soft=False)
             else:
                 model_output = model(X)
@@ -183,8 +185,8 @@ def evaluate_dnn_model(
             figures=figures,
         )
     if is_separted:
-        overall_loss = {"Overall":  overall_loss,
-                        "Angle":    overall_loss_angle,
+        overall_loss = {"Overall": overall_loss,
+                        "Angle": overall_loss_angle,
                         "Distance": overall_loss_distance}
     return overall_loss
 
@@ -407,7 +409,7 @@ def evaluate_model_based(
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if isinstance(criterion, RMSPELoss) and is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
-                                                                    is_separted)
+                                                               is_separted)
 
                 loss_list_angle.append(rmspe_angle.item())
                 loss_list_distance.append(rmspe_distance.item())
@@ -420,8 +422,8 @@ def evaluate_model_based(
                 f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
             )
     if is_separted:
-        return {"Overall":  torch.mean(torch.Tensor(loss_list)).item(),
-                "Angle":    torch.mean(torch.Tensor(loss_list_angle)).item(),
+        return {"Overall": torch.mean(torch.Tensor(loss_list)).item(),
+                "Angle": torch.mean(torch.Tensor(loss_list_angle)).item(),
                 "Distance": torch.mean(torch.Tensor(loss_list_distance)).item()}
     else:
         return torch.mean(torch.Tensor(loss_list)).item()
@@ -449,6 +451,45 @@ def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):
             predictions, 0, np.round(np.random.rand(1) * 180, decimals=2) - 90.00
         )
     return predictions
+
+
+def evaluate_crb(dataset: list,
+                 params: SystemModelParams):
+    u_snr = 10 ** (params.snr / 10)
+    if params.field_type.lower() == "far":
+        print("CRB calculation is not supported for Far Field yet.")
+        return None
+    elif params.field_type.lower() == "near":
+        if params.signal_nature.lower() == "non-coherent":
+            angles = []
+            distances = []
+            for i, data in enumerate(dataset):
+                _, labels = data
+                labels = labels[0]
+                angles.extend(*labels[:len(labels) // 2][None, :].detach().numpy())
+                distances.extend(*labels[len(labels) // 2:][None, :].detach().numpy())
+            angles = np.array(angles)
+            distances = np.array(distances)
+            snr_coeff = (1 + 1 / (u_snr * params.N))
+            ucrb_angle = 12 / (2 * u_snr * params.T * np.pi * np.cos(angles) ** 2)
+            ucrb_angle *= (8 * params.N - 11) * (2 * params.N - 1)
+            ucrb_angle /= params.N * (params.N ** 2 - 1) * (params.N ** 2 - 4)
+            ucrb_angle *= snr_coeff
+
+            ucrb_distance = 6 * distances ** 2 * 16 / (u_snr * params.T * np.pi)  # missing /wavelength
+            ucrb_distance *= snr_coeff
+            ucrb_distance /= params.N ** 2 * (params.N ** 2 - 1) * (params.N ** 2 - 4) * np.cos(angles) ** 4
+            num = 15 * distances ** 2
+            num += 15 * distances * (params.N - 1) * np.sin(angles)  # missing *wavelength
+            num += 0.25 * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles) ** 2  # missing * wavelength ** 2
+            ucrb_distance *= num
+
+            return {"Overall": None, "Angle": np.mean(ucrb_angle), "Distance": np.mean(ucrb_distance)}
+        else:
+            print("UCRB calculation for the coherent is not supported yet")
+    else:
+        print("Unrecognized field type.")
+    return
 
 
 def evaluate(
@@ -521,6 +562,13 @@ def evaluate(
             is_separted=True
         )
         res[algorithm] = loss
+    # UCRB
+    try:
+        params = model.system_model.params
+    except Exception as e:
+        print("Couldn't get model params - unable to calculte UCRB")
+    # crb = evaluate_crb(generic_test_dataset, params)
+    # res["CRB"] = crb
     for method, loss_ in res.items():
-        print("{} test loss = {}".format(method.upper(), loss_))
+        print(f"{method.upper() + ' test loss' : <30} = {loss_}")
     return res
