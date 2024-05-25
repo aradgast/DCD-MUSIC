@@ -151,15 +151,27 @@ class RMSPELoss(nn.Module):
         """
         # Calculate RMSPE loss for only DOA
         num_sources = doa_predictions.shape[1]
-        num_samples = doa_predictions.shape[0]
         perm = list(permutations(range(num_sources), num_sources))
+
+        err_angle = (doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_sources, 1)).to(torch.float32))
+        # Calculate error with modulo pi in the range [-pi/2, pi/2]
+        err_angle += torch.pi / 2
+        err_angle %= torch.pi
+        err_angle -= torch.pi / 2
+        rmspe_angle = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
         if distance is None:
-
-            error_ = ((doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_sources, 1)).to(torch.float32)) + torch.pi / 2) % torch.pi - torch.pi / 2
-            rmspe = np.sqrt(1 / num_sources) * torch.linalg.norm(error_, dim=-1)
-            rmspe = torch.min(rmspe, dim=1)[0]
-            result = torch.mean(rmspe, dim=-1)
-
+            rmspe = rmspe_angle
+        else:
+            err_distance = (distance_predictions[:, perm] - torch.tile(distance[:, None, :], (1, num_sources, 1)))
+            rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
+            rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
+        rmspe, min_idx = torch.min(rmspe, dim=-1)
+        result = torch.mean(rmspe)
+        if is_separted:
+            result_angle = torch.mean(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
+            result_distance = torch.mean(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
+            return result, result_angle, result_distance
+        else:
             return result
             # rmspe = []
             # for iter in range(doa_predictions.shape[0]):
@@ -180,21 +192,6 @@ class RMSPELoss(nn.Module):
             # if (result_ != result):
             #     raise ValueError("ERROR in RMSPE loss")
         # Calculate RMSPE loss for both DOA and distance
-        else:
-            err_angle = ((doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_sources, 1)).to(torch.float32)) + torch.pi / 2) % torch.pi - torch.pi / 2
-            rmspe_angle = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
-            err_distance = (distance_predictions[:, perm] - torch.tile(distance[:, None, :], (1, num_sources, 1)))
-            rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
-            rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
-            rmspe, min_idx = torch.min(rmspe, dim=-1)
-
-            result = torch.mean(rmspe)
-            if is_separted:
-                result_angle = torch.mean(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
-                result_distance = torch.mean(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
-                return result, result_angle, result_distance
-            else:
-                return result
             # rmspe = []
             # rmspe_angle = []
             # rmspe_distance = []
