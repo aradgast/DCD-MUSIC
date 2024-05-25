@@ -67,11 +67,11 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 200,
-        "train_test_ratio": 1,
+        "samples_size":  1024 * 32,
+        "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
         "batch_size": 256,
-        "epochs": 100,
+        "epochs": 80,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
         "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
-        "balance_factor": None                 # if None, the balance factor will be set to the default value -> 0.6
+        "balance_factor": 0.0                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
         "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
@@ -107,19 +107,20 @@ if __name__ == "__main__":
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": False,
-        "CREATE_DATA": True,
+        "SAVE_TO_FILE": True,
+        "CREATE_DATA": False,
         "LOAD_MODEL": True,
-        "TRAIN_MODEL": False,
-        "SAVE_MODEL": False,
-        "EVALUATE_MODE": True,
-        "PLOT_RESULTS": True
+        "TRAIN_MODEL": True,
+        "SAVE_MODEL": True,
+        "EVALUATE_MODE": False,
+        "PLOT_RESULTS": False
     }
-
+    start = time.time()
     loss = run_simulation(simulation_commands=simulation_commands,
                           system_model_params=system_model_params,
                           model_config=model_config,
                           training_params=training_params,
                           evaluation_params=evaluation_params,
                           scenario_dict=scenario_dict)
+    print("Total time: ", time.time() - start)
 

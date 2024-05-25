@@ -579,7 +579,10 @@ class CascadedSubspaceNet(SubspaceNet):
         if path is None:
             path = self.state_path
         ref_path = os.path.join(cwd, "data", "weights", "final_models", path)
-        self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
+        try:
+            self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
+        except FileNotFoundError:
+            print(f"Model state not found in {ref_path}")
 
     def extract_angles(self, Rx_tau: torch.Tensor, train_angle_extractor: bool = False):
         """
@@ -875,7 +878,7 @@ class MUSIC(SubspaceMethod):
         self.__define_grid_params()
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
-            self.cell_size = 3
+            self.cell_size = int(self.distances.shape[0] * 0.1)
         elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.1)
             self.cell_size_angle = 3
@@ -935,7 +938,7 @@ class MUSIC(SubspaceMethod):
     def adjust_cell_size(self):
         if self.estimation_params == "range":
             # if self.cell_size > int(self.distances.shape[0] * 0.02):
-            if self.cell_size > 3 or self.cell_size > int(self.distances.shape[0] * 0.02):
+            if self.cell_size > 1 or self.cell_size > int(self.distances.shape[0] * 0.02):
                 # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
                 self.cell_size = int(0.95 * self.cell_size)
                 if self.cell_size % 2 == 0:

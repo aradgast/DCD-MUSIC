@@ -33,7 +33,7 @@ import torch.nn as nn
 import torch
 from itertools import permutations
 from src.utils import *
-
+import time
 BALANCE_FACTOR = 0.6
 
 
@@ -150,6 +150,9 @@ class RMSPELoss(nn.Module):
             None
         """
         # Calculate RMSPE loss for only DOA
+        num_sources = doa_predictions.shape[1]
+        num_samples = doa_predictions.shape[0]
+        perm = list(permutations(range(num_sources), num_sources))
         if distance is None:
             rmspe = []
             for iter in range(doa_predictions.shape[0]):
@@ -167,6 +170,9 @@ class RMSPELoss(nn.Module):
                 rmspe_min = torch.min(rmspe_tensor)
                 rmspe.append(rmspe_min)
             result = torch.mean(torch.stack(rmspe, dim=0))
+            error_ = ((doa_predictions[:, perm] - torch.tile(doa[:, :, None], (1, num_sources))) + torch.pi / 2) % torch.pi - torch.pi / 2
+            rmspe_ = torch.sqrt((1 / num_sources) * torch.linalg.norm(error_, dim=2))
+            res_ = torch.min(rmspe_, dim=1)[0]
             return result
         # Calculate RMSPE loss for both DOA and distance
         else:
@@ -331,6 +337,7 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
     rmspe_list = []
     rmspe_angle_list = []
     rmspe_distance_list = []
+
     if distance_predictions is not None:
         for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))),
                                      list(permutations(distance_predictions, len(distance_predictions)))):
@@ -365,6 +372,7 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
             rmspe_list.append(rmspe)
         # Choose minimal error from all permutations
         res = np.min(rmspe_list)
+
 
     return res
 
@@ -429,13 +437,16 @@ class CartesianLoss(nn.Module):
         coords_pred = torch.stack((pred_x, pred_y), dim=2)
         # need to consider all possible permutations for M sources
         perm = list(permutations(range(M), M))
-        loss = []
-        for batch in range(number_of_samples):
-            loss_per_sample = []
-            for p in perm:
-                loss_per_sample.append(torch.sqrt(torch.sum((coords_true[batch] - coords_pred[batch, p, :]) ** 2, dim=1)).mean())
-            loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
-        return torch.mean(torch.stack(loss, dim=0))
+        # loss = []
+        # for batch in range(number_of_samples):
+        #     loss_per_sample = []
+        #     for p in perm:
+        #         loss_per_sample.append(torch.sqrt(torch.sum((coords_true[batch] - coords_pred[batch, p, :]) ** 2, dim=1)).mean())
+        #     loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
+        loss = torch.min(torch.mean(torch.sqrt(torch.sum((torch.tile(coords_true[:, None, :, :], (1, M, 1, 1)) - coords_pred[:, perm]) ** 2, dim=-1)), dim=-1), dim=-1)
+        # if (loss_[0] != torch.stack(loss, dim=0)).all():
+        #     raise ValueError("Error in Cartesian Loss")
+        return torch.mean(loss[0])
 
 def set_criterions(criterion_name: str, balance_factor: float = 0.6):
     """

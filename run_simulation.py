@@ -69,6 +69,7 @@ def __run_simulation(**kwargs):
 
             # Saving simulation scores to external file
             if save_to_file:
+                orig_stdout = sys.stdout
                 file_path = (
                         simulations_path / "results" / "scores" / Path(dt_string_for_save + f"_{mode}_SNR_{snr}" +".txt")
                 )
@@ -180,8 +181,8 @@ def __run_simulation(**kwargs):
                     try:
                         simulation_parameters.load_model(
                             loading_path=saving_path / "final_models" / get_model_filename(system_model_params, model_config))
-                        if isinstance(simulation_parameters.model, CascadedSubspaceNet):
-                            simulation_parameters.model._load_state_for_angle_extractor()
+                        # if isinstance(simulation_parameters.model, CascadedSubspaceNet):
+                        #     simulation_parameters.model._load_state_for_angle_extractor()
                     except Exception as e:
                         print(e)
                         print("Model not found.")
@@ -253,8 +254,8 @@ def __run_simulation(**kwargs):
                         )
                     )
                     model = simulation_parameters.model
-                    if isinstance(model, CascadedSubspaceNet):
-                        model._load_state_for_angle_extractor()
+                    # if isinstance(model, CascadedSubspaceNet):
+                    #     model._load_state_for_angle_extractor()
                 # print simulation summary details
                 simulation_summary(
                     system_model_params=system_model_params,
@@ -281,6 +282,7 @@ def __run_simulation(**kwargs):
                 res[mode][snr] = loss
                 if save_to_file:
                     sys.stdout.close()
+                    sys.stdout = orig_stdout
     if res is not None:
         if SIMULATION_COMMANDS["PLOT_RESULTS"] == True:
             for signal_nature, snr_dict in res.items():
@@ -350,6 +352,7 @@ def __run_simulation(**kwargs):
                             print(f"\t{method.upper(): <15}: {loss['Overall']}")
             if save_to_file:
                 sys.stdout.close()
+                sys.stdout = orig_stdout
         return res
 
 
