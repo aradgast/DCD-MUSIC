@@ -154,78 +154,96 @@ class RMSPELoss(nn.Module):
         num_samples = doa_predictions.shape[0]
         perm = list(permutations(range(num_sources), num_sources))
         if distance is None:
-            rmspe = []
-            for iter in range(doa_predictions.shape[0]):
-                rmspe_list = []
-                batch_predictions_doa = doa_predictions[iter].to(device)
-                targets_doa = doa[iter].to(device)
-                prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
-                for prediction_doa in prediction_perm_doa:
-                    # Calculate error with modulo pi
-                    error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
-                    # Calculate RMSE over all permutations
-                    rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
-                    rmspe_list.append(rmspe_val)
-                rmspe_tensor = torch.stack(rmspe_list, dim=0)
-                rmspe_min = torch.min(rmspe_tensor)
-                rmspe.append(rmspe_min)
-            result = torch.mean(torch.stack(rmspe, dim=0))
-            error_ = ((doa_predictions[:, perm] - torch.tile(doa[:, :, None], (1, num_sources))) + torch.pi / 2) % torch.pi - torch.pi / 2
-            rmspe_ = torch.sqrt((1 / num_sources) * torch.linalg.norm(error_, dim=2))
-            res_ = torch.min(rmspe_, dim=1)[0]
+
+            error_ = ((doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_sources, 1)).to(torch.float32)) + torch.pi / 2) % torch.pi - torch.pi / 2
+            rmspe = np.sqrt(1 / num_sources) * torch.linalg.norm(error_, dim=-1)
+            rmspe = torch.min(rmspe, dim=1)[0]
+            result = torch.mean(rmspe, dim=-1)
+
             return result
+            # rmspe = []
+            # for iter in range(doa_predictions.shape[0]):
+            #     rmspe_list = []
+            #     batch_predictions_doa = doa_predictions[iter].to(device)
+            #     targets_doa = doa[iter].to(device).to(torch.float32)
+            #     prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
+            #     for prediction_doa in prediction_perm_doa:
+            #         # Calculate error with modulo pi
+            #         error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
+            #         # Calculate RMSE over all permutations
+            #         rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
+            #         rmspe_list.append(rmspe_val)
+            #     rmspe_tensor = torch.stack(rmspe_list, dim=0)
+            #     rmspe_min = torch.min(rmspe_tensor)
+            #     rmspe.append(rmspe_min)
+            # result = torch.mean(torch.stack(rmspe, dim=0))
+            # if (result_ != result):
+            #     raise ValueError("ERROR in RMSPE loss")
         # Calculate RMSPE loss for both DOA and distance
         else:
-            rmspe = []
-            rmspe_angle = []
-            rmspe_distance = []
-            for iter in range(doa_predictions.shape[0]):
-                rmspe_list = []
-                rmspe_angle_list = []
-                rmspe_distance_list = []
+            err_angle = ((doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_sources, 1)).to(torch.float32)) + torch.pi / 2) % torch.pi - torch.pi / 2
+            rmspe_angle = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
+            err_distance = (distance_predictions[:, perm] - torch.tile(distance[:, None, :], (1, num_sources, 1)))
+            rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
+            rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
+            rmspe, min_idx = torch.min(rmspe, dim=-1)
 
-                batch_predictions_doa = doa_predictions[iter].to(device)
-                targets_doa = doa[iter].to(device)
-                prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
-
-                batch_predictions_distance = distance_predictions[iter].to(device)
-                targets_distance = distance[iter].to(device)
-                prediction_perm_distance = permute_prediction(batch_predictions_distance).to(device)
-
-                for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
-                    # Calculate error with modulo pi
-                    angle_err = ((((prediction_doa - targets_doa) + (torch.pi / 2)) % torch.pi) - (torch.pi / 2))
-                    # Calculate error for distance
-                    distance_err = (prediction_distance - targets_distance)
-                    # Calculate RMSE over all permutations for each element
-                    rmspe_angle_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(angle_err)
-                    rmspe_distance_val = (1 / np.sqrt(len(targets_distance))) * torch.linalg.norm(distance_err)
-                    # Sum the rmpse with a balance factor
-                    rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
-                    rmspe_list.append(rmspe_val)
-                    rmspe_angle_list.append(rmspe_angle_val)
-                    rmspe_distance_list.append(rmspe_distance_val)
-                rmspe_tensor = torch.stack(rmspe_list, dim=0)
-                rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
-                rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
-                # Choose minimal error from all permutations
-                if rmspe_tensor.shape[0] == 1:
-                    rmspe_min = torch.min(rmspe_tensor)
-                    rmspe_angle.append(rmspe_angle_tensor.item())
-                    rmspe_distance.append(rmspe_distnace_tensor.item())
-                else:
-                    rmspe_min, min_idx = torch.min(rmspe_tensor, dim=0)
-                    rmspe_angle.append(rmspe_angle_tensor[min_idx])
-                    rmspe_distance.append(rmspe_distnace_tensor[min_idx])
-                rmspe.append(rmspe_min)
-
-            result = torch.mean(torch.stack(rmspe, dim=0))
+            result = torch.mean(rmspe)
             if is_separted:
-                result_angle = torch.mean(torch.Tensor(rmspe_angle), dim=0)
-                result_distance = torch.mean(torch.Tensor(rmspe_distance), dim=0)
+                result_angle = torch.mean(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
+                result_distance = torch.mean(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
                 return result, result_angle, result_distance
             else:
                 return result
+            # rmspe = []
+            # rmspe_angle = []
+            # rmspe_distance = []
+            # for iter in range(doa_predictions.shape[0]):
+            #     rmspe_list = []
+            #     rmspe_angle_list = []
+            #     rmspe_distance_list = []
+            #
+            #     batch_predictions_doa = doa_predictions[iter].to(device)
+            #     targets_doa = doa[iter].to(device)
+            #     prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
+            #
+            #     batch_predictions_distance = distance_predictions[iter].to(device)
+            #     targets_distance = distance[iter].to(device)
+            #     prediction_perm_distance = permute_prediction(batch_predictions_distance).to(device)
+            #
+            #     for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
+            #         # Calculate error with modulo pi
+            #         angle_err = ((((prediction_doa - targets_doa) + (torch.pi / 2)) % torch.pi) - (torch.pi / 2))
+            #         # Calculate error for distance
+            #         distance_err = (prediction_distance - targets_distance)
+            #         # Calculate RMSE over all permutations for each element
+            #         rmspe_angle_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(angle_err)
+            #         rmspe_distance_val = (1 / np.sqrt(len(targets_distance))) * torch.linalg.norm(distance_err)
+            #         # Sum the rmpse with a balance factor
+            #         rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
+            #         rmspe_list.append(rmspe_val)
+            #         rmspe_angle_list.append(rmspe_angle_val)
+            #         rmspe_distance_list.append(rmspe_distance_val)
+            #     rmspe_tensor = torch.stack(rmspe_list, dim=0)
+            #     rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
+            #     rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
+            #     # Choose minimal error from all permutations
+            #     if rmspe_tensor.shape[0] == 1:
+            #         rmspe_min = torch.min(rmspe_tensor)
+            #         rmspe_angle.append(rmspe_angle_tensor.item())
+            #         rmspe_distance.append(rmspe_distnace_tensor.item())
+            #     else:
+            #         rmspe_min, min_idx = torch.min(rmspe_tensor, dim=0)
+            #         rmspe_angle.append(rmspe_angle_tensor[min_idx])
+            #         rmspe_distance.append(rmspe_distnace_tensor[min_idx])
+            #     rmspe.append(rmspe_min)
+            # result = torch.mean(torch.stack(rmspe, dim=0))
+            # if is_separted:
+            #     result_angle = torch.mean(torch.Tensor(rmspe_angle), dim=0)
+            #     result_distance = torch.mean(torch.Tensor(rmspe_distance), dim=0)
+            #     return result, result_angle, result_distance
+            # else:
+            #     return result
 
     def adjust_balance_factor(self, loss=None):
         # if self.balance_factor > 0.4:
@@ -437,17 +455,18 @@ class CartesianLoss(nn.Module):
         coords_pred = torch.stack((pred_x, pred_y), dim=2)
         # need to consider all possible permutations for M sources
         perm = list(permutations(range(M), M))
+
+        loss = torch.min(torch.mean(torch.sqrt(torch.sum((torch.tile(coords_true[:, None, :, :], (1, M, 1, 1)) - coords_pred[:, perm]) ** 2, dim=-1)), dim=-1), dim=-1)
+
+        return torch.mean(loss[0])
         # loss = []
         # for batch in range(number_of_samples):
         #     loss_per_sample = []
         #     for p in perm:
         #         loss_per_sample.append(torch.sqrt(torch.sum((coords_true[batch] - coords_pred[batch, p, :]) ** 2, dim=1)).mean())
         #     loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
-        loss = torch.min(torch.mean(torch.sqrt(torch.sum((torch.tile(coords_true[:, None, :, :], (1, M, 1, 1)) - coords_pred[:, perm]) ** 2, dim=-1)), dim=-1), dim=-1)
         # if (loss_[0] != torch.stack(loss, dim=0)).all():
         #     raise ValueError("Error in Cartesian Loss")
-        return torch.mean(loss[0])
-
 def set_criterions(criterion_name: str, balance_factor: float = 0.6):
     """
     Set the loss criteria based on the criterion name.
