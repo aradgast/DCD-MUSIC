@@ -193,12 +193,12 @@ def autocorrelation_matrix(X: torch.Tensor, lag: int):
         torch.Tensor: The autocorrelation matrix for the given lag.
 
     """
-    meu = torch.mean(X, dim=1).reshape(-1, 1).to(device)
-    center_x = X.to(device) - meu
-    x1 = center_x[:, :center_x.shape[1] - lag].to(device).to(torch.complex128)
-    x2 = torch.conj(center_x[:, lag:]).T.to(device).to(torch.complex128)
+    meu = torch.mean(X, dim=1).reshape(-1, 1).to("cpu")
+    center_x = X.to("cpu") - meu
+    x1 = center_x[:, :center_x.shape[1] - lag].to("cpu").to(torch.complex128)
+    x2 = torch.conj(center_x[:, lag:]).T.to("cpu").to(torch.complex128)
     Rx_lag = torch.matmul(x1, x2) / (center_x.shape[-1] - lag - 1)
-    Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), 0)
+    Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), 0).to("cpu")
     return Rx_lag
 
 

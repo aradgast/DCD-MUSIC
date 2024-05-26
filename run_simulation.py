@@ -236,10 +236,10 @@ def __run_simulation(**kwargs):
 
                 # Generate DataLoader objects
                 model_test_dataset = torch.utils.data.DataLoader(
-                    test_dataset, batch_size=1, shuffle=False, drop_last=False
+                    test_dataset, batch_size=32, shuffle=False, drop_last=True
                 )
                 generic_test_dataset = torch.utils.data.DataLoader(
-                    generic_test_dataset, batch_size=1, shuffle=False, drop_last=False
+                    generic_test_dataset, batch_size=32, shuffle=False, drop_last=True
                 )
                 # Load pre-trained model
                 if not train_model:

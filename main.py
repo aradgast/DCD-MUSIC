@@ -45,8 +45,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [-10, -5, 0, 5, 10],
-        "non-coherent": [-10, -5, 0, 5, 10],
+        "coherent": [],
+        "non-coherent": [5],
     }
 
     system_model_params = {
@@ -61,19 +61,19 @@ if __name__ == "__main__":
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "CascadedSubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
-        "diff_method": "music_1D",                  # esprit, music_1D, music_2D
+        "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
+        "diff_method": "esprit",                  # esprit, music_1D, music_2D
         "tau": 8,
-        "field_type": "Near"                        # Near, Far
+        "field_type": "Far"                        # Near, Far
     }
     training_params = {
-        "samples_size":  1024 * 32,
-        "train_test_ratio": .1,
-        "training_objective": "angle, range",       # angle, range
-        "batch_size": 256,
-        "epochs": 80,
+        "samples_size":  32,
+        "train_test_ratio": 1,
+        "training_objective": "angle",       # angle, range
+        "batch_size": 16,
+        "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
-        "learning_rate": 0.0001,
+        "learning_rate": 0.00001,
         "weight_decay": 1e-9,
         "step_size": 70,
         "gamma": 0.5,
@@ -81,11 +81,11 @@ if __name__ == "__main__":
         "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-        "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
-        "balance_factor": 0.0                 # if None, the balance factor will be set to the default value -> 0.6
+        "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
+        "balance_factor": 1.0                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
-        "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
+        "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
         "balance_factor": training_params["balance_factor"],
         "augmented_methods": [
             # "mvdr",
@@ -103,16 +103,16 @@ if __name__ == "__main__":
             # "sps-esprit",
             # "sps-music_1d"
             # "bb-music",
-            "music_2D"
+            # "music_2D"
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": True,
+        "SAVE_TO_FILE": False,
         "CREATE_DATA": False,
-        "LOAD_MODEL": True,
-        "TRAIN_MODEL": True,
-        "SAVE_MODEL": True,
-        "EVALUATE_MODE": False,
+        "LOAD_MODEL": False,
+        "TRAIN_MODEL": False,
+        "SAVE_MODEL": False,
+        "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }
     start = time.time()

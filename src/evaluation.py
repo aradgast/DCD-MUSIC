@@ -38,6 +38,7 @@ from src.criterions import RMSPE, MSPE
 from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
 from src.utils import *
 from src.models import SubspaceNet, MUSIC, RootMusic, Esprit_torch, CascadedSubspaceNet
+from src.models import MLE
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel, SystemModelParams
 
@@ -159,13 +160,13 @@ def evaluate_dnn_model(
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     if not (isinstance(criterion, nn.BCELoss) or isinstance(criterion, CartesianLoss)):
-                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
+                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE.to(device), is_separted)
                         if is_separted:
                             eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
                             overall_loss_angle += eval_loss_angle.item() / len(dataset)
                             overall_loss_distance += eval_loss_distance.item() / len(dataset)
                     else:
-                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
+                        eval_loss = criterion(DOA_predictions, DOA.to(device), RANGE_predictions, RANGE.to(device))
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
             else:
@@ -491,6 +492,33 @@ def evaluate_crb(dataset: list,
         print("Unrecognized field type.")
     return
 
+def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
+    """
+    Evaluate the Maximum Likelihood Estimation (MLE) algorithm on a given dataset.
+
+    Args:
+        dataset (list): The evaluation dataset.
+        system_model (SystemModel): The system model for the MLE algorithm.
+
+    Returns:
+        float: The average evaluation loss.
+    """
+    # initialize mle instance
+    mle = MLE(system_model)
+    # Initialize parameters for evaluation
+    loss_list = []
+    for i, data in enumerate(dataset):
+        X, labels = data
+        Rx = calculate_covariance_tensor(X, method="simple").to(device)
+        angles = labels[:, :labels.shape[-1] // 2].to(device)
+        distances = labels[:, labels.shape[-1] // 2:].to(device)
+        # Apply MLE algorithm
+        pred_angle, pred_distance = mle(Rx)
+        # Calculate loss criterion
+        loss = criterion(pred_angle.to(device), angles, pred_distance.to(device), distances)
+        loss_list.append(loss.item())
+    return {"Overall": np.mean(loss_list)}
+
 
 def evaluate(
         model: nn.Module,
@@ -569,6 +597,9 @@ def evaluate(
         print("Couldn't get model params - unable to calculte UCRB")
     # crb = evaluate_crb(generic_test_dataset, params)
     # res["CRB"] = crb
+    # MLE
+    mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
+    res["MLE"] = mle_loss
     for method, loss_ in res.items():
         print(f"{method.upper() + ' test loss' : <30} = {loss_}")
     return res

@@ -325,7 +325,7 @@ class TrainingParams(object):
             train_dataset, batch_size=self.batch_size, shuffle=True, drop_last=False
         )
         self.valid_dataset = torch.utils.data.DataLoader(
-            valid_dataset, batch_size=1, shuffle=False, drop_last=False
+            valid_dataset, batch_size=32, shuffle=False, drop_last=True
         )
         return self
 

@@ -162,7 +162,7 @@ class RMSPELoss(nn.Module):
         if distance is None:
             rmspe = rmspe_angle
         else:
-            err_distance = (distance_predictions[:, perm] - torch.tile(distance[:, None, :], (1, num_sources, 1)))
+            err_distance = (distance_predictions[:, perm].to(device) - torch.tile(distance[:, None, :], (1, num_sources, 1)).to(device))
             rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
         rmspe, min_idx = torch.min(rmspe, dim=-1)

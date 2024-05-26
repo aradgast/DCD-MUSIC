@@ -29,9 +29,9 @@ import scipy
 # Constants
 R2D = 180 / np.pi
 D2R = 1 / R2D
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = "cpu"
-
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
+print("Running on device: ", device)
 
 # Functions
 # def sum_of_diag(matrix: np.ndarray) -> list:
@@ -170,10 +170,11 @@ def set_unified_seed(seed: int = 42):
     """
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.use_deterministic_algorithms(True)
+    torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    # torch.use_deterministic_algorithms(True)
 
 
 # def get_k_angles(grid_size: float, k: int, prediction: torch.Tensor) -> torch.Tensor:
@@ -269,7 +270,7 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
     if not isinstance(Kx, torch.Tensor):
         Kx = torch.tensor(Kx)
 
-    Kx_garm = torch.matmul(torch.transpose(Kx.conj(), 1, 2), Kx)
+    Kx_garm = torch.matmul(torch.transpose(Kx.conj(), 1, 2).to("cpu"), Kx.to("cpu")).to(device)
     eps_addition = (eps * torch.diag(torch.ones(Kx_garm.shape[-1]))).to(device)
     Kx_Out = Kx_garm + eps_addition
     return Kx_Out
@@ -277,7 +278,11 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
 
 def calculate_covariance_tensor(sampels: torch.Tensor, method: str = "simple"):
     if method in ["simple", "sample"]:
-        Rx = torch.cov(sampels)[None, :, :]
+        if sampels.dim() == 2:
+            Rx = torch.cov(sampels)[None, :, :]
+        elif sampels.dim() == 3:
+            Rx = torch.stack([torch.cov(sampels[i, :, :]) for i in range(sampels.shape[0])])
+
     elif method == "sps":
         Rx = _spatial_smoothing_covariance(sampels)[None, :, :]
     else:
