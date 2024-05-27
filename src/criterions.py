@@ -452,9 +452,12 @@ class CartesianLoss(nn.Module):
         coords_pred = torch.stack((pred_x, pred_y), dim=2)
         # need to consider all possible permutations for M sources
         perm = list(permutations(range(M), M))
+        perm = torch.tensor(perm, dtype=torch.int64).to(device)
 
-        loss = torch.min(torch.mean(torch.sqrt(torch.sum((torch.tile(coords_true[:, None, :, :], (1, M, 1, 1)) - coords_pred[:, perm]) ** 2, dim=-1)), dim=-1), dim=-1)
-
+        error = torch.tile(coords_true[:, None, :, :], (1, M, 1, 1)) - coords_pred[:, perm]
+        loss = torch.sqrt(torch.sum(error ** 2, dim=-1))
+        loss = torch.mean(loss, dim=-1)
+        loss = torch.min(loss, dim=-1)
         return torch.mean(loss[0])
         # loss = []
         # for batch in range(number_of_samples):

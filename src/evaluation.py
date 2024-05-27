@@ -598,8 +598,8 @@ def evaluate(
     # crb = evaluate_crb(generic_test_dataset, params)
     # res["CRB"] = crb
     # MLE
-    mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
-    res["MLE"] = mle_loss
+    # mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
+    # res["MLE"] = mle_loss
     for method, loss_ in res.items():
         print(f"{method.upper() + ' test loss' : <30} = {loss_}")
     return res
