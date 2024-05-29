@@ -111,21 +111,21 @@ def create_dataset(
                 )[0],
                 dtype=torch.complex128,
             )
-            if model_type.endswith("SubspaceNet"):
-                # Generate auto-correlation tensor
-                X_model = create_autocorrelation_tensor(X, tau).to(torch.float)
-            elif model_type.startswith("DeepCNN") and phase.startswith("test"):
-                # Generate 3d covariance parameters tensor
-                X_model = create_cov_tensor(X)
-            else:
-                X_model = X
+            # if model_type.endswith("SubspaceNet"):
+            #     # Generate auto-correlation tensor
+            #     X_model = create_autocorrelation_tensor(X, tau).to(torch.float)
+            # elif model_type.startswith("DeepCNN") and phase.startswith("test"):
+            #     # Generate 3d covariance parameters tensor
+            #     X_model = create_cov_tensor(X)
+            # else:
+            #     X_model = X
             # Ground-truth creation
             Y = torch.tensor(samples_model.doa, dtype=torch.float64)
             if system_model_params.field_type.endswith("Near"):
                 Y1 = torch.tensor(samples_model.distances, dtype=torch.float64)
                 Y = torch.cat((Y, Y1), dim=0)
             generic_dataset.append((X, Y))
-            model_dataset.append((X_model, Y))
+            # model_dataset.append((X_model, Y))
 
     if save_datasets:
         model_dataset_filename = f"{model_type}_DataSet" + set_dataset_filename(
@@ -138,7 +138,7 @@ def create_dataset(
             system_model_params, samples_size
         )
 
-        torch.save(obj=model_dataset, f=datasets_path / phase / model_dataset_filename)
+        # torch.save(obj=model_dataset, f=datasets_path / phase / model_dataset_filename)
         torch.save(
             obj=generic_dataset, f=datasets_path / phase / generic_dataset_filename
         )
@@ -147,7 +147,7 @@ def create_dataset(
                 obj=samples_model, f=datasets_path / phase / samples_model_filename
             )
 
-    return model_dataset, generic_dataset, samples_model
+    return generic_dataset, samples_model # model_dataset,
 
 
 # def read_data(Data_path: str) -> torch.Tensor:

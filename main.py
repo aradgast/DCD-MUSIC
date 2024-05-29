@@ -45,8 +45,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [-10, -5, 0, 5, 10],
-        "non-coherent": [-10, -5, 0, 5, 10],
+        "coherent": [],
+        "non-coherent": [10],
     }
 
     system_model_params = {
@@ -54,22 +54,22 @@ if __name__ == "__main__":
         "M": 2,                                     # number of sources
         "T": 100,                                   # number of snapshots
         "snr": None,                                # if defined, values in scenario_dict will be ignored
-        "field_type": "Near",                       # Near, Far
+        "field_type": "Far",                       # Near, Far
         "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
         "eta": 0,                                   # steering vector error
         "bias": 0,
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC
+        "model_type": "TransMUSIC",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC, TransMUSIC
         "diff_method": "music_2D",                  # esprit, music_1D, music_2D
         "tau": 8,
-        "field_type": "Near"                        # Near, Far
+        "field_type": "Far"                        # Near, Far
     }
     training_params = {
-        "samples_size":  1024 * 32,
-        "train_test_ratio": .1,
-        "training_objective": "angle, range",       # angle, range
+        "samples_size":  32,
+        "train_test_ratio": 1,
+        "training_objective": "angle",       # angle, range
         "batch_size": 256,
         "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
@@ -107,12 +107,12 @@ if __name__ == "__main__":
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": True,
-        "CREATE_DATA": False,
+        "SAVE_TO_FILE": False,
+        "CREATE_DATA": True,
         "LOAD_MODEL": False,
-        "TRAIN_MODEL": True,
-        "SAVE_MODEL": True,
-        "EVALUATE_MODE": False,
+        "TRAIN_MODEL": False,
+        "SAVE_MODEL": False,
+        "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }
     start = time.time()

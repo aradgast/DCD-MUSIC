@@ -32,13 +32,24 @@ import torch
 # Imports
 import torch.nn as nn
 from matplotlib import pyplot as plt
-from src.utils import device
+from src.utils import *
+
 from src.criterions import RMSPELoss, MSPELoss, RMSELoss, CartesianLoss
 from src.criterions import RMSPE, MSPE
-from src.methods import MUSIC, RootMUSIC, Esprit, MVDR, MUSIC_2D
-from src.utils import *
-from src.models import SubspaceNet, MUSIC, RootMusic, Esprit_torch, CascadedSubspaceNet
-from src.models import MLE
+# import methods
+from src.methods import MVDR
+from src.methods_pack.music import MUSIC
+from src.methods_pack.root_music import RootMusic
+from src.methods_pack.esprit import ESPRIT
+from src.methods_pack.mle import MLE
+# import models
+from src.models_pack.cascaded_subspacenet import CascadedSubspaceNet, SubspaceNet
+from src.models_pack.deep_cnn import DeepCNN
+from src.models_pack.deep_root_music import DeepRootMUSIC
+from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
+
+
+
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel, SystemModelParams
 
@@ -62,7 +73,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower() == "root_music":
         return RootMusic(system_model)
     if method_name.lower() == "esprit":
-        return Esprit_torch(system_model)
+        return ESPRIT(system_model)
 
 
 def evaluate_dnn_model(
@@ -103,6 +114,7 @@ def evaluate_dnn_model(
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
+            X = model.pre_processing(X)
             if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
                 DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                 RANGE.to(device)
@@ -233,7 +245,7 @@ def evaluate_augmented_model(
     methods = {
         "mvdr": MVDR(system_model),
         "music": MUSIC(system_model, estimation_parameter="angle"),
-        "esprit": Esprit_torch(system_model),
+        "esprit": ESPRIT(system_model),
         "r-music": RootMUSIC(system_model),
         "music_2D": MUSIC(system_model, estimation_parameter="angle, range")
     }
@@ -558,7 +570,7 @@ def evaluate(
     # Evaluate SubspaceNet + differentiable algorithm performances
     model_test_loss = evaluate_dnn_model(
         model=model,
-        dataset=model_test_dataset,
+        dataset=generic_test_dataset,
         criterion=criterion,
         plot_spec=plot_spec,
         figures=figures,

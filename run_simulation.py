@@ -135,7 +135,8 @@ def __run_simulation(**kwargs):
                 print("Creating Data...")
                 if create_training_data:
                     # Generate training dataset
-                    train_dataset, _, _ = create_dataset(
+                    # train_dataset, _, _ = create_dataset(
+                    train_dataset, _ = create_dataset(
                         system_model_params=system_model_params,
                         samples_size=samples_size,
                         model_type=model_config.model_type,
@@ -148,7 +149,8 @@ def __run_simulation(**kwargs):
                     )
                 if create_testing_data:
                     # Generate test dataset
-                    test_dataset, generic_test_dataset, samples_model = create_dataset(
+                    # test_dataset, generic_test_dataset, samples_model = create_dataset(
+                    generic_test_dataset, samples_model = create_dataset(
                         system_model_params=system_model_params,
                         samples_size=int(train_test_ratio * samples_size),
                         model_type=model_config.model_type,
@@ -235,9 +237,9 @@ def __run_simulation(**kwargs):
                     )
 
                 # Generate DataLoader objects
-                model_test_dataset = torch.utils.data.DataLoader(
-                    test_dataset, batch_size=32, shuffle=False, drop_last=True
-                )
+                # model_test_dataset = torch.utils.data.DataLoader(
+                #     test_dataset, batch_size=32, shuffle=False, drop_last=True
+                # )
                 generic_test_dataset = torch.utils.data.DataLoader(
                     generic_test_dataset, batch_size=32, shuffle=False, drop_last=True
                 )
@@ -267,7 +269,7 @@ def __run_simulation(**kwargs):
                 loss = evaluate(
                     model=model,
                     model_type=model_config.model_type,
-                    model_test_dataset=model_test_dataset,
+                    model_test_dataset=generic_test_dataset,
                     generic_test_dataset=generic_test_dataset,
                     criterion=criterion,
                     subspace_criterion=subspace_criterion,
