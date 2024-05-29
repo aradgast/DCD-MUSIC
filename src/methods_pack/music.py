@@ -46,7 +46,7 @@ class MUSIC(SubspaceMethod):
         self.noise_subspace = None
         # self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
 
-    def forward(self, x:torch.Tensor, known_angles=None, known_distances=None, is_soft: bool = True):
+    def forward(self, cov:torch.Tensor, known_angles=None, known_distances=None, is_soft: bool = True):
         """
 
         Parameters
@@ -125,12 +125,12 @@ class MUSIC(SubspaceMethod):
                                                     BatchSizex(length_search_grid_angle)x(length_search_grid_distance)
         """
         if self.system_model.params.field_type.startswith("Far"):
-            var1 = torch.einsum("an, bnm -> bam", self.search_grid.conj().transpose(0, 1), noise_subspace)
+            var1 = torch.einsum("an, bnm -> bam", self.search_grid.conj().transpose(0, 1)[:, :noise_subspace.shape[1]], noise_subspace)
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
                 var1 = torch.einsum("adk, bkl -> badl",
-                                    torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1),
+                                    torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1)[:, :, :noise_subspace.shape[1]],
                                     noise_subspace)
                 # get the norm value for each element in the batch.
                 inverse_spectrum = torch.norm(var1, dim=-1) ** 2

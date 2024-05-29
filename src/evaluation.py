@@ -65,11 +65,11 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     """
     if method_name.lower().endswith("music_1d"):
         return MUSIC(system_model=system_model, estimation_parameter="angle")
-    if method_name.lower() == "music_2d":
+    if method_name.lower().endswith("music_2d"):
         return MUSIC(system_model=system_model, estimation_parameter="angle, range")
     if method_name.lower() == "root_music":
         return RootMusic(system_model)
-    if method_name.lower() == "esprit":
+    if method_name.lower().endswith("esprit"):
         return ESPRIT(system_model)
 
 def get_model(model_name: str, params: dict, system_model: SystemModel):
@@ -365,7 +365,7 @@ def evaluate_model_based(
 
     for i, data in enumerate(dataset):
         X, doa = data
-        X = X[0]
+        # X = X[0]
         # Root-MUSIC algorithms
         if algorithm.endswith("r-music"):
             root_music = RootMusic(system_model)
@@ -413,7 +413,7 @@ def evaluate_model_based(
 
         # ESPRIT algorithms
         elif "esprit" in algorithm:
-            esprit = ESPRIT(system_model)
+            # esprit = ESPRIT(system_model)
             if algorithm.startswith("sps"):
                 # Spatial smoothing
                 Rx = model_based.pre_processing(X, mode="sps")
@@ -446,11 +446,14 @@ def evaluate_model_based(
                     figures=figures,
                 )
         elif algorithm.endswith("2D"):
-            y = doa[0]
-            doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
+            y = doa
+            doa, distances = y[:, :y.shape[-1] // 2], y[:, y.shape[-1] // 2:]
             doa = doa.to(device)
             distances = distances.to(device)
-            Rx = model_based.pre_processing(X, mode="sample")
+            if algorithm.startswith("sps"):
+                Rx = model_based.pre_processing(X, mode="sps")
+            else:
+                Rx = model_based.pre_processing(X, mode="sample")
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if isinstance(criterion, RMSPELoss) and is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
