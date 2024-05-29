@@ -46,7 +46,7 @@ class MUSIC(SubspaceMethod):
         self.noise_subspace = None
         # self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
 
-    def forward(self, cov, known_angles=None, known_distances=None, is_soft: bool = True):
+    def forward(self, x:torch.Tensor, known_angles=None, known_distances=None, is_soft: bool = True):
         """
 
         Parameters
@@ -77,7 +77,7 @@ class MUSIC(SubspaceMethod):
                     return params
         _, Un = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
         # self.noise_subspace = Un.cpu().detach().numpy()
-        inverse_spectrum = self.get_inverse_spectrum(Un)
+        inverse_spectrum = self.get_inverse_spectrum(Un.to(device)).to(device)
         self.music_spectrum = 1 / inverse_spectrum
         #####
         # self.music_spectrum = torch.div(self.music_spectrum, torch.max(torch.max(self.music_spectrum, dim=2).values, dim=1).values.unsqueeze(1).unsqueeze(2))

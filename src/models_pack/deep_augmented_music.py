@@ -1,3 +1,11 @@
+"""
+DA-MUSIC: Deep Augmented MUSIC model-based deep learning algorithm as described in
+        [3] J. P. Merkofer, G. Revach, N. Shlezinger, and R. J. van Sloun, “Deep
+        augmented MUSIC algorithm for data-driven DoA estimation,” in IEEE
+        International Conference on Acoustics, Speech and Signal Processing
+        (ICASSP), 2022, pp. 3598-3602."
+"""
+
 import torch
 import torch.nn as nn
 

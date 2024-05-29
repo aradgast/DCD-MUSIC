@@ -20,20 +20,9 @@
 
 """
 # Imports
-import sys
-import torch
 import os
-import matplotlib.pyplot as plt
 import warnings
-from src.system_model import SystemModelParams
-from src.signal_creation import *
-from src.data_handler import *
-from src.criterions import set_criterions
 from src.training import *
-from src.evaluation import evaluate
-from src.plotting import initialize_figures
-from pathlib import Path
-from src.models import ModelGenerator
 from run_simulation import run_simulation
 
 # Initialization
@@ -45,8 +34,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [],
-        "non-coherent": [10],
+        "coherent": [-10, 0, 10],
+        "non-coherent": [-10, 0, 10],
     }
 
     system_model_params = {
@@ -54,7 +43,7 @@ if __name__ == "__main__":
         "M": 2,                                     # number of sources
         "T": 100,                                   # number of snapshots
         "snr": None,                                # if defined, values in scenario_dict will be ignored
-        "field_type": "Far",                       # Near, Far
+        "field_type": "Near",                       # Near, Far
         "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
         "eta": 0,                                   # steering vector error
         "bias": 0,
@@ -62,16 +51,16 @@ if __name__ == "__main__":
     }
     model_config = {
         "model_type": "TransMUSIC",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC, TransMUSIC
-        "diff_method": "music_2D",                  # esprit, music_1D, music_2D
+        "diff_method": "esprit",                  # esprit, music_1D, music_2D
         "tau": 8,
-        "field_type": "Far"                        # Near, Far
+        "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size":  32,
-        "train_test_ratio": 1,
-        "training_objective": "angle",       # angle, range
+        "samples_size": 1024 * 64,
+        "train_test_ratio": .05,
+        "training_objective": "angle, range",       # angle, range
         "batch_size": 256,
-        "epochs": 150,
+        "epochs": 100,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -87,6 +76,16 @@ if __name__ == "__main__":
     evaluation_params = {
         "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
         "balance_factor": training_params["balance_factor"],
+        "models":
+                {
+                # "TransMUSIC": {},
+                # "SubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
+                #                 "diff_method": model_config["diff_method"], "field_type": model_config["field_type"]},
+                # "CascadedSubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
+                #                         "diff_method": model_config["diff_method"], "field_type": model_config["field_type"]},
+
+
+                },
         "augmented_methods": [
             # "mvdr",
             # "r-music",
@@ -107,12 +106,12 @@ if __name__ == "__main__":
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": False,
-        "CREATE_DATA": True,
-        "LOAD_MODEL": False,
-        "TRAIN_MODEL": False,
-        "SAVE_MODEL": False,
-        "EVALUATE_MODE": True,
+        "SAVE_TO_FILE": True,
+        "CREATE_DATA": False,
+        "LOAD_MODEL": True,
+        "TRAIN_MODEL": True,
+        "SAVE_MODEL": True,
+        "EVALUATE_MODE": False,
         "PLOT_RESULTS": False
     }
     start = time.time()

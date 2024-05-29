@@ -1,3 +1,10 @@
+"""
+DeepCNN: Deep learning algorithm as described in:
+        [4] G. K. Papageorgiou, M. Sellathurai, and Y. C. Eldar, “Deep networks
+        for direction-of-arrival estimation in low SNR,” IEEE Trans. Signal
+        Process., vol. 69, pp. 3714-3729, 2021.
+"""
+
 import torch
 import torch.nn as nn
 

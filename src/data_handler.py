@@ -29,8 +29,6 @@ Attributes:
 """
 
 # Imports
-import torch
-import numpy as np
 import itertools
 from tqdm import tqdm
 from src.signal_creation import Samples
@@ -128,9 +126,9 @@ def create_dataset(
             # model_dataset.append((X_model, Y))
 
     if save_datasets:
-        model_dataset_filename = f"{model_type}_DataSet" + set_dataset_filename(
-            system_model_params, samples_size
-        )
+        # model_dataset_filename = f"{model_type}_DataSet" + set_dataset_filename(
+        #     system_model_params, samples_size
+        # )
         generic_dataset_filename = f"Generic_DataSet" + set_dataset_filename(
             system_model_params, samples_size
         )
@@ -281,9 +279,9 @@ def load_datasets(
     # Define test set size
     test_samples_size = int(train_test_ratio * samples_size)
     # Generate datasets filenames
-    model_dataset_filename = f"{model_type}_DataSet" + set_dataset_filename(
-        system_model_params, test_samples_size
-    )
+    # model_dataset_filename = f"{model_type}_DataSet" + set_dataset_filename(
+    #     system_model_params, test_samples_size
+    # )
     generic_dataset_filename = f"Generic_DataSet" + set_dataset_filename(
         system_model_params, test_samples_size
     )
@@ -295,7 +293,7 @@ def load_datasets(
     if is_training:
         # Load training dataset
         try:
-            model_trainingset_filename = f"{model_type}_DataSet" + set_dataset_filename(
+            model_trainingset_filename = f"Generic_DataSet" + set_dataset_filename(
                 system_model_params, samples_size
             )
             train_dataset = read_data(
@@ -305,11 +303,11 @@ def load_datasets(
         except:
             raise Exception("load_datasets: Training dataset doesn't exist")
     # Load test dataset
-    try:
-        test_dataset = read_data(datasets_path / "test" / model_dataset_filename)
-        datasets.append(test_dataset)
-    except:
-        raise Exception("load_datasets: Test dataset doesn't exist")
+    # try:
+    #     test_dataset = read_data(datasets_path / "test" / model_dataset_filename)
+    #     datasets.append(test_dataset)
+    # except:
+    #     raise Exception("load_datasets: Test dataset doesn't exist")
     # Load generic test dataset
     try:
         generic_test_dataset = read_data(

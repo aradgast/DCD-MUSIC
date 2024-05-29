@@ -1,3 +1,15 @@
+"""
+Inspired by the paper:
+J. Ji, W. Mao, F. Xi and S. Chen,
+"TransMUSIC: A Transformer-Aided Subspace Method for DOA Estimation with Low-Resolution ADCS,"
+ ICASSP 2024 - 2024 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP), Seoul, Korea,
+ Republic of, 2024, pp. 8576-8580, doi: 10.1109/ICASSP48485.2024.10447483. keywords:
+  {Direction-of-arrival estimation;Quantization (signal);Acoustic distortion;Simulation;Estimation;Signal processing algorithms
+  ;Transformers;DOA estimation;Transformer;low-resolution ADCs;quantization},
+
+
+"""
+
 import torch
 import torch.nn as nn
 import math
@@ -69,20 +81,28 @@ class TransMUSIC(nn.Module):
                                              norm=None).to(device)
 
         self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
-
+        if self.estimation_params == "angle":
+            input_dim = self.music.angels.shape[0]
+            output_dim = self.params.M
+        elif self.estimation_params == "angle, range":
+            input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
+            output_dim = self.params.M * 2
+            self.activation = nn.LeakyReLU()
+        else:
+            raise ValueError(f"TransMUSIC.__init__: unrecognized estimation parameter {self.estimation_params}")
         self.output = nn.Sequential(
 
-            nn.Linear(in_features=360, out_features=self.N * 2),
+            nn.Linear(in_features=input_dim, out_features=self.N * 2),
             nn.ReLU(inplace=False),
             nn.Linear(in_features=self.N * 2, out_features=self.N * 2),
             nn.ReLU(inplace=False),
             nn.Linear(in_features=self.N * 2, out_features=self.N * 2),
             nn.ReLU(inplace=False),
-            nn.Linear(in_features=self.N * 2, out_features=6)
-        ).to(device)
+            nn.Linear(in_features=self.N * 2, out_features=output_dim)
+            ).to(device)
 
         self.source_number_estimator = nn.Sequential(
-            nn.Linear(in_features=128, out_features=128),
+            nn.Linear(in_features=2 * self.N ** 2, out_features=128),
             nn.ReLU(inplace=False),
             nn.Linear(in_features=128, out_features=128),
             nn.ReLU(inplace=False),
@@ -90,12 +110,13 @@ class TransMUSIC(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(in_features=64, out_features=32),
             nn.ReLU(inplace=False),
-            nn.Linear(in_features=32, out_features=4)
+            nn.Linear(in_features=32, out_features=4),
+            nn.Softmax(dim=1)
         ).to(device)
 
     def forward(self, x, mode: str = "subspace_train"):
         N = self.N
-
+        x = self.pre_processing(x)
         # The input X is [size, 16200] batch_ Size=16, input dimension N*2, sequence length T
         size = x.shape[0]  # Get batch size
         if mode == "subspace_train":
@@ -105,7 +126,12 @@ class TransMUSIC(nn.Module):
             Un = torch.complex(x4[:, :N, :].to(device), x4[:, N:, :].to(device)).to(torch.complex32) # feature vector  [size, N, N]
             spectrum = self.music.get_music_spectrum_from_noise_subspace(Un).to(device)  # Calculate spectrum
             x7 = spectrum.float().to(device)
-            predictions = self.output(x7.to(device)).to(device)
+            x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
+            predictions = self.output(x7).to(device)
+            if self.estimation_params == "angle, range":
+                angles, distances = predictions[:, :predictions.shape[1] // 2], predictions[:, predictions.shape[1] // 2:]
+                distances = self.activation(distances).to(device)
+                predictions = torch.stack([angles, distances], dim=1).to(device)
             with torch.no_grad():
                 x9 = x3.detach()
                 num_sources_est = self.source_number_estimator(x9)
@@ -143,3 +169,15 @@ class TransMUSIC(nn.Module):
         """
         x = torch.concatenate([x.real, x.imag], dim=1)
         return x
+
+    def get_model_file_name(self):
+        return f"TransMUSIC_" + \
+            f"N={self.N}_" + \
+            f"M={self.system_model.params.M}_" + \
+            f"{self.system_model.params.signal_type}_" + \
+            f"SNR={self.system_model.params.snr}_" + \
+            f"{self.system_model.params.field_type}_field_" + \
+            f"{self.system_model.params.signal_nature}"
+
+    def get_model_name(self):
+        return "TransMUSIC"

@@ -27,11 +27,11 @@ evaluate: Wrapper function for model and algorithm evaluations.
 
 
 """
+import os
+import time
 import numpy as np
-import torch
 # Imports
 import torch.nn as nn
-from matplotlib import pyplot as plt
 from src.utils import *
 
 from src.criterions import RMSPELoss, MSPELoss, RMSELoss, CartesianLoss
@@ -43,11 +43,8 @@ from src.methods_pack.root_music import RootMusic
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
 # import models
-from src.models_pack.cascaded_subspacenet import CascadedSubspaceNet, SubspaceNet
-from src.models_pack.deep_cnn import DeepCNN
-from src.models_pack.deep_root_music import DeepRootMUSIC
-from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
-
+from src.models import (SubspaceNet, CascadedSubspaceNet, DeepAugmentedMUSIC,
+                        DeepCNN, DeepRootMUSIC, TransMUSIC)
 
 
 from src.plotting import plot_spectrum
@@ -75,9 +72,30 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower() == "esprit":
         return ESPRIT(system_model)
 
+def get_model(model_name: str, params: dict, system_model: SystemModel):
+    if model_name.lower() == "subspacenet":
+        model = SubspaceNet(tau=params["tau"], N=params["N"], diff_method=params["diff_method"],
+                            system_model=system_model, field_type=params["field_type"])
+    elif model_name.lower() == "cascadedsubspacenet":
+        model = CascadedSubspaceNet(tau=params["tau"], N=params["N"],
+                                    system_model=system_model)
+    elif model_name.lower() == "deepaugmentedmusic":
+        model = DeepAugmentedMUSIC(N=params["N"], T=params["T"], M=params["M"])
+    elif model_name.lower() == "deepcnn":
+        model = DeepCNN(N=params["N"], grid_size=params["grid_size"])
+    elif model_name.lower() == "transmusic":
+        model = TransMUSIC(system_model=system_model)
+
+    else:
+        raise Exception(f"Model {model_name} is not defined")
+    path = os.path.join(os.getcwd(), "data", "weights", "final_models", model.get_model_file_name())
+    model.load_state_dict(torch.load(path))
+    return model.to(device)
+
+
 
 def evaluate_dnn_model(
-        model,
+        model: nn.Module,
         dataset: list,
         criterion: nn.Module,
         plot_spec: bool = False,
@@ -114,14 +132,12 @@ def evaluate_dnn_model(
     with torch.no_grad():
         for data in dataset:
             X, true_label = data
-            X = model.pre_processing(X)
-            if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
+            if model.system_model.params.field_type.endswith("Far"):
+                DOA = true_label.to(device)
+            elif model.system_model.params.field_type.endswith("Near"):
                 DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
                 RANGE.to(device)
-            if true_label.shape[1] != model.system_model.params.M:
-                DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
-            else:
-                DOA = true_label
+
             test_length += DOA.shape[1]
             # Convert observations and DoA to device
             X = X.to(device)
@@ -131,17 +147,17 @@ def evaluate_dnn_model(
                 if isinstance(model, CascadedSubspaceNet):
                     model_output = model(X, is_soft=False, train_angle_extractor=False)
                 else:  # SubspaceNet with 2D MUSIC
-                    model_output = model(X, is_soft=False)
+                    model_output = model(X, is_soft=False).to(device)
             else:
                 model_output = model(X)
-            if model_type.startswith("DA-MUSIC"):
+            if isinstance(model, DeepAugmentedMUSIC):
                 # Deep Augmented MUSIC
-                DOA_predictions = model_output
-            elif model_type.startswith("DeepCNN"):
+                DOA_predictions = model_output.to(device)
+            elif isinstance(model, DeepCNN):
                 # Deep CNN
                 if isinstance(criterion, nn.BCELoss):
                     # If evaluation performed over validation set, loss is BCE
-                    DOA_predictions = model_output
+                    DOA_predictions = model_output.to(device)
                     # find peaks in the pseudo spectrum of probabilities
                     DOA_predictions = (
                             get_k_peaks(361, DOA.shape[1], DOA_predictions[0]) * D2R
@@ -149,7 +165,7 @@ def evaluate_dnn_model(
                     DOA_predictions = DOA_predictions.view(1, DOA_predictions.shape[0])
                 elif isinstance(criterion, [RMSPELoss, MSPELoss]):
                     # If evaluation performed over testset, loss is RMSPE / MSPE
-                    DOA_predictions = model_output
+                    DOA_predictions = model_output.to(device)
                 else:
                     raise Exception(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
@@ -157,11 +173,19 @@ def evaluate_dnn_model(
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     # 2 possible outputs: DOA and RANGE
-                    DOA_predictions = model_output[0]
-                    RANGE_predictions = model_output[1]
+                    DOA_predictions = model_output[0].to(device)
+                    RANGE_predictions = model_output[1].to(device)
                 elif model.field_type.endswith("Far"):
                     # Default - SubSpaceNet
                     DOA_predictions = model_output[0]
+            elif isinstance(model, TransMUSIC):
+                if model.estimation_params == "angle":
+                    DOA_predictions = model_output[0]
+                    prob_source_number = model_output[1]
+                elif model.estimation_params == "angle, range":
+                    DOA_predictions, RANGE_predictions = model_output[0][:, 0], model_output[0][:, 1]
+                    prob_source_number = model_output[1]
+                estimated_source_number = torch.argmax(prob_source_number, dim=1)
             else:
                 raise Exception(
                     f"evaluate_dnn_model: Model type {model_type} is not defined"
@@ -169,6 +193,13 @@ def evaluate_dnn_model(
             # Compute prediction loss
             if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
+            elif isinstance(model, TransMUSIC):
+                DOA_predictions = DOA_predictions[:, :DOA.shape[1]]
+                if model.estimation_params == "angle":
+                    eval_loss = criterion(DOA_predictions, DOA)
+                elif model.estimation_params == "angle, range":
+                    RANGE_predictions = RANGE_predictions[:, :RANGE.shape[1]]
+                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE.to(device))
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     if not (isinstance(criterion, nn.BCELoss) or isinstance(criterion, CartesianLoss)):
@@ -246,7 +277,7 @@ def evaluate_augmented_model(
         "mvdr": MVDR(system_model),
         "music": MUSIC(system_model, estimation_parameter="angle"),
         "esprit": ESPRIT(system_model),
-        "r-music": RootMUSIC(system_model),
+        "r-music": RootMusic(system_model),
         "music_2D": MUSIC(system_model, estimation_parameter="angle, range")
     }
     # If algorithm is not in methods
@@ -337,7 +368,7 @@ def evaluate_model_based(
         X = X[0]
         # Root-MUSIC algorithms
         if algorithm.endswith("r-music"):
-            root_music = RootMUSIC(system_model)
+            root_music = RootMusic(system_model)
             if algorithm.startswith("sps"):
                 # Spatial smoothing
                 predictions, roots, predictions_all, _, M = root_music.narrowband(
@@ -369,12 +400,11 @@ def evaluate_model_based(
                 predictions, spectrum, M = model_based(X=X)
             elif algorithm.startswith("sps"):
                 # Spatial smoothing
-                Rx = calculate_covariance_tensor(X, method="sps")
-                predictions = model_based(Rx)
+                Rx = model_based.pre_processing(X, mode="sps")
             elif algorithm.startswith("music"):
                 # Conventional
-                Rx = calculate_covariance_tensor(X, method="simple")
-                predictions = model_based(Rx, is_soft=False)
+                Rx = model_based.pre_processing(X, mode="sample")
+            predictions = model_based(Rx, is_soft=False)
             # If the amount of predictions is less than the amount of sources
             # predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
@@ -383,14 +413,14 @@ def evaluate_model_based(
 
         # ESPRIT algorithms
         elif "esprit" in algorithm:
-            esprit = Esprit(system_model)
+            esprit = ESPRIT(system_model)
             if algorithm.startswith("sps"):
                 # Spatial smoothing
-                predictions, M = esprit.narrowband(X=X, mode="spatial_smoothing")
+                Rx = model_based.pre_processing(X, mode="sps")
             else:
                 # Conventional
-                Rx = calculate_covariance_tensor(X, method="simple")
-                predictions = model_based(Rx)
+                Rx = model_based.pre_processing(X, mode="sample")
+            predictions = model_based(Rx)
             # If the amount of predictions is less than the amount of sources
             # predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
@@ -418,7 +448,9 @@ def evaluate_model_based(
         elif algorithm.endswith("2D"):
             y = doa[0]
             doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
-            Rx = calculate_covariance_tensor(X, method="simple")
+            doa = doa.to(device)
+            distances = distances.to(device)
+            Rx = model_based.pre_processing(X, mode="sample")
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
             if isinstance(criterion, RMSPELoss) and is_separted:
                 rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
@@ -533,15 +565,13 @@ def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
 
 
 def evaluate(
-        model: nn.Module,
-        model_type: str,
-        model_test_dataset: list,
         generic_test_dataset: list,
         criterion: nn.Module,
         subspace_criterion,
-        system_model,
+        system_model: SystemModel,
         figures: dict,
         plot_spec: bool = True,
+        models: dict = None,
         augmented_methods: list = None,
         subspace_methods: list = None,
 ):
@@ -568,21 +598,24 @@ def evaluate(
     """
     res = {}
     # Evaluate SubspaceNet + differentiable algorithm performances
-    model_test_loss = evaluate_dnn_model(
-        model=model,
-        dataset=generic_test_dataset,
-        criterion=criterion,
-        plot_spec=plot_spec,
-        figures=figures,
-        model_type=model_type,
-        is_separted=True
-    )
-    res[model_type] = model_test_loss
+    for model_name, params in models.items():
+        model = get_model(model_name, params, system_model)
+        start = time.time()
+        model_test_loss = evaluate_dnn_model(
+            model=model,
+            dataset=generic_test_dataset,
+            criterion=criterion,
+            plot_spec=plot_spec,
+            figures=figures,
+            model_type=model_name,
+            is_separted=True)
+        print(f"{model_name} evaluation time: {time.time() - start}")
+        res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(
             model=model,
-            dataset=model_test_dataset,
+            dataset=generic_test_dataset,
             system_model=system_model,
             criterion=subspace_criterion,
             algorithm=algorithm,
@@ -592,6 +625,7 @@ def evaluate(
         res["augmented" + algorithm] = loss
     # Evaluate classical subspace methods
     for algorithm in subspace_methods:
+        start = time.time()
         loss = evaluate_model_based(
             generic_test_dataset,
             system_model,
@@ -601,10 +635,11 @@ def evaluate(
             figures=figures,
             is_separted=True
         )
+        print(f"{algorithm} evaluation time: {time.time() - start}")
         res[algorithm] = loss
     # UCRB
     try:
-        params = model.system_model.params
+        params = system_model.params
     except Exception as e:
         print("Couldn't get model params - unable to calculte UCRB")
     # crb = evaluate_crb(generic_test_dataset, params)

@@ -45,7 +45,7 @@ from sklearn.model_selection import train_test_split
 from src.utils import *
 from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams
-from src.models import SubspaceNet, DeepCNN, DeepAugmentedMUSIC, ModelGenerator, CascadedSubspaceNet
+from src.models import SubspaceNet, DeepCNN, DeepAugmentedMUSIC, ModelGenerator, CascadedSubspaceNet, TransMUSIC
 from src.evaluation import evaluate_dnn_model
 
 
@@ -370,12 +370,11 @@ def train(
         training_parameters, model_name=model_name, checkpoint_path=saving_path
     )
     # Save models best weights
-    torch.save(model.state_dict(), saving_path / Path(dt_string_for_save))
+    torch.save(model.state_dict(), saving_path / model.get_model_file_name())
     # Plot learning and validation loss curves
     if plot_curves:
         plot_learning_curve(
-            list(range(training_parameters.epochs)), loss_train_list, loss_valid_list
-        )
+            list(range(training_parameters.epochs)), loss_train_list, loss_valid_list, model_name=model.get_model_name())
     return model, loss_train_list, loss_valid_list
 
 
@@ -427,30 +426,27 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model.train()
         model = model.to(device)
         for data in tqdm(training_params.train_dataset):
-            Rx, true_label = data
-            if isinstance(model, SubspaceNet):
-                # in this case there are 2 labels - angles and distances.
-                if model.field_type.lower() == "near":
-                    DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                    RANGE = Variable(RANGE, requires_grad=True).to(device)
-                elif model.field_type != model.system_model.params.field_type:
+            x, true_label = data
+            if training_params.training_objective.lower() == "angle, range" or training_params.training_objective.lower() == "range":
+                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                RANGE = Variable(RANGE, requires_grad=True).to(device)
+            elif training_params.training_objective.lower() == "angle":
+                if model.system_model.params.field_type.lower() == "near":
                     # if the data_model and the model are not synced.
                     DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
                 else:
                     DOA = true_label
-            else:
-                DOA = true_label
 
             train_length += DOA.shape[0]
             # Cast observations and DoA to Variables
-            Rx = Variable(Rx, requires_grad=True).to(device)
+            x = Variable(x, requires_grad=True).to(device)
             DOA = Variable(DOA, requires_grad=True).to(device)
             # Get model output
             # This if condition is mainly to spearte the case which we want to train the angle extractor.
             if isinstance(model, CascadedSubspaceNet):
-                model_output = model(Rx, train_angle_extractor=training_angle_extractor)
+                model_output = model(x, train_angle_extractor=training_angle_extractor)
             else:
-                model_output = model(Rx)
+                model_output = model(x)
             if isinstance(model, SubspaceNet):
                 # in this case there are 2 labels - angles and distances.
                 if isinstance(model, CascadedSubspaceNet) or training_params.training_objective == "angle, range":
@@ -458,14 +454,29 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     RANGE_predictions = model_output[1]
                 elif training_params.training_objective.endswith("angle"):
                     DOA_predictions = model_output[0]
+            elif isinstance(model, TransMUSIC):
+                if training_params.training_objective == "angle":
+                    DOA_predictions = model_output[0]
+                    prob_source_number = model_output[1]
+                elif training_params.training_objective == "angle, range":
+                    DOA_predictions, RANGE_predictions = model_output[0][:, 0], model_output[0][:, 1]
+                    prob_source_number = model_output[1]
+                estimated_source_number = torch.argmax(prob_source_number, dim=1)
+
             else:
                 # Deep Augmented MUSIC or DeepCNN
                 DOA_predictions = model_output
+
             # Compute training loss
-            if training_params.model_type.startswith("DeepCNN"):
-                train_loss = training_params.criterion(
-                    DOA_predictions.float(), DOA.float()
-                )
+            if isinstance(model, DeepCNN):
+                train_loss = training_params.criterion(DOA_predictions.float(), DOA.float())
+            elif isinstance(model, TransMUSIC):
+                DOA_predictions = DOA_predictions[:, :DOA.shape[1]]
+                if training_params.training_objective == "angle":
+                    train_loss = training_params.criterion(DOA_predictions, DOA)
+                elif training_params.training_objective == "angle, range":
+                    RANGE_predictions = RANGE_predictions[:, :RANGE.shape[1]]
+                    train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
@@ -536,7 +547,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             best_epoch = epoch
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
-            torch.save(model.state_dict(), checkpoint_path / model_name)
+            torch.save(model.state_dict(), checkpoint_path / model.get_model_file_name())
         if isinstance(model, SubspaceNet):
             model.adjust_diff_method_temperature(epoch)
         # if isinstance(training_params.criterion, RMSPELoss):
@@ -555,11 +566,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
 
     # load best model weights
     model.load_state_dict(best_model_wts)
-    torch.save(model.state_dict(), checkpoint_path / model_name)
+    torch.save(model.state_dict(), checkpoint_path / model.get_model_file_name())
     return model, loss_train_list, loss_valid_list
 
 
-def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list):
+def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, model_name: str = None):
     """
     Plot the learning curve.
 
@@ -569,7 +580,10 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list):
         train_loss (list): List of training losses per epoch.
         validation_loss (list): List of validation losses per epoch.
     """
-    plt.title("Learning Curve: Loss per Epoch")
+    title = "Learning Curve: Loss per Epoch"
+    if model_name is not None:
+        model_name += f" {model_name}"
+    plt.title(title)
     plt.plot(epoch_list, train_loss, label="Train")
     plt.plot(epoch_list, validation_loss, label="Validation")
     plt.xlabel("Epochs")
@@ -651,7 +665,7 @@ def get_simulation_filename(
     )
 
 
-def get_model_filename(system_model_params: SystemModelParams, model_config: ModelGenerator):
+def get_model_filename(system_model_params: SystemModelParams, model_name: str):
     """
 
     Parameters
@@ -664,8 +678,21 @@ def get_model_filename(system_model_params: SystemModelParams, model_config: Mod
     file name to the wieghts of a network.
     different from get_simulation_filename by not considering parameters that are not relevant to the network itself.
     """
-    return (
-            f"{model_config.model_type}_"
+    if model_name.lower() == "cascadedsubspacenet":
+        return (
+                f"{model_name}_"
+                + f"N={system_model_params.N}_"
+                + f"tau=8_"
+                + f"M={system_model_params.M}_"
+                + f"{system_model_params.signal_type}_"
+                + f"SNR={system_model_params.snr}_"
+                + f"diff_method=music_1D_"
+                + f"{system_model_params.field_type}_field_"
+                + f"{system_model_params.signal_nature}"
+        )
+    else:
+        return (
+            f"{model_name}_"
             + f"N={system_model_params.N}_"
             + f"tau={model_config.tau}_"
             + f"M={system_model_params.M}_"
@@ -674,4 +701,4 @@ def get_model_filename(system_model_params: SystemModelParams, model_config: Mod
             + f"diff_method={model_config.diff_method}_"
             + f"{system_model_params.field_type}_field_"
             + f"{system_model_params.signal_nature}"
-    )
+        )

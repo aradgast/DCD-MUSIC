@@ -2,55 +2,23 @@
 Details
 ----------
 Name: models.py
-Authors: Dor Haim Shmuel
+Authors: Dor Haim Shmuel, Arad Gast
 Created: 01/10/21
-Edited: 02/06/23
-
-Purpose:
---------
-This script defines the tested NN-models and the model-based DL models, which used for simulation.
-The implemented models:
-    * DeepRootMUSIC: model-based deep learning algorithm as described in:
-        [1] D. H. Shmuel, J. P. Merkofer, G. Revach, R. J. G. van Sloun and N. Shlezinger,
-        "Deep Root Music Algorithm for Data-Driven Doa Estimation," ICASSP 2023 - 
-        2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP),
-        Rhodes Island, Greece, 2023, pp. 1-5, doi: 10.1109/ICASSP49357.2023.10096504.
-        
-    * SubspaceNet: model-based deep learning algorithm as described in:
-        [2] "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
-    
-    * DA-MUSIC: Deep Augmented MUSIC model-based deep learning algorithm as described in
-        [3] J. P. Merkofer, G. Revach, N. Shlezinger, and R. J. van Sloun, “Deep
-        augmented MUSIC algorithm for data-driven DoA estimation,” in IEEE
-        International Conference on Acoustics, Speech and Signal Processing
-        (ICASSP), 2022, pp. 3598-3602."
-        
-    * DeepCNN: Deep learning algorithm as described in:
-        [4] G. K. Papageorgiou, M. Sellathurai, and Y. C. Eldar, “Deep networks
-        for direction-of-arrival estimation in low SNR,” IEEE Trans. Signal
-        Process., vol. 69, pp. 3714-3729, 2021.
-
-Functions:
-----------
-This script also includes the implementation of Root-MUSIC algorithm, as it is written using Pytorch library,
-for the usage of src.models: SubspaceNet implementation.
+Edited: 29/05/24
 """
+
 # Imports
 import warnings
-
-
+# Internal Imports
 from src.system_model import SystemModel, SystemModelParams
 from src.models_pack.trans_music import TransMUSIC
 from src.models_pack.subspacenet import SubspaceNet
 from src.models_pack.cascaded_subspacenet import CascadedSubspaceNet
 from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
 from src.models_pack.deep_cnn import DeepCNN
-
+from src.models_pack.deep_root_music import DeepRootMUSIC
 
 warnings.simplefilter("ignore")
-
-
-# Constants
 
 class ModelGenerator(object):
     """

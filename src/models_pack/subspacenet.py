@@ -1,3 +1,8 @@
+"""
+SubspaceNet: model-based deep learning algorithm as described in:
+        [2] "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
+"""
+
 import torch
 import torch.nn as nn
 from src.system_model import SystemModel
@@ -64,7 +69,7 @@ class SubspaceNet(nn.Module):
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
 
-    def forward(self, Rx_tau: torch.Tensor, is_soft=True, known_angles=None):
+    def forward(self, x: torch.Tensor, is_soft=True, known_angles=None):
         """
         Performs the forward pass of the SubspaceNet.
 
@@ -83,13 +88,14 @@ class SubspaceNet(nn.Module):
             Rz (torch.Tensor): Surrogate covariance matrix.
 
         """
+        x = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
-        self.N = Rx_tau.shape[-1]
-        self.batch_size = Rx_tau.shape[0]
+        self.N = x.shape[-1]
+        self.batch_size = x.shape[0]
         ############################
         ## Architecture flow ##
         # CNN block #1
-        x = self.conv1(Rx_tau)
+        x = self.conv1(x)
         x = self.anti_rectifier(x)
         # CNN block #2
         x = self.conv2(x)
@@ -143,18 +149,31 @@ class SubspaceNet(nn.Module):
          tensors of size [batch, tau, 2N, N].
         """
         batch_size = x.shape[0]
-        Rx_tau = torch.zeros(batch_size, self.tau, 2 * self.N, self.N)
-        meu = torch.mean(x, dim=-1)[:, :, None].to("cpu")
-        center_x = x.to("cpu") - meu
+        Rx_tau = torch.zeros(batch_size, self.tau, 2 * self.N, self.N, device=device)
+        meu = torch.mean(x, dim=-1, keepdim=True).to(device)
+        center_x = x - meu
 
         for i in range(self.tau):
-            x1 = center_x[:, :, :center_x.shape[-1] - i].to("cpu").to(torch.complex128)
-            x2 = torch.conj(center_x[:, :, i:]).transpose(1, 2).to("cpu").to(torch.complex128)
+            x1 = center_x[:, :, :center_x.shape[-1] - i].to(torch.complex128)
+            x2 = torch.conj(center_x[:, :, i:]).transpose(1, 2).to(torch.complex128)
             Rx_lag = torch.einsum("BNT, BTM -> BNM", x1, x2) / (center_x.shape[-1] - i - 1)
-            Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), dim=1).to("cpu")
+            Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), dim=1)
             Rx_tau[:, i, :, :] = Rx_lag
 
         return Rx_tau
+
+
+    def get_model_file_name(self):
+        return f"SubspaceNet_" + \
+                f"N={self.N}_" + \
+                f"tau={self.tau}_" + \
+                f"M={self.system_model.params.M}_" + \
+                f"{self.system_model.params.signal_type}_" + \
+                f"SNR={self.system_model.params.snr}_" + \
+                f"diff_method=esprit_" + \
+                f"{self.system_model.params.field_type}_field_" +  \
+                f"{self.system_model.params.signal_nature}"
+
 
     def set_diff_method(self, diff_method: str, system_model):
         """Sets the differentiable subspace method for training subspaceNet.
@@ -215,6 +234,8 @@ class SubspaceNet(nn.Module):
                 return {"angle_cell_size": self.diff_method.cell_size_angle,
                         "distance_cell_size": self.diff_method.cell_size_distance}
 
+    def get_model_name(self):
+        return "SubspaceNet"
 
 class SubspaceNetEsprit(SubspaceNet):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,

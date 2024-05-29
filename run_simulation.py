@@ -1,13 +1,7 @@
 # Imports
 import sys
-import torch
 import os
-import matplotlib.pyplot as plt
-import warnings
-from src.system_model import SystemModelParams
-from src.signal_creation import *
 from src.data_handler import *
-from src.criterions import set_criterions
 from src.training import *
 from src.evaluation import evaluate
 from src.plotting import initialize_figures
@@ -93,8 +87,8 @@ def __run_simulation(**kwargs):
                 ModelGenerator(system_model)
                 .set_model_type(MODEL_CONFIG["model_type"])
                 .set_field_type(MODEL_CONFIG["field_type"])
-                .set_diff_method(MODEL_CONFIG["diff_method"])
-                .set_tau(MODEL_CONFIG["tau"])
+                .set_diff_method(MODEL_CONFIG.get("diff_method"))
+                .set_tau(MODEL_CONFIG.get("tau"))
                 .set_model(system_model_params)
             )
             # Define samples size
@@ -113,7 +107,6 @@ def __run_simulation(**kwargs):
                     (
                         train_dataset,
                         test_dataset,
-                        generic_test_dataset,
                         samples_model,
                     ) = load_datasets(
                         system_model_params=system_model_params,
@@ -206,8 +199,7 @@ def __run_simulation(**kwargs):
                 if save_model:
                     torch.save(
                         model.state_dict(),
-                        saving_path / "final_models" / Path(
-                            get_model_filename(model_config=model_config, system_model_params=system_model_params)),
+                        saving_path / "final_models" / Path(model.get_model_file_name()),
                     )
                 # Plots saving
                 if save_to_file:
@@ -246,36 +238,36 @@ def __run_simulation(**kwargs):
                 # Load pre-trained model
                 if not train_model:
                     # Define an evaluation parameters instance
-                    simulation_parameters = (
-                        TrainingParams()
-                        .set_model(model=model_config)
-                        .load_model(
-                            loading_path=saving_path
-                                         / "final_models"
-                                         / get_model_filename(system_model_params, model_config)
-                        )
-                    )
-                    model = simulation_parameters.model
-                    # if isinstance(model, CascadedSubspaceNet):
-                    #     model._load_state_for_angle_extractor()
+                    # simulation_parameters = (
+                    #     TrainingParams()
+                    #     .set_model(model=model_config)
+                    #     .load_model(
+                    #         loading_path=saving_path
+                    #                      / "final_models"
+                    #                      / get_model_filename(system_model_params, model_config, model_name=model_config.model_type)
+                    #     )
+                    # )
+                    models = EVALUATION_PARAMS["models"]
+                    # for model, params in models.items():
+                    #     params["model_path"] = saving_path / "final_models" / get_model_filename(system_model_params, model_name=model)
+                        # if isinstance(model, CascadedSubspaceNet):
+                        #     model._load_state_for_angle_extractor()
                 # print simulation summary details
-                simulation_summary(
-                    system_model_params=system_model_params,
-                    model_type=model_config.model_type,
-                    phase="evaluation",
-                    parameters=simulation_parameters,
-                )
+                # simulation_summary(
+                #     system_model_params=system_model_params,
+                #     model_type=model_config.model_type,
+                #     phase="evaluation",
+                #     parameters=simulation_parameters,
+                # )
                 # Evaluate DNN models, augmented and subspace methods
                 loss = evaluate(
-                    model=model,
-                    model_type=model_config.model_type,
-                    model_test_dataset=generic_test_dataset,
                     generic_test_dataset=generic_test_dataset,
                     criterion=criterion,
                     subspace_criterion=subspace_criterion,
                     system_model=samples_model,
                     figures=figures,
                     plot_spec=False,
+                    models=EVALUATION_PARAMS["models"],
                     augmented_methods=EVALUATION_PARAMS["augmented_methods"],
                     subspace_methods=EVALUATION_PARAMS["subspace_methods"]
                 )

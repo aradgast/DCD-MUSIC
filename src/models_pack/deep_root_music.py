@@ -1,3 +1,12 @@
+"""
+DeepRootMUSIC: model-based deep learning algorithm as described in:
+        [1] D. H. Shmuel, J. P. Merkofer, G. Revach, R. J. G. van Sloun and N. Shlezinger,
+        "Deep Root Music Algorithm for Data-Driven Doa Estimation," ICASSP 2023 -
+        2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP),
+        Rhodes Island, Greece, 2023, pp. 1-5, doi: 10.1109/ICASSP49357.2023.10096504.
+"""
+
+
 import torch
 import torch.nn as nn
 
