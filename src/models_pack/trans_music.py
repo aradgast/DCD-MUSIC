@@ -181,3 +181,6 @@ class TransMUSIC(nn.Module):
 
     def get_model_name(self):
         return "TransMUSIC"
+
+    def get_model_params(self):
+        return None

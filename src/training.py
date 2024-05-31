@@ -135,22 +135,13 @@ class TrainingParams(object):
         return self
 
     # TODO: add option to get a Model instance also
-    def set_model(
-            self,
-            system_model: SystemModel = None,
-            tau: int = None,
-            diff_method: str = "root_music",
-            model_type: str = "SubspaceNet",
-            model: ModelGenerator = None,
-    ):
+    def set_model(self, model_gen: ModelGenerator = None):
         """
         Sets the model for training.
 
         Args
         ----
-        - system_model (SystemModel): The system model object.
-        - tau (int, optional): The number of lags for auto-correlation (relevant only for SubspaceNet model).
-        - diff_method (str): the differentiable subspace method used for training SubspaceNet model.
+        - model_gen (ModelGenerator): The system model object.
 
         Returns
         -------
@@ -160,40 +151,8 @@ class TrainingParams(object):
         ------
         Exception: If the model type is not defined.
         """
-        if model is None:
-            self.model_type = model_type
-            # Assign the desired model for training
-            if self.model_type.startswith("DA-MUSIC"):
-                model = DeepAugmentedMUSIC(
-                    N=system_model.params.N,
-                    T=system_model.params.T,
-                    M=system_model.params.M,
-                )
-            elif self.model_type.startswith("DeepCNN"):
-                model = DeepCNN(N=system_model.params.N, grid_size=361)
-            elif self.model_type.startswith("SubspaceNet"):
-                if not isinstance(tau, int):
-                    raise ValueError(
-                        "TrainingParams.set_model: tau parameter must be provided for SubspaceNet model"
-                    )
-                self.tau = tau
-                self.diff_method = diff_method
-                model = SubspaceNet(
-                    tau=tau, M=system_model.params.M, diff_method=diff_method
-                )
-            else:
-                raise Exception(
-                    f"TrainingParams.set_model: Model type {self.model_type} is not defined"
-                )
-        elif isinstance(model, ModelGenerator):
-            self.model_type = model.model_type
-            self.tau = model.tau
-            self.diff_method = model.diff_method
-            model = model.model
-        else:
-            raise Exception("TrainingParams.set_model: model is not supported")
         # assign model to device
-        self.model = model.to(device)
+        self.model = model_gen.model.to(device)
         return self
 
     def load_model(self, loading_path: Path):
@@ -589,7 +548,7 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend(loc="best")
-    plt.show()
+    # plt.show()
 
 
 def simulation_summary(
@@ -625,11 +584,7 @@ def simulation_summary(
     print(f"Geometry noise variance = {system_model_params.sv_noise_var}")
     print("Simulation parameters:")
     print(f"Model: {model_type}")
-    if model_type.startswith("SubspaceNet"):
-        print(f"SubspaceNet: tau = {parameters.tau}")
-        print(
-            f"SubspaceNet: differentiable subspace method  = {parameters.diff_method}"
-        )
+    print(f"Model parameters: {parameters.model.get_model_params()}")
     if phase.startswith("training"):
         print(f"Epochs = {parameters.epochs}")
         print(f"Batch Size = {parameters.batch_size}")
@@ -654,14 +609,18 @@ def get_simulation_filename(
     File name to a simulation ran.
     """
     return (
-            f"{model_config.model_type}_M={system_model_params.M}_"
-            + f"T={system_model_params.T}_SNR_{system_model_params.snr}_"
-            + f"tau={model_config.tau}_{system_model_params.signal_type}_"
-            + f"diff_method={model_config.diff_method}_"
-            + f"{system_model_params.field_type}_field_"
-            + f"{system_model_params.signal_nature}_eta={system_model_params.eta}_"
-            + f"bias={system_model_params.bias}_"
-            + f"sv_noise={system_model_params.sv_noise_var}"
+            f"{model_config.model.get_model_name()}_"
+            f"{model_config.model.get_model_params()}_"
+            f"N={system_model_params.N}_"
+            f"M={system_model_params.M}_"
+            f"T={system_model_params.T}_"
+            f"SNR_{system_model_params.snr}_"
+            f"{system_model_params.signal_type}_"
+            f"{system_model_params.field_type}_field_"
+            f"{system_model_params.signal_nature}"
+            f"_eta={system_model_params.eta}_"
+            f"bias={system_model_params.bias}_"
+            f"sv_noise={system_model_params.sv_noise_var}"
     )
 
 

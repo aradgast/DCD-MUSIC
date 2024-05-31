@@ -43,9 +43,8 @@ from src.methods_pack.root_music import RootMusic
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
 # import models
-from src.models import (SubspaceNet, CascadedSubspaceNet, DeepAugmentedMUSIC,
+from src.models import (ModelGenerator, SubspaceNet, CascadedSubspaceNet, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
-
 
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel, SystemModelParams
@@ -72,26 +71,24 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower().endswith("esprit"):
         return ESPRIT(system_model)
 
+
 def get_model(model_name: str, params: dict, system_model: SystemModel):
-    if model_name.lower() == "subspacenet":
-        model = SubspaceNet(tau=params["tau"], N=params["N"], diff_method=params["diff_method"],
-                            system_model=system_model, field_type=params["field_type"])
-    elif model_name.lower() == "cascadedsubspacenet":
-        model = CascadedSubspaceNet(tau=params["tau"], N=params["N"],
-                                    system_model=system_model)
-    elif model_name.lower() == "deepaugmentedmusic":
-        model = DeepAugmentedMUSIC(N=params["N"], T=params["T"], M=params["M"])
-    elif model_name.lower() == "deepcnn":
-        model = DeepCNN(N=params["N"], grid_size=params["grid_size"])
-    elif model_name.lower() == "transmusic":
-        model = TransMUSIC(system_model=system_model)
-
-    else:
-        raise Exception(f"Model {model_name} is not defined")
+    model_config = (
+        ModelGenerator()
+        .set_model_type(model_name)
+        .set_system_model(system_model)
+        .set_model_params(params)
+        .set_model()
+    )
+    model = model_config.model
     path = os.path.join(os.getcwd(), "data", "weights", "final_models", model.get_model_file_name())
-    model.load_state_dict(torch.load(path))
+    try:
+        model.load_state_dict(torch.load(path))
+    except FileNotFoundError as e:
+        print("####################################")
+        print(e)
+        print("####################################")
     return model.to(device)
-
 
 
 def evaluate_dnn_model(
@@ -539,6 +536,7 @@ def evaluate_crb(dataset: list,
         print("Unrecognized field type.")
     return
 
+
 def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
     """
     Evaluate the Maximum Likelihood Estimation (MLE) algorithm on a given dataset.
@@ -570,7 +568,6 @@ def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
 def evaluate(
         generic_test_dataset: list,
         criterion: nn.Module,
-        subspace_criterion,
         system_model: SystemModel,
         figures: dict,
         plot_spec: bool = True,
@@ -582,15 +579,12 @@ def evaluate(
     Wrapper function for model and algorithm evaluations.
 
     Parameters:
-        model (nn.Module): The DNN model.
-        model_type (str): Type of the model.
-        model_test_dataset (list): Test dataset for the model.
         generic_test_dataset (list): Test dataset for generic subspace methods.
         criterion (nn.Module): Loss criterion for (DNN) model evaluation.
-        subspace_criterion: Loss criterion for subspace method evaluation.
         system_model: instance of SystemModel.
         figures (dict): Dictionary to store figures.
         plot_spec (bool, optional): Whether to plot spectrums. Defaults to True.
+        models (dict): dict that contains the models to evluate and their parameters.
         augmented_methods (list, optional): List of augmented methods for evaluation.
             Defaults to None.
         subspace_methods (list, optional): List of subspace methods for evaluation.
@@ -620,7 +614,7 @@ def evaluate(
             model=model,
             dataset=generic_test_dataset,
             system_model=system_model,
-            criterion=subspace_criterion,
+            criterion=criterion,
             algorithm=algorithm,
             plot_spec=plot_spec,
             figures=figures,
@@ -632,7 +626,7 @@ def evaluate(
         loss = evaluate_model_based(
             generic_test_dataset,
             system_model,
-            criterion=subspace_criterion,
+            criterion=criterion,
             plot_spec=plot_spec,
             algorithm=algorithm,
             figures=figures,

@@ -40,7 +40,6 @@ def create_dataset(
         system_model_params: SystemModelParams,
         samples_size: float,
         model_type: str,
-        tau: int = None,
         save_datasets: bool = False,
         datasets_path: Path = None,
         true_doa: list = None,

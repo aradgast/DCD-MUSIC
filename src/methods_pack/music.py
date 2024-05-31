@@ -8,7 +8,6 @@ from src.methods_pack.subspace_method import SubspaceMethod
 from src.utils import *
 
 
-
 class MUSIC(SubspaceMethod):
     """
     This is implementation of the MUSIC method for localization in Far and Near field environments.
@@ -46,7 +45,7 @@ class MUSIC(SubspaceMethod):
         self.noise_subspace = None
         # self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
 
-    def forward(self, cov:torch.Tensor, known_angles=None, known_distances=None, is_soft: bool = True):
+    def forward(self, cov: torch.Tensor, known_angles=None, known_distances=None, is_soft: bool = True):
         """
 
         Parameters
@@ -91,7 +90,6 @@ class MUSIC(SubspaceMethod):
         self.music_spectrum = 1 / inverse_spectrum
         return self.music_spectrum
 
-
     def adjust_cell_size(self):
         if self.estimation_params == "range":
             # if self.cell_size > int(self.distances.shape[0] * 0.02):
@@ -125,12 +123,14 @@ class MUSIC(SubspaceMethod):
                                                     BatchSizex(length_search_grid_angle)x(length_search_grid_distance)
         """
         if self.system_model.params.field_type.startswith("Far"):
-            var1 = torch.einsum("an, bnm -> bam", self.search_grid.conj().transpose(0, 1)[:, :noise_subspace.shape[1]], noise_subspace)
+            var1 = torch.einsum("an, bnm -> bam", self.search_grid.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
+                                noise_subspace)
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
                 var1 = torch.einsum("adk, bkl -> badl",
-                                    torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1)[:, :, :noise_subspace.shape[1]],
+                                    torch.transpose(self.search_grid.conj(), 0, 2).transpose(0, 1)[:, :,
+                                    :noise_subspace.shape[1]],
                                     noise_subspace)
                 # get the norm value for each element in the batch.
                 inverse_spectrum = torch.norm(var1, dim=-1) ** 2
@@ -298,8 +298,8 @@ class MUSIC(SubspaceMethod):
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
             if self.system_model.params.M > 1:
                 original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 30)
-            max_row[batch] = original_idx[0][0 : self.system_model.params.M]
-            max_col[batch] = original_idx[1][0 : self.system_model.params.M]
+            max_row[batch] = original_idx[0][0: self.system_model.params.M]
+            max_col[batch] = original_idx[1][0: self.system_model.params.M]
         for source in range(self.system_model.params.M):
             max_row_cell_idx = (max_row[:, source][:, None]
                                 - self.cell_size_angle
@@ -381,7 +381,7 @@ class MUSIC(SubspaceMethod):
             elif self.estimation_params.startswith("range"):
                 self.music_spectrum = torch.zeros(batch_size, len(self.distances))
 
-    def  __define_grid_params(self):
+    def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
             self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360, device=device,
@@ -485,6 +485,9 @@ class MUSIC(SubspaceMethod):
 
             plt.figaspect(2)
             plt.show()
+
+    def __str__(self):
+        return f"MUSIC_{self.estimation_params}_estimation"
 
 
 def keep_far_enough_points(tensor, M, D):

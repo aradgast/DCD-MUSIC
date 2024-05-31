@@ -2,9 +2,9 @@
     Details
     -------
     Name: main.py
-    Authors: D. H. Shmuel
+    Authors: D. H. Shmuel, Arad Gast
     Created: 01/10/21
-    Edited: 30/06/23
+    Edited: 31/05/24
 
     Purpose
     --------
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [-5, 5, -10, 0, 10],
-        "non-coherent": [-5, 5, -10, 0, 10],
+        "coherent": [10],
+        "non-coherent": [10],
     }
 
     system_model_params = {
@@ -50,17 +50,26 @@ if __name__ == "__main__":
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "TransMUSIC",                # SubspaceNet, CascadedSubspaceNet, DR-MUSIC, TransMUSIC
-        "diff_method": "esprit",                  # esprit, music_1D, music_2D
-        "tau": 8,
-        "field_type": "Near"                        # Near, Far
+        "model_type": "CascadedSubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+        "model_params": {}
     }
+    if model_config.get("model_type") == "SubspaceNet":
+        model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
+        model_config["model_params"]["tau"] = 8
+        model_config["model_params"]["field_type"] = "Far"     # Near, Far
+
+    elif model_config.get("model_type") == "CascadedSubspaceNet":
+        model_config["model_params"]["tau"] = 8
+
+    elif model_config.get("model_type") == "DeepCNN":
+        model_config["model_params"]["grid_size"] = 361
+
     training_params = {
-        "samples_size": 500,
-        "train_test_ratio": .05,
+        "samples_size": 128,
+        "train_test_ratio": .1,
         "training_objective": "angle, range",       # angle, range
-        "batch_size": 256,
-        "epochs": 150,
+        "batch_size": 16,
+        "epochs": 5,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -70,22 +79,18 @@ if __name__ == "__main__":
         "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-        "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
-        "balance_factor": 1.0                 # if None, the balance factor will be set to the default value -> 0.6
+        "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
+        "balance_factor": 0.0                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
-        "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
+        "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
         "balance_factor": training_params["balance_factor"],
-        "models":
-                {
-                "TransMUSIC": {},
-                "SubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
-                                "diff_method": "music_2D", "field_type": model_config["field_type"]},
-                "CascadedSubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
-                                        "diff_method": "music_1D", "field_type": model_config["field_type"]},
-
-
-
+        "models": {
+                    "TransMUSIC": {},
+                    "SubspaceNet": {"tau": 8,
+                                    "diff_method": "music_2D",
+                                    "field_type": system_model_params["field_type"]},
+                    "CascadedSubspaceNet": {"tau": 8}
                 },
         "augmented_methods": [
             # "mvdr",
@@ -97,11 +102,11 @@ if __name__ == "__main__":
         "subspace_methods": [
             # "esprit",
             # "music_1d",
-            # "r-music",
+            # "root_music",
             # "mvdr",
-            # "sps-r-music",
-            # "sps-esprit",
-            # "sps-music_1d"
+            # "sps_root_music",
+            # "sps_esprit",
+            # "sps_music_1d"
             # "bb-music",
             # "music_2D",
             # "sps_music_2D",
@@ -111,8 +116,8 @@ if __name__ == "__main__":
         "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
         "LOAD_MODEL": True,
-        "TRAIN_MODEL": False,
-        "SAVE_MODEL": False,
+        "TRAIN_MODEL": True,
+        "SAVE_MODEL": True,
         "EVALUATE_MODE": True,
         "PLOT_RESULTS": True
     }

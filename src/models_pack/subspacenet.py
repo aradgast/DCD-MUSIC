@@ -41,7 +41,7 @@ class SubspaceNet(nn.Module):
 
     """
 
-    def __init__(self, tau: int, N: int, diff_method: str = "root_music",
+    def __init__(self, tau: int, diff_method: str = "root_music",
                  system_model: SystemModel = None, field_type: str = "Far"):
         """Initializes the SubspaceNet model.
 
@@ -53,7 +53,10 @@ class SubspaceNet(nn.Module):
         """
         super(SubspaceNet, self).__init__()
         self.tau = tau
-        self.N = N
+        self.system_model = system_model
+        self.N = self.system_model.params.N
+        self.diff_method = None
+        self.field_type = field_type
         self.p = 0.1
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
@@ -63,9 +66,7 @@ class SubspaceNet(nn.Module):
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
         self.DropOut = nn.Dropout(self.p)
         self.ReLU = nn.ReLU()
-        self.diff_method = None
-        self.field_type = field_type
-        self.system_model = system_model
+
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
 
@@ -235,7 +236,12 @@ class SubspaceNet(nn.Module):
                         "distance_cell_size": self.diff_method.cell_size_distance}
 
     def get_model_name(self):
-        return "SubspaceNet"
+        return f"SubspaceNet"
+
+    def get_model_params(self):
+        tau = self.tau
+        diff_method = self.diff_method
+        return f"tau={tau}_diff_method={diff_method}"
 
 class SubspaceNetEsprit(SubspaceNet):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,

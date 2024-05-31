@@ -6,6 +6,7 @@ from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
 from src.utils import *
 
+
 class CascadedSubspaceNet(SubspaceNet):
     """
     The CascadedSubspaceNet is a suggested solution for localization in near-field.
@@ -14,12 +15,11 @@ class CascadedSubspaceNet(SubspaceNet):
     The second, uses the first to extract the angles, and then uses the angles to get the distance.
     """
 
-    def __init__(self, tau: int, N: int, system_model: SystemModel = None,state_path: str=""):
-        super(CascadedSubspaceNet, self).__init__(tau, N, "music_1D", system_model, "Near")
+    def __init__(self, tau: int, system_model: SystemModel = None, state_path: str = ""):
+        super(CascadedSubspaceNet, self).__init__(tau, "music_1D", system_model, "Near")
         self.angle_extractor = None
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
-
 
     def forward(self, Rx_tau: torch.Tensor, is_soft: bool = True, train_angle_extractor: bool = False):
         """
@@ -42,7 +42,6 @@ class CascadedSubspaceNet(SubspaceNet):
 
     def __init_angle_extractor(self, path: str = None):
         self.angle_extractor = SubspaceNet(tau=self.tau,
-                                           N=self.N,
                                            diff_method="esprit",
                                            system_model=self.system_model,
                                            field_type="Far")
@@ -57,7 +56,10 @@ class CascadedSubspaceNet(SubspaceNet):
         try:
             self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
         except FileNotFoundError:
+            print("######################################################################################")
             print(f"Model state not found in {ref_path}")
+            print("######################################################################################")
+
 
     def extract_angles(self, Rx_tau: torch.Tensor, train_angle_extractor: bool = False):
         """
@@ -83,12 +85,12 @@ class CascadedSubspaceNet(SubspaceNet):
 
     def get_model_file_name(self):
         return f"CascadedSubspaceNet_" + \
-                f"N={self.N}_" + \
-                f"tau={self.tau}_" + \
-                f"M={self.system_model.params.M}_" + \
-                f"{self.system_model.params.signal_type}_" + \
-                f"SNR={self.system_model.params.snr}_" + \
-                f"{self.system_model.params.signal_nature}"
+               f"N={self.N}_" + \
+               f"tau={self.tau}_" + \
+               f"M={self.system_model.params.M}_" + \
+               f"{self.system_model.params.signal_type}_" + \
+               f"SNR={self.system_model.params.snr}_" + \
+               f"{self.system_model.params.signal_nature}"
 
     def get_model_name(self):
         return "CascadedSubspaceNet"

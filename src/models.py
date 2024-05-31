@@ -20,99 +20,24 @@ from src.models_pack.deep_root_music import DeepRootMUSIC
 
 warnings.simplefilter("ignore")
 
+
 class ModelGenerator(object):
     """
     Generates an instance of the desired model, according to model configuration parameters.
     Attributes:
             model_type(str): The network type
-            field_type(str) : The field type region ("Far" or "Near")
-            diff_method(str): The differentiable method to use("root_music", "esprit", "music")
-            tau(int): The number of input features to the network(time shift for auto-correlation)
-            model : An instance of the model
-            system_model(SystemModel): An instance of SystemModel
+            system_model_params(SystemModelParams): the system model parameters.
+            model_params(dict): The parameters for the model.
+            model(nn.Module) : An instance of the model
     """
 
-    def __init__(self, system_model: SystemModel = None):
+    def __init__(self):
         """
         Initialize ModelParams object.
         """
         self.model_type: str = str(None)
-        self.field_type: str = str(None)
-        self.diff_method: str = str(None)
-        self.tau: int = None
-        self.model = None
-        self.system_model = system_model
-
-    def set_field_type(self, field_type: str = None):
-        """
-
-        Args:
-            field_type:
-
-        Returns:
-
-        """
-        if field_type.lower() == "near":
-            self.field_type = "Near"
-        elif field_type.lower() == "far":
-            self.field_type = "Far"
-        else:
-            raise Exception(f"ModelParams.set_field_type:"
-                            f" unrecognized {field_type} as field type, available options are Near or Far.")
-        return self
-
-    def set_tau(self, tau: int = None):
-        """
-        Set the value of tau parameter for SubspaceNet model.
-
-        Parameters:
-            tau (int): The number of lags.
-
-        Returns:
-            ModelParams: The updated ModelParams object.
-
-        Raises:
-            ValueError: If tau parameter is not provided for SubspaceNet model.
-        """
-        if self.model_type.endswith("SubspaceNet"):
-            if not isinstance(tau, int):
-                raise ValueError(
-                    "ModelParams.set_tau: tau parameter must be provided for SubspaceNet model"
-                )
-            self.tau = tau
-        return self
-
-    def set_diff_method(self, diff_method: str = "root_music"):
-        """
-        Set the differentiation method for SubspaceNet model.
-
-        Parameters:
-            diff_method (str): The differantiable subspace method ("esprit" or "root_music").
-
-        Returns:
-            ModelParams: The updated ModelParams object.
-
-        Raises:
-            ValueError: If the diff_method is not defined for SubspaceNet model.
-        """
-        if self.model_type.startswith("SubspaceNet"):
-            if self.field_type.startswith("Far"):
-                if diff_method not in ["esprit", "root_music"]:
-                    raise ValueError(
-                        f"ModelParams.set_diff_method:"
-                        f" {diff_method} is not defined for SubspaceNet model on {self.field_type} scenario")
-                self.diff_method = diff_method
-            elif self.field_type.startswith("Near"):
-                if diff_method not in ["music_2D"]:
-                    raise ValueError(f"ModelParams.set_diff_method: "
-                                     f"{diff_method} is not defined for SubspaceNet model on {self.field_type} scenario")
-                self.diff_method = diff_method
-        elif self.model_type.startswith("CascadedSubspaceNet"):
-            if diff_method not in ["music_1D"]:
-                raise ValueError(f"ModelParams.set_diff_method: "
-                                 f"{diff_method} is not defined for CascadedSubspaceNet model")
-            self.diff_method = diff_method
-        return self
+        self.system_model: SystemModel = None
+        self.model_params: dict = None
 
     def set_model_type(self, model_type: str):
         """
@@ -122,53 +47,64 @@ class ModelGenerator(object):
             model_type (str): The model type.
 
         Returns:
-            ModelParams: The updated ModelParams object.
+            ModelGenerator: The updated ModelGenerator object.
 
         Raises:
             ValueError: If model type is not provided.
         """
         if not isinstance(model_type, str):
             raise ValueError(
-                "ModelParams.set_model_type: model type has not been provided"
+                "ModelGenerator.set_model_type: model type has not been provided"
             )
         self.model_type = model_type
         return self
 
-    def get_model_filename(self, system_model_params: SystemModelParams):
+    def set_system_model(self, system_model: SystemModel):
         """
+        Set the system model.
 
-        Parameters
-        ----------
-        system_model_params
+        Parameters:
+            system_model (SystemModel): The system model.
 
-        Returns
-        -------
-        file name to the wieghts of a network.
-        different from get_simulation_filename by not considering parameters that are not relevant to the network itself.
+        Returns:
+            ModelGenerator: The updated ModelParams object.
+
+        Raises:
+            ValueError: If system_model is not provided.
         """
-        return (
-                f"{self.model_type}"
-                + f"N={system_model_params.N}_"
-                + f"tau={self.tau}_"
-                + f"M={system_model_params.M}_"
-                + f"{system_model_params.signal_type}_"
-                + f"SNR={system_model_params.snr}_"
-                + f"diff_method=esprit_"
-                + f"{system_model_params.field_type}_field_"
-                + f"{system_model_params.signal_nature}"
-        )
-        # return (
-        #     f"SubspaceNet_M={system_model_params.M}_"
-        #     + f"T={system_model_params.T}_SNR_{system_model_params.snr}_"
-        #     + f"tau={self.tau}_{system_model_params.signal_type}_"
-        #     + f"diff_method=esprit_"
-        #     + f"{system_model_params.field_type}_field_"
-        #     + f"{system_model_params.signal_nature}_eta={system_model_params.eta}_"
-        #     + f"bias={system_model_params.bias}_"
-        #     + f"sv_noise={system_model_params.sv_noise_var}"
-        # )
+        if not isinstance(system_model, SystemModel):
+            raise ValueError(
+                "ModelGenerator.set_system_model: system model params has not been provided"
+            )
+        self.system_model = system_model
+        return self
 
-    def set_model(self, system_model_params):
+    def set_model_params(self, model_params: dict):
+        """
+        Set the model params.
+
+        Parameters:
+            model_params (dict): The model's parameters.
+
+        Returns:
+            ModelGenerator: The updated ModelParams object.
+
+        Raises:
+            ValueError: If model type is not provided.
+        """
+        if not isinstance(model_params, dict):
+            raise ValueError(
+                "ModelGenerator.set_model_params: model params has not been provided"
+            )
+        # verify params for model.
+        try:
+            self.__verify_model_params(model_params)
+        except Exception as e:
+            print(e)
+        self.model_params = model_params
+        return self
+
+    def set_model(self):
         """
         Set the model based on the model type and system model parameters.
 
@@ -182,28 +118,149 @@ class ModelGenerator(object):
             Exception: If the model type is not defined.
         """
         if self.model_type.startswith("DA-MUSIC"):
-            self.model = DeepAugmentedMUSIC(
-                N=system_model_params.N,
-                T=system_model_params.T,
-                M=system_model_params.M,
-            )
+            self.__set_da_music()
+        elif self.model_type.startswith("DR_MUSIC"):
+            self.__set_dr_music()
         elif self.model_type.startswith("DeepCNN"):
-            self.model = DeepCNN(N=system_model_params.N, grid_size=361)
+            self.__set_deepcnn()
         elif self.model_type.startswith("SubspaceNet"):
-            self.model = SubspaceNet(tau=self.tau,
-                                     N=system_model_params.N,
-                                     diff_method=self.diff_method,
-                                     system_model=self.system_model,
-                                     field_type=self.field_type)
+            self.__set_subspacenet()
         elif self.model_type.startswith("CascadedSubspaceNet"):
-            self.model = CascadedSubspaceNet(tau=self.tau,
-                                             N=system_model_params.N,
-                                             system_model=self.system_model,
-                                             state_path=self.get_model_filename(system_model_params))
+            self.__set_cascadedssn()
         elif self.model_type.startswith("TransMUSIC"):
-            self.model = TransMUSIC(system_model=self.system_model)
+            self.__set_transmusic()
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
 
         return self
 
+    def __set_subspacenet(self):
+        """
+
+        """
+        tau = self.model_params.get("tau")
+        diff_method = self.model_params.get("diff_method")
+        field_type = self.model_params.get("field_type")
+        self.model = SubspaceNet(tau=tau,
+                                 diff_method=diff_method,
+                                 system_model=self.system_model,
+                                 field_type=field_type)
+
+    def __set_cascadedssn(self):
+        """
+
+        """
+        tau = self.model_params.get("tau")
+        cascaded_state_path = self.__get_state_path_cascadedssn()
+        self.model = CascadedSubspaceNet(tau=tau,
+                                         system_model=self.system_model,
+                                         state_path=cascaded_state_path)
+
+    def __set_transmusic(self):
+        """
+
+        """
+        self.model = TransMUSIC(system_model=self.system_model)
+
+    def __set_deepcnn(self):
+        """
+
+        """
+        N = self.system_model.params.N
+        grid_size = self.model_params.get("grid_size")
+        self.model = DeepCNN(N=N, grid_size=grid_size)
+
+    def __set_da_music(self):
+        """
+
+        """
+        N = self.system_model.params.N
+        T = self.system_model.params.T
+        M = self.system_model.params.M
+        self.model = DeepAugmentedMUSIC(N=N, T=T, M=M)
+
+    def __set_dr_music(self):
+        """
+
+        """
+        tau = self.model_params.get("tau")
+        activation_val = self.model_params.get("activation_value")
+        self.model = DeepRootMUSIC(tau=tau, activation_value=activation_val)
+
+    def __verify_model_params(self, model_params):
+        """
+        There are different models, and each one has different set of parameters to set.
+        This function just verify the correctness of the params depending on the model.
+        """
+
+        if self.model_type.lower() == "subspacenet":
+            self.__verify_subspacenet_params(model_params)
+        elif self.model_type.lower() == "cascadedsubspacenet":
+            self.__verify_cascadedssn_params(model_params)
+        elif self.model_type.lower() == "transmusic":
+            self.__verify_transmusic_params(model_params)
+        else:
+            raise ValueError(f"ModelGenerator.__verify_model_params:"
+                             f" currently there is no verification support for {self.model_type}")
+
+    def __verify_transmusic_params(self, model_params):
+        """
+
+        """
+        pass
+
+    def __verify_subspacenet_params(self, model_params):
+        """
+        tau: int, diff_method: str = "root_music", field_type: str = "Far"
+        """
+        tau = model_params.get("tau")
+        if not isinstance(tau, int) or not (tau < self.system_model.params.T):
+            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                             f" Tau has to be an int and smaller than T")
+
+        field_type = model_params.get("field_type")
+        if not isinstance(field_type, str) or not (field_type.lower() in ["far", "near"]):
+            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                             f"field_type has to be a str and the possible values are far or near.")
+
+        diff_method = model_params.get("diff_method")
+        if isinstance(diff_method, str):
+            if field_type.lower() == "far":
+                if not (diff_method.lower() in ["root_music", "esprit", "music_1d"]):
+                    raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                                     f"for Far field possible diff methods are: root_music, esprit or music_1d")
+            else:  # field_type.lower() == "near":
+                if not (diff_method.lower() in ["music_1d", "music_2d"]):
+                    raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                                     f"for Near field possible diff methods are: music_2d or music_1d")
+        else:
+            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                             f"field type was not given as a model param.")
+
+    def __verify_cascadedssn_params(self, model_params):
+        """
+        tau: int
+        """
+        tau = model_params.get("tau")
+        if not isinstance(tau, int) or not (tau < self.system_model.params.T):
+            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                             f" Tau has to be an int and smaller than T")
+
+    def __get_state_path_cascadedssn(self):
+        """
+
+        """
+        tau = self.model_params.get("tau")
+        path = f"SubspaceNet_" + \
+            f"N={self.system_model.params.N}_" + \
+            f"tau={tau}_" + \
+            f"M={self.system_model.params.M}_" + \
+            f"{self.system_model.params.signal_type}_" + \
+            f"SNR={self.system_model.params.snr}_" + \
+            f"diff_method=esprit" + \
+            f"{self.system_model.params.field_type}_field_" +  \
+            f"{self.system_model.params.signal_nature}"
+        return path
+
+    def __str__(self):
+        return f"{self.model.get_model_name()}_{self.model.get_model_params()}"

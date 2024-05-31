@@ -5,6 +5,7 @@ from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
 from src.utils import *
 
+
 class RootMusic(SubspaceMethod):
     def __init__(self, system_model: SystemModel):
         super(RootMusic, self).__init__(system_model)
@@ -62,6 +63,7 @@ class RootMusic(SubspaceMethod):
             if tensor.shape[-1] != tensor.shape[-2]:
                 raise ValueError("sum_of_diag: input tensor should be square matrices as a batch.")
         return tensor
+
 
 def root_music(Rz: torch.Tensor, M: int, batch_size: int):
     """Implementation of the model-based Root-MUSIC algorithm, support Pytorch, intended for

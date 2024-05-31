@@ -4,6 +4,7 @@ import torch.nn as nn
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
 
+
 class ESPRIT(SubspaceMethod):
     def __init__(self, system_model: SystemModel):
         super().__init__(system_model)
@@ -20,6 +21,7 @@ class ESPRIT(SubspaceMethod):
         prediction = -1 * torch.arcsin((1 / torch.pi) * eigvals_phase)
 
         return prediction
+
 
 def esprit(Rz: torch.Tensor, M: int, batch_size: int):
     """Implementation of the model-based Esprit algorithm, support Pytorch, intended for
@@ -60,7 +62,7 @@ def esprit(Rz: torch.Tensor, M: int, batch_size: int):
         # Calculate the phase component of the roots
         eigenvalues_angels = torch.angle(phi_eigenvalues)
         # Calculate the DoA out of the phase component
-        doa_predictions = -1 * torch.arcsin((1 / np.pi) * eigenvalues_angels)
+        doa_predictions = -1 * torch.arcsin((1 / torch.pi) * eigenvalues_angels)
         doa_batches.append(doa_predictions)
 
     return torch.stack(doa_batches, dim=0)

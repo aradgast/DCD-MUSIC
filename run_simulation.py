@@ -27,8 +27,6 @@ def __run_simulation(**kwargs):
     for mode, snr_list in scenario_dict.items():
         res[mode] = {}
         for snr in snr_list:
-
-
             # Initialize seed
             set_unified_seed()
 
@@ -59,7 +57,7 @@ def __run_simulation(**kwargs):
             train_model = SIMULATION_COMMANDS["TRAIN_MODEL"]  # Applying training operation
             save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Saving tuned model
             evaluate_mode = SIMULATION_COMMANDS["EVALUATE_MODE"]  # Evaluating desired algorithms
-            load_data = not (create_data)  # Loading data from exist dataset
+            load_data = not create_data  # Loading data from exist dataset
 
             # Saving simulation scores to external file
             if save_to_file:
@@ -84,12 +82,11 @@ def __run_simulation(**kwargs):
             system_model = SystemModel(system_model_params)
             # Generate model configuration
             model_config = (
-                ModelGenerator(system_model)
-                .set_model_type(MODEL_CONFIG["model_type"])
-                .set_field_type(MODEL_CONFIG["field_type"])
-                .set_diff_method(MODEL_CONFIG.get("diff_method"))
-                .set_tau(MODEL_CONFIG.get("tau"))
-                .set_model(system_model_params)
+                ModelGenerator()
+                .set_model_type(MODEL_CONFIG.get("model_type"))
+                .set_system_model(system_model)
+                .set_model_params(MODEL_CONFIG.get("model_params"))
+                .set_model()
             )
             # Define samples size
             samples_size = TRAINING_PARAMS["samples_size"]  # Overall dateset size
@@ -133,7 +130,6 @@ def __run_simulation(**kwargs):
                         system_model_params=system_model_params,
                         samples_size=samples_size,
                         model_type=model_config.model_type,
-                        tau=model_config.tau,
                         save_datasets=True,
                         datasets_path=datasets_path,
                         true_doa=TRAINING_PARAMS["true_doa_train"],
@@ -147,7 +143,6 @@ def __run_simulation(**kwargs):
                         system_model_params=system_model_params,
                         samples_size=int(train_test_ratio * samples_size),
                         model_type=model_config.model_type,
-                        tau=model_config.tau,
                         save_datasets=True,
                         datasets_path=datasets_path,
                         true_doa=TRAINING_PARAMS["true_doa_test"],
@@ -162,7 +157,7 @@ def __run_simulation(**kwargs):
                     .set_training_objective(TRAINING_PARAMS["training_objective"])
                     .set_batch_size(TRAINING_PARAMS["batch_size"])
                     .set_epochs(TRAINING_PARAMS["epochs"])
-                    .set_model(model=model_config)
+                    .set_model(model_gen=model_config)
                     .set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
                                    learning_rate=TRAINING_PARAMS["learning_rate"],
                                    weight_decay=TRAINING_PARAMS["weight_decay"])
@@ -217,7 +212,8 @@ def __run_simulation(**kwargs):
                 # Initialize figures dict for plotting
                 figures = initialize_figures()
                 # Define loss measure for evaluation
-                criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"], EVALUATION_PARAMS["balance_factor"])
+                criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"],
+                                                               EVALUATION_PARAMS["balance_factor"])
                 # Load datasets for evaluation
                 if not (create_data or load_data):
                     test_dataset, generic_test_dataset, samples_model = load_datasets(
@@ -235,36 +231,11 @@ def __run_simulation(**kwargs):
                 generic_test_dataset = torch.utils.data.DataLoader(
                     generic_test_dataset, batch_size=32, shuffle=False, drop_last=True
                 )
-                # Load pre-trained model
-                if not train_model:
-                    # Define an evaluation parameters instance
-                    # simulation_parameters = (
-                    #     TrainingParams()
-                    #     .set_model(model=model_config)
-                    #     .load_model(
-                    #         loading_path=saving_path
-                    #                      / "final_models"
-                    #                      / get_model_filename(system_model_params, model_config, model_name=model_config.model_type)
-                    #     )
-                    # )
-                    models = EVALUATION_PARAMS["models"]
-                    # for model, params in models.items():
-                    #     params["model_path"] = saving_path / "final_models" / get_model_filename(system_model_params, model_name=model)
-                        # if isinstance(model, CascadedSubspaceNet):
-                        #     model._load_state_for_angle_extractor()
-                # print simulation summary details
-                # simulation_summary(
-                #     system_model_params=system_model_params,
-                #     model_type=model_config.model_type,
-                #     phase="evaluation",
-                #     parameters=simulation_parameters,
-                # )
                 # Evaluate DNN models, augmented and subspace methods
                 loss = evaluate(
                     generic_test_dataset=generic_test_dataset,
                     criterion=criterion,
-                    subspace_criterion=subspace_criterion,
-                    system_model=samples_model,
+                    system_model=system_model,
                     figures=figures,
                     plot_spec=False,
                     models=EVALUATION_PARAMS["models"],
@@ -283,34 +254,62 @@ def __run_simulation(**kwargs):
                 if snr_dict:
                     # plt.figure()
                     if isinstance(criterion, RMSPELoss):
-                        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-                        snr_values = snr_dict.keys()
-                        plt_res = {}
-                        for snr, results in snr_dict.items():
-                            for method, loss_ in results.items():
-                                if method not in plt_res:
-                                    plt_res[method] = {"Angle": [], "Distance": []}
-                                # plt_res[method].append(loss_["Overall"])
-                                plt_res[method]["Angle"].append(loss_["Angle"])
-                                plt_res[method]["Distance"].append(loss_["Distance"])
+                        if system_model.params.field_type == "Near":
+                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+                            snr_values = snr_dict.keys()
+                            plt_res = {}
+                            for snr, results in snr_dict.items():
+                                for method, loss_ in results.items():
+                                    if method not in plt_res:
+                                        plt_res[method] = {"Angle": [], "Distance": []}
+                                    # plt_res[method].append(loss_["Overall"])
+                                    plt_res[method]["Angle"].append(loss_["Angle"])
+                                    plt_res[method]["Distance"].append(loss_["Distance"])
 
-                        fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
-                        for method, loss_ in plt_res.items():
-                            # ax.scatter(snr_values, loss_, label=method)
-                            ax1.plot(snr_values, loss_["Angle"], label=method)
-                            ax2.plot(snr_values, loss_["Distance"], label=method)
-                        ax1.legend()
-                        ax2.legend()
-                        ax1.grid()
-                        ax2.grid()
-                        ax1.set_xlabel("SNR [dB]")
-                        ax2.set_xlabel("SNR [dB]")
-                        ax1.set_ylabel("RMSE [rad]")
-                        ax2.set_ylabel("RMSE [m]")
-                        ax1.set_title("Angle RMSE")
-                        ax2.set_title("Distance RMSE")
-                        plt.savefig(os.path.join(plot_path, f"{signal_nature}_sources_results_{dt_string_for_save}.png"))
-                        plt.show()
+                            fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
+                            for method, loss_ in plt_res.items():
+                                # ax.scatter(snr_values, loss_, label=method)
+                                ax1.plot(snr_values, loss_["Angle"], label=method)
+                                ax2.plot(snr_values, loss_["Distance"], label=method)
+                            ax1.legend()
+                            ax2.legend()
+                            ax1.grid()
+                            ax2.grid()
+                            ax1.set_xlabel("SNR [dB]")
+                            ax2.set_xlabel("SNR [dB]")
+                            ax1.set_ylabel("RMSE [rad]")
+                            ax2.set_ylabel("RMSE [m]")
+                            ax1.set_title("Angle RMSE")
+                            ax2.set_title("Distance RMSE")
+                            plt.savefig(os.path.join(simulations_path,
+                                                     "results",
+                                                     "plots",
+                                                     f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                            plt.show()
+                        else: #FAR
+                            fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                            snr_values = snr_dict.keys()
+                            plt_res = {}
+                            for snr, results in snr_dict.items():
+                                for method, loss_ in results.items():
+                                    if method not in plt_res:
+                                        plt_res[method] = {"Overall": []}
+                                    plt_res[method]["Overall"].append(loss_["Overall"])
+
+                            fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
+                            for method, loss_ in plt_res.items():
+                                ax.plot(snr_values, loss_["Overall"], label=method)
+                            ax.legend()
+                            ax.grid()
+                            ax.set_xlabel("SNR [dB]")
+                            ax.set_ylabel("RMSE [rad]")
+                            ax.set_title("Overall RMSPE loss")
+                            plt.savefig(os.path.join(simulations_path,
+                                                     "results",
+                                                     "plots",
+                                                     f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                            plt.show()
+
                     elif isinstance(criterion, CartesianLoss):
                         fig, ax = plt.subplots(1, 1, figsize=(15, 5))
                         snr_values = snr_dict.keys()
@@ -329,24 +328,26 @@ def __run_simulation(**kwargs):
                         ax.set_xlabel("SNR [dB]")
                         ax.set_ylabel("RMSE [m]")
                         ax.set_title("Overall RMSE - Cartesian Loss")
-                        plt.savefig(os.path.join(plot_path, f"{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                        plt.savefig(os.path.join(simulations_path,
+                                                 "results",
+                                                 "plots",
+                                                 f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
                         plt.show()
-        else:
-            if save_to_file:
-                file_path = (
-                        simulations_path / "results" / "scores" / Path(dt_string_for_save +"_summary" + ".txt")
-                )
-                sys.stdout = open(file_path, "w")
-            for signal_nature, snr_dict in res.items():
-                if len(snr_dict.keys()) >= 1:
-                    print("#" * 20, signal_nature.upper(), "#" * 20)
-                    for snr, results in snr_dict.items():
-                        print(f"SNR = {snr} [dB]: ")
-                        for method, loss in results.items():
-                            print(f"\t{method.upper(): <20}: {loss['Overall']}")
-            if save_to_file:
-                sys.stdout.close()
-                sys.stdout = orig_stdout
+        if save_to_file:
+            file_path = (
+                    simulations_path / "results" / "scores" / Path(dt_string_for_save +"_summary" + ".txt")
+            )
+            sys.stdout = open(file_path, "w")
+        for signal_nature, snr_dict in res.items():
+            if len(snr_dict.keys()) >= 1:
+                print("#" * 20, signal_nature.upper(), "#" * 20)
+                for snr, results in snr_dict.items():
+                    print(f"SNR = {snr} [dB]: ")
+                    for method, loss in results.items():
+                        print(f"\t{method.upper(): <20}: {loss['Overall']}")
+        if save_to_file:
+            sys.stdout.close()
+            sys.stdout = orig_stdout
         return res
 
 

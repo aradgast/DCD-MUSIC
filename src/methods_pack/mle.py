@@ -4,14 +4,15 @@ import tqdm
 import itertools
 from itertools import product
 
-
 from src.system_model import SystemModel
 from src.utils import *
+
 
 class MLE(nn.Module):
     """
     This is the Maximum Likelihood Estimation method for localization in Far and Near field environments.
     """
+
     def __init__(self, system_model: SystemModel):
         super(MLE, self).__init__()
         self.system_model = system_model
@@ -54,9 +55,10 @@ class MLE(nn.Module):
         # f(angles, distances) = Tr[P_A(angles, distances) * cov]]
         # where P_A(angles, distances) is the projection matrix of the given steering matrix given by psseudo inverse.
 
-
-        angles_output = torch.zeros(cov.shape[0], number_of_sources, device=device, dtype=torch.float32, requires_grad=False)
-        distances_output = torch.zeros(cov.shape[0], number_of_sources, device=device, dtype=torch.float32, requires_grad=False)
+        angles_output = torch.zeros(cov.shape[0], number_of_sources, device=device, dtype=torch.float32,
+                                    requires_grad=False)
+        distances_output = torch.zeros(cov.shape[0], number_of_sources, device=device, dtype=torch.float32,
+                                       requires_grad=False)
         likelihoods = torch.zeros(cov.shape[0], 1, device=device, dtype=torch.float32, requires_grad=False)
 
         # for idx_a, subset_angles in enumerate(tqdm(self.subsets_angles)):
@@ -69,7 +71,7 @@ class MLE(nn.Module):
         #             self.projection_matrix_dict[(subset_angles, subset_distances)] = projection_matrix
         for (subset_angles, subset_distances), projection_matrix in tqdm(self.projection_matrix_dict.items()):
             # calculate the likelihood function
-            likelihood_tmp = self.__calc_liklihood(cov, projection_matrix)     # size: batch_sizeX1
+            likelihood_tmp = self.__calc_liklihood(cov, projection_matrix)  # size: batch_sizeX1
             mask = (likelihoods < likelihood_tmp).repeat(1, number_of_sources)
 
             # Ensure subset_angles and subset_distances are tensors and expand dimensions if necessary
@@ -92,17 +94,20 @@ class MLE(nn.Module):
         if cov.dim() == 2:
             return torch.abs(torch.trace(projection_matrix @ cov))
         else:
-            return torch.stack([torch.abs(torch.trace(projection_matrix @ c)) for c in cov])[:, None].to(device).to(torch.float32)
+            return torch.stack([torch.abs(torch.trace(projection_matrix @ c)) for c in cov])[:, None].to(device).to(
+                torch.float32)
+
     def __define_grid_params(self):
         M = self.system_model.params.M
         if self.system_model.params.field_type.startswith("Far"):
-            self.angles = torch.linspace(-np.pi/2, np.pi/2, 361)
+            self.angles = torch.linspace(-np.pi / 2, np.pi / 2, 361)
             self.subsets_angles = list(itertools.combinations(range(self.angles.shape[0]), M))
         elif self.system_model.params.field_type.startswith("Near"):
-            self.angles = torch.arange(-np.pi/6, np.pi/6, torch.pi / 90, device=device, dtype=torch.float32, requires_grad=False)
+            self.angles = torch.arange(-np.pi / 6, np.pi / 6, torch.pi / 90, device=device, dtype=torch.float32,
+                                       requires_grad=False)
             fresnel = float(np.floor(self.system_model.fresnel))
             fraunhofer = float(np.round(self.system_model.fraunhofer, decimals=1) + 1)
-            self.distances = torch.arange(fresnel, fraunhofer // 2 , step=1,
+            self.distances = torch.arange(fresnel, fraunhofer // 2, step=1,
                                           device=device, dtype=torch.float32, requires_grad=False)
             self.subsets_angles = list(itertools.combinations(range(self.angles.shape[0]), M))
             self.subsets_distances = list(itertools.combinations(range(self.distances.shape[0]), M))
@@ -128,6 +133,7 @@ class MLE(nn.Module):
             projection_matrix_dict[(tuple(angles), tuple(distances))] = projection_matrix
 
         self.projection_matrix_dict = projection_matrix_dict
+
     def __define_search_grid(self):
         if self.system_model.params.field_type.startswith("Far"):
             self.__define_search_grid_far()
@@ -158,7 +164,6 @@ class MLE(nn.Module):
 
         steering_matrix = torch.exp(2 * -1j * torch.pi * time_delay)
         self.search_grid = steering_matrix
-
 
     def __define_search_grid_far(self):
         pass
