@@ -88,6 +88,6 @@ class SubspaceMethod(nn.Module):
             # Calculate sample covariance matrix for each sub-array
             sub_covariance = torch.einsum("bmt, btl -> bml", x_sub, torch.conj(x_sub).transpose(1,2)) / samples_number
             # Aggregate sub-arrays covariances
-            Rx_smoothed += sub_covariance / number_of_sub_arrays
+            Rx_smoothed += sub_covariance.to(device) / number_of_sub_arrays
         # Divide overall matrix by the number of sources
         return Rx_smoothed

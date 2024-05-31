@@ -147,7 +147,7 @@ def evaluate_dnn_model(
                 if isinstance(model, CascadedSubspaceNet):
                     model_output = model(X, is_soft=False, train_angle_extractor=False)
                 else:  # SubspaceNet with 2D MUSIC
-                    model_output = model(X, is_soft=False).to(device)
+                    model_output = model(X, is_soft=False)
             else:
                 model_output = model(X)
             if isinstance(model, DeepAugmentedMUSIC):

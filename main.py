@@ -34,8 +34,8 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [-10, 0, 10],
-        "non-coherent": [-10, 0, 10],
+        "coherent": [-5, 5, -10, 0, 10],
+        "non-coherent": [-5, 5, -10, 0, 10],
     }
 
     system_model_params = {
@@ -56,11 +56,11 @@ if __name__ == "__main__":
         "field_type": "Near"                        # Near, Far
     }
     training_params = {
-        "samples_size": 1024 * 64,
+        "samples_size": 500,
         "train_test_ratio": .05,
         "training_objective": "angle, range",       # angle, range
         "batch_size": 256,
-        "epochs": 100,
+        "epochs": 150,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -78,11 +78,12 @@ if __name__ == "__main__":
         "balance_factor": training_params["balance_factor"],
         "models":
                 {
-                # "TransMUSIC": {},
-                # "SubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
-                #                 "diff_method": model_config["diff_method"], "field_type": model_config["field_type"]},
-                # "CascadedSubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
-                #                         "diff_method": model_config["diff_method"], "field_type": model_config["field_type"]},
+                "TransMUSIC": {},
+                "SubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
+                                "diff_method": "music_2D", "field_type": model_config["field_type"]},
+                "CascadedSubspaceNet": {"tau": model_config["tau"], "N": system_model_params["N"],
+                                        "diff_method": "music_1D", "field_type": model_config["field_type"]},
+
 
 
                 },
@@ -102,17 +103,18 @@ if __name__ == "__main__":
             # "sps-esprit",
             # "sps-music_1d"
             # "bb-music",
-            # "music_2D"
+            # "music_2D",
+            # "sps_music_2D",
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": True,
-        "CREATE_DATA": False,
+        "SAVE_TO_FILE": False,
+        "CREATE_DATA": True,
         "LOAD_MODEL": True,
-        "TRAIN_MODEL": True,
-        "SAVE_MODEL": True,
-        "EVALUATE_MODE": False,
-        "PLOT_RESULTS": False
+        "TRAIN_MODEL": False,
+        "SAVE_MODEL": False,
+        "EVALUATE_MODE": True,
+        "PLOT_RESULTS": True
     }
     start = time.time()
     loss = run_simulation(simulation_commands=simulation_commands,

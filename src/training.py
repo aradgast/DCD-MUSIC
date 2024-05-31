@@ -582,7 +582,7 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
     """
     title = "Learning Curve: Loss per Epoch"
     if model_name is not None:
-        model_name += f" {model_name}"
+        title += f" {model_name}"
     plt.title(title)
     plt.plot(epoch_list, train_loss, label="Train")
     plt.plot(epoch_list, validation_loss, label="Validation")
