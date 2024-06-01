@@ -188,7 +188,7 @@ def evaluate_dnn_model(
                     f"evaluate_dnn_model: Model type {model_type} is not defined"
                 )
             # Compute prediction loss
-            if model_type.startswith("DeepCNN") and isinstance(criterion, RMSPELoss):
+            if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(DOA_predictions.float(), DOA.float())
             elif isinstance(model, TransMUSIC):
                 DOA_predictions = DOA_predictions[:, :DOA.shape[1]]

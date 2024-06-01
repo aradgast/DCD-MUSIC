@@ -170,7 +170,7 @@ def __run_simulation(**kwargs):
                 if load_model:
                     try:
                         simulation_parameters.load_model(
-                            loading_path=saving_path / "final_models" / get_model_filename(system_model_params, model_config))
+                            loading_path=saving_path / "final_models" / model_config.model.get_model_file_name())
                         # if isinstance(simulation_parameters.model, CascadedSubspaceNet):
                         #     simulation_parameters.model._load_state_for_angle_extractor()
                     except Exception as e:
@@ -328,6 +328,7 @@ def __run_simulation(**kwargs):
                         ax.set_xlabel("SNR [dB]")
                         ax.set_ylabel("RMSE [m]")
                         ax.set_title("Overall RMSE - Cartesian Loss")
+                        ax.set_yscale("log")
                         plt.savefig(os.path.join(simulations_path,
                                                  "results",
                                                  "plots",

@@ -152,8 +152,9 @@ class RMSPELoss(nn.Module):
         # Calculate RMSPE loss for only DOA
         num_sources = doa_predictions.shape[1]
         perm = list(permutations(range(num_sources), num_sources))
+        num_of_perm = len(perm)
 
-        err_angle = (doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_sources, 1)).to(torch.float32))
+        err_angle = (doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_of_perm, 1)).to(torch.float32))
         # Calculate error with modulo pi in the range [-pi/2, pi/2]
         err_angle += torch.pi / 2
         err_angle %= torch.pi
@@ -162,7 +163,7 @@ class RMSPELoss(nn.Module):
         if distance is None:
             rmspe = rmspe_angle
         else:
-            err_distance = (distance_predictions[:, perm].to(device) - torch.tile(distance[:, None, :], (1, num_sources, 1)).to(device))
+            err_distance = (distance_predictions[:, perm].to(device) - torch.tile(distance[:, None, :], (1, num_of_perm, 1)).to(device))
             rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
         rmspe, min_idx = torch.min(rmspe, dim=-1)
@@ -453,8 +454,9 @@ class CartesianLoss(nn.Module):
         # need to consider all possible permutations for M sources
         perm = list(permutations(range(M), M))
         perm = torch.tensor(perm, dtype=torch.int64).to(device)
+        num_of_perm = len(perm)
 
-        error = torch.tile(coords_true[:, None, :, :], (1, M, 1, 1)) - coords_pred[:, perm]
+        error = torch.tile(coords_true[:, None, :, :], (1, num_of_perm, 1, 1)) - coords_pred[:, perm]
         loss = torch.sqrt(torch.sum(error ** 2, dim=-1))
         loss = torch.mean(loss, dim=-1)
         loss = torch.min(loss, dim=-1)

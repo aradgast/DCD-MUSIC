@@ -257,7 +257,7 @@ class ModelGenerator(object):
             f"M={self.system_model.params.M}_" + \
             f"{self.system_model.params.signal_type}_" + \
             f"SNR={self.system_model.params.snr}_" + \
-            f"diff_method=esprit" + \
+            f"diff_method=esprit_" + \
             f"{self.system_model.params.field_type}_field_" +  \
             f"{self.system_model.params.signal_nature}"
         return path
