@@ -88,6 +88,15 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
         print("####################################")
         print(e)
         print("####################################")
+        try:
+            print(f"Model {model_name} not found in final_models, trying to load from temp weights.")
+            path = os.path.join(os.getcwd(), "data", "weights", model.get_model_file_name())
+            model.load_state_dict(torch.load(path))
+        except FileNotFoundError as e:
+            print("####################################")
+            print(e)
+            print("####################################")
+            print(f"Model {model_name} not found")
     return model.to(device)
 
 
@@ -196,7 +205,14 @@ def evaluate_dnn_model(
                     eval_loss = criterion(DOA_predictions, DOA)
                 elif model.estimation_params == "angle, range":
                     RANGE_predictions = RANGE_predictions[:, :RANGE.shape[1]]
-                    eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE.to(device))
+                    if isinstance(criterion, RMSPELoss):
+                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
+                        if is_separted:
+                            eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
+                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                    else:
+                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE.to(device))
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     if not (isinstance(criterion, nn.BCELoss) or isinstance(criterion, CartesianLoss)):
@@ -358,8 +374,11 @@ def evaluate_model_based(
     loss_list = []
     loss_list_angle = []
     loss_list_distance = []
+    if algorithm.lower() == "crb":
+        if system_model.params.signal_nature.lower() == "non-coherent":
+            crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
+            return crb
     model_based = get_model_based_method(algorithm, system_model)
-
     for i, data in enumerate(dataset):
         X, doa = data
         # X = X[0]
@@ -611,6 +630,9 @@ def evaluate(
     # Evaluate SubspaceNet + differentiable algorithm performances
     for model_name, params in models.items():
         model = get_model(model_name, params, system_model)
+        # num_of_params = sum(p.numel() for p in model.parameters())
+        # total_size = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
+        # print(f"Number of parameters in {model_name}: {num_of_params} with total size: {total_size} bytes")
         start = time.time()
         model_test_loss = evaluate_dnn_model(
             model=model,
@@ -648,13 +670,6 @@ def evaluate(
         )
         print(f"{algorithm} evaluation time: {time.time() - start}")
         res[algorithm] = loss
-    # UCRB
-    try:
-        params = system_model.params
-    except Exception as e:
-        print("Couldn't get model params - unable to calculte UCRB")
-    crb = evaluate_crb(generic_test_dataset, params, mode="cartesian")
-    res["CRB"] = crb
     # MLE
     # mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
     # res["MLE"] = mle_loss

@@ -257,7 +257,7 @@ class TrainingParams(object):
             self.criterion = CartesianLoss()
         else:
             raise Exception(
-                f"TrainingParams.set_criterion: Training objective {self.training_objective} is not defined"
+                f"TrainingParams.set_criterion: criterion {criterion} is not defined"
             )
         return self
 

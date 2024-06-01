@@ -50,7 +50,7 @@ if __name__ == "__main__":
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+        "model_type": "CascadedSubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
         "model_params": {}
     }
     if model_config.get("model_type") == "SubspaceNet":
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     training_params = {
         "samples_size": 1024 * 100,
         "train_test_ratio": .05,
-        "training_objective": "angle",       # angle, range
+        "training_objective": "range",       # angle, range
         "batch_size": 256,
         "epochs": 100,
         "optimizer": "Adam",                        # Adam, SGD
@@ -80,17 +80,18 @@ if __name__ == "__main__":
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
         "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-        "balance_factor": 1.0                 # if None, the balance factor will be set to the default value -> 0.6
+        "balance_factor": 0.0                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
         "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
         "balance_factor": training_params["balance_factor"],
         "models": {
-                    "TransMUSIC": {},
-                    "SubspaceNet": {"tau": 8,
-                                    "diff_method": "music_2D",
-                                    "field_type": system_model_params["field_type"]},
-                    "CascadedSubspaceNet": {"tau": 8}
+                    "CascadedSubspaceNet": {"tau": 8},
+                    # "SubspaceNet": {"tau": 8,
+                    #                 "diff_method": "music_2D",
+                    #                 "field_type": system_model_params["field_type"]},
+                    # "TransMUSIC": {},
+
                 },
         "augmented_methods": [
             # "mvdr",
@@ -110,12 +111,13 @@ if __name__ == "__main__":
             # "bb-music",
             # "music_2D",
             # "sps_music_2D",
+            # "CRB"
         ]
     }
     simulation_commands = {
         "SAVE_TO_FILE": True,
-        "CREATE_DATA": False,
-        "LOAD_MODEL": True,
+        "CREATE_DATA": True,
+        "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
         "SAVE_MODEL": True,
         "EVALUATE_MODE": False,

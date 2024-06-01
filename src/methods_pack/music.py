@@ -30,7 +30,7 @@ class MUSIC(SubspaceMethod):
         self.music_spectrum = None
         self.__define_grid_params()
         if self.estimation_params == "range":
-            self.cell_size = int(self.distances.shape[0] * 0.3)
+            self.cell_size = int(self.distances.shape[0] * 0.05)
         elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.2)
             self.cell_size_distance = int(self.distances.shape[0] * 0.2)
@@ -487,7 +487,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
     def __str__(self):
-        return f"MUSIC_{self.estimation_params}_estimation"
+        return f"music_{self.estimation_params}"
 
 
 def keep_far_enough_points(tensor, M, D):

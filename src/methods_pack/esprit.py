@@ -22,6 +22,9 @@ class ESPRIT(SubspaceMethod):
 
         return prediction
 
+    def __str__(self):
+        return "esprit"
+
 
 def esprit(Rz: torch.Tensor, M: int, batch_size: int):
     """Implementation of the model-based Esprit algorithm, support Pytorch, intended for

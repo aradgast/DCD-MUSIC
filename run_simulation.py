@@ -174,8 +174,10 @@ def __run_simulation(**kwargs):
                         # if isinstance(simulation_parameters.model, CascadedSubspaceNet):
                         #     simulation_parameters.model._load_state_for_angle_extractor()
                     except Exception as e:
+                        print("#############################################")
                         print(e)
                         print("Model not found.")
+                        print("#############################################")
 
                 # Print training simulation details
                 simulation_summary(
@@ -192,10 +194,8 @@ def __run_simulation(**kwargs):
                 )
                 # Save model weights
                 if save_model:
-                    torch.save(
-                        model.state_dict(),
-                        saving_path / "final_models" / Path(model.get_model_file_name()),
-                    )
+                    torch.save(model.state_dict(),
+                            saving_path / "final_models" / Path(model.get_model_file_name()))
                 # Plots saving
                 if save_to_file:
                     plt.savefig(
@@ -328,7 +328,11 @@ def __run_simulation(**kwargs):
 
                         fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
                         for method, loss_ in plt_res.items():
-                            ax.plot(snr_values, loss_["Overall"], label=method)
+                            if method == "CRB":
+                                line_style = "-."
+                            else:
+                                line_style = None
+                            ax.plot(snr_values, loss_["Overall"], label=method, linestyle=line_style)
                         ax.legend()
                         ax.grid()
                         ax.set_xlabel("SNR [dB]")

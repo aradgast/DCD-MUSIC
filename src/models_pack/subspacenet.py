@@ -171,7 +171,7 @@ class SubspaceNet(nn.Module):
                 f"M={self.system_model.params.M}_" + \
                 f"{self.system_model.params.signal_type}_" + \
                 f"SNR={self.system_model.params.snr}_" + \
-                f"diff_method=music_2D_" + \
+                f"diff_method={self.diff_method}_" + \
                 f"{self.system_model.params.field_type}_field_" +  \
                 f"{self.system_model.params.signal_nature}"
 
