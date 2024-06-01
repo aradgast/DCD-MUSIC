@@ -364,7 +364,7 @@ class MUSIC(SubspaceMethod):
             original_idx = np.array(np.unravel_index(peaks, music_spectrum.shape))
             if self.system_model.params.M > 1:
                 original_idx = keep_far_enough_points(original_idx, self.system_model.params.M, 30)
-            # original_idx = original_idx[:, 0:self.system_model.params.M]
+            original_idx = original_idx[:, 0:self.system_model.params.M]
             predict_theta[batch] = angels[original_idx[0]]
             predict_dist[batch] = distances[original_idx[1]]
 

@@ -499,7 +499,8 @@ def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):
 
 
 def evaluate_crb(dataset: list,
-                 params: SystemModelParams):
+                 params: SystemModelParams,
+                 mode: str="separate"):
     u_snr = 10 ** (params.snr / 10)
     if params.field_type.lower() == "far":
         print("CRB calculation is not supported for Far Field yet.")
@@ -508,28 +509,41 @@ def evaluate_crb(dataset: list,
         if params.signal_nature.lower() == "non-coherent":
             angles = []
             distances = []
+            ucrb_cartzien = None
             for i, data in enumerate(dataset):
                 _, labels = data
-                labels = labels[0]
-                angles.extend(*labels[:len(labels) // 2][None, :].detach().numpy())
-                distances.extend(*labels[len(labels) // 2:][None, :].detach().numpy())
+                angles.extend(*labels[:, :labels.shape[1] // 2][None, :].detach().numpy())
+                distances.extend(*labels[:, labels.shape[1] // 2:][None, :].detach().numpy())
             angles = np.array(angles)
             distances = np.array(distances)
             snr_coeff = (1 + 1 / (u_snr * params.N))
-            ucrb_angle = 12 / (2 * u_snr * params.T * np.pi * np.cos(angles) ** 2)
+            ucrb_angle = (3 * 2 ** 2) / (2 * u_snr * params.T * (np.pi * np.cos(angles)) ** 2)
             ucrb_angle *= (8 * params.N - 11) * (2 * params.N - 1)
             ucrb_angle /= params.N * (params.N ** 2 - 1) * (params.N ** 2 - 4)
             ucrb_angle *= snr_coeff
 
-            ucrb_distance = 6 * distances ** 2 * 16 / (u_snr * params.T * np.pi)  # missing /wavelength
+            ucrb_distance = 6 * distances ** 2 * 2 ** 4 / (u_snr * params.T * np.pi ** 2)  # missing /wavelength
             ucrb_distance *= snr_coeff
             ucrb_distance /= params.N ** 2 * (params.N ** 2 - 1) * (params.N ** 2 - 4) * np.cos(angles) ** 4
             num = 15 * distances ** 2
-            num += 15 * distances * (params.N - 1) * np.sin(angles)  # missing *wavelength
-            num += 0.25 * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles) ** 2  # missing * wavelength ** 2
+            num += (30 / 2) * distances * (params.N - 1) * np.sin(angles)  # missing *wavelength
+            num += (1 / 2) ** 2 * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles) ** 2  # missing * wavelength ** 2
             ucrb_distance *= num
+            if mode == "cartesian":
+                # Need to calculate the cross term as well, and change coordinates.
+                ucrb_cross = - snr_coeff * (3 * distances)
+                ucrb_cross /= u_snr * params.T * np.pi ** 2 * (1 / 2) ** 3
+                ucrb_cross *= 15 * distances*(params.N - 1) + (1 / 2) * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles)
+                ucrb_cross /= params.N * (params.N ** 2 - 1) * (params.N ** 2 - 4) * np.cos(angles) ** 3
 
-            return {"Overall": None, "Angle": np.mean(ucrb_angle), "Distance": np.mean(ucrb_distance)}
+                #change coordinates
+                ucrb_cartzien = distances ** 2 * ucrb_angle + ucrb_distance
+                ucrb_cartzien -= distances ** 2 * np.sin(2 * angles) * ucrb_angle
+                # ucrb_cartzien += np.sin(2 * angles) * ucrb_distance
+                # ucrb_cartzien += 2 * distances * np.cos(2 * angles) * ucrb_cross
+                ucrb_cartzien = np.mean(ucrb_cartzien)
+
+            return {"Overall": ucrb_cartzien, "Angle": np.mean(ucrb_angle), "Distance": np.mean(ucrb_distance)}
         else:
             print("UCRB calculation for the coherent is not supported yet")
     else:
@@ -639,8 +653,8 @@ def evaluate(
         params = system_model.params
     except Exception as e:
         print("Couldn't get model params - unable to calculte UCRB")
-    # crb = evaluate_crb(generic_test_dataset, params)
-    # res["CRB"] = crb
+    crb = evaluate_crb(generic_test_dataset, params, mode="cartesian")
+    res["CRB"] = crb
     # MLE
     # mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
     # res["MLE"] = mle_loss

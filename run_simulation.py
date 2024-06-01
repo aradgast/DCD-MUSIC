@@ -268,9 +268,12 @@ def __run_simulation(**kwargs):
 
                             fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
                             for method, loss_ in plt_res.items():
-                                # ax.scatter(snr_values, loss_, label=method)
-                                ax1.plot(snr_values, loss_["Angle"], label=method)
-                                ax2.plot(snr_values, loss_["Distance"], label=method)
+                                if method == "CRB":
+                                    line_style = "-."
+                                else:
+                                    line_style = None
+                                ax1.plot(snr_values, loss_["Angle"], label=method, linestyle=line_style)
+                                ax2.plot(snr_values, loss_["Distance"], label=method, linestyle=line_style)
                             ax1.legend()
                             ax2.legend()
                             ax1.grid()
@@ -281,6 +284,8 @@ def __run_simulation(**kwargs):
                             ax2.set_ylabel("RMSE [m]")
                             ax1.set_title("Angle RMSE")
                             ax2.set_title("Distance RMSE")
+                            ax1.set_yscale("log")
+                            ax2.set_yscale("log")
                             plt.savefig(os.path.join(simulations_path,
                                                      "results",
                                                      "plots",
@@ -304,6 +309,7 @@ def __run_simulation(**kwargs):
                             ax.set_xlabel("SNR [dB]")
                             ax.set_ylabel("RMSE [rad]")
                             ax.set_title("Overall RMSPE loss")
+                            ax.set_yscale("log")
                             plt.savefig(os.path.join(simulations_path,
                                                      "results",
                                                      "plots",
