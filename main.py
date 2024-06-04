@@ -34,23 +34,23 @@ if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
     # hold values for different scenarios, currently only for SNR and signal nature
     scenario_dict = {
-        "coherent": [-10, -5, 0, 5, 10],
-        "non-coherent": [-10, -5, 0, 5, 10],
+        "coherent": [],
+        "non-coherent": [-5],
     }
 
     system_model_params = {
         "N": 15,                                    # number of antennas
-        "M": 3,                                     # number of sources
+        "M": 2,                                     # number of sources
         "T": 100,                                   # number of snapshots
         "snr": None,                                # if defined, values in scenario_dict will be ignored
-        "field_type": "Near",                       # Near, Far
+        "field_type": "Far",                       # Near, Far
         "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
         "eta": 0,                                   # steering vector error
         "bias": 0,
         "sv_noise_var": 0
     }
     model_config = {
-        "model_type": "CascadedSubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+        "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
         "model_params": {}
     }
     if model_config.get("model_type") == "SubspaceNet":
@@ -65,11 +65,11 @@ if __name__ == "__main__":
         model_config["model_params"]["grid_size"] = 361
 
     training_params = {
-        "samples_size": 1024 * 100,
-        "train_test_ratio": .05,
-        "training_objective": "range",       # angle, range
-        "batch_size": 256,
-        "epochs": 100,
+        "samples_size":  320,
+        "train_test_ratio": .1,
+        "training_objective": "angle",       # angle, range
+        "batch_size": 32,
+        "epochs": 10,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -80,16 +80,16 @@ if __name__ == "__main__":
         "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
         "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-        "balance_factor": 0.0                 # if None, the balance factor will be set to the default value -> 0.6
+        "balance_factor": 1.0                 # if None, the balance factor will be set to the default value -> 0.6
     }
     evaluation_params = {
-        "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
+        "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
         "balance_factor": training_params["balance_factor"],
         "models": {
-                    "CascadedSubspaceNet": {"tau": 8},
-                    # "SubspaceNet": {"tau": 8,
-                    #                 "diff_method": "music_2D",
-                    #                 "field_type": system_model_params["field_type"]},
+                    # "CascadedSubspaceNet": {"tau": 8},
+                    "SubspaceNet": {"tau": 8,
+                                    "diff_method": "esprit",
+                                    "field_type": system_model_params["field_type"]},
                     # "TransMUSIC": {},
 
                 },
@@ -115,12 +115,12 @@ if __name__ == "__main__":
         ]
     }
     simulation_commands = {
-        "SAVE_TO_FILE": True,
-        "CREATE_DATA": True,
+        "SAVE_TO_FILE": False,
+        "CREATE_DATA": False,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
-        "SAVE_MODEL": True,
-        "EVALUATE_MODE": False,
+        "SAVE_MODEL": False,
+        "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }
     start = time.time()

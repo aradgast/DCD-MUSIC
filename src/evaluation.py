@@ -30,6 +30,7 @@ evaluate: Wrapper function for model and algorithm evaluations.
 import os
 import time
 import numpy as np
+import torch.linalg
 # Imports
 import torch.nn as nn
 from src.utils import *
@@ -184,6 +185,7 @@ def evaluate_dnn_model(
                 elif model.field_type.endswith("Far"):
                     # Default - SubSpaceNet
                     DOA_predictions = model_output[0]
+                    eigen_regularization = model_output[-1]
             elif isinstance(model, TransMUSIC):
                 if model.estimation_params == "angle":
                     DOA_predictions = model_output[0]
@@ -225,6 +227,15 @@ def evaluate_dnn_model(
                         eval_loss = criterion(DOA_predictions, DOA.to(device), RANGE_predictions, RANGE.to(device))
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
+                    if not is_separted:
+                        eval_loss += 0.1 * torch.mean(eigen_regularization, dim=0)
+                        pass
+                    else: # Test phase
+                        Rx = model_output[1]
+                        eigen_val = torch.real(torch.linalg.eigvals(Rx))
+                        est_num_sources = torch.linalg.norm(torch.nn.functional.relu(eigen_val / torch.max(eigen_val, dim=1)[0][:, None] - 0.5), dim=1 ,ord=0)
+                        error_rate = torch.mean(torch.Tensor(est_num_sources == (DOA.shape[1] * torch.ones_like(est_num_sources))).to(torch.float32))
+                        print(f"Accuracy for number of source estimation: {100 * error_rate:.2f}%")
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model_type}")
             # add the batch evaluation loss to epoch loss

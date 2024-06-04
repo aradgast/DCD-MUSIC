@@ -13,6 +13,7 @@ class SubspaceMethod(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(SubspaceMethod, self).__init__()
         self.system_model = system_model
+        self.eigen_threshold = nn.Parameter(torch.tensor(.5), requires_grad=False)
 
     def subspace_separation(self, covariance: torch.Tensor, number_of_sources: int = None):
         """
@@ -30,7 +31,12 @@ class SubspaceMethod(nn.Module):
                                          sorted_idx.unsqueeze(-1).expand(-1, -1, covariance.shape[-1]).transpose(1, 2))
         signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
         noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
-        return signal_subspace.to(device), noise_subspace.to(device)
+        if True:
+            sorted_eigenvals = torch.gather(eigenvalues, 1, sorted_idx)
+            normalized_eigen = torch.real(sorted_eigenvals) / torch.real(sorted_eigenvals[:, 0][:, None])
+            eigen_regularization = (normalized_eigen[:, number_of_sources] - self.eigen_threshold) *\
+                                   (normalized_eigen[:, number_of_sources + 1] - self.eigen_threshold)
+        return signal_subspace.to(device), noise_subspace.to(device), eigen_regularization
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

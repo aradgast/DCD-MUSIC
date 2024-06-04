@@ -127,14 +127,13 @@ class SubspaceNet(nn.Module):
 
         if self.field_type == "Far":
             method_output = self.diff_method(Rz)
-            if isinstance(method_output, tuple):
-                # Root MUSIC output
+            if isinstance(self.diff_method, RootMusic):
                 doa_prediction, doa_all_predictions, roots = method_output
+                return doa_prediction, doa_all_predictions, roots
             else:
                 # Esprit output
-                doa_prediction = method_output
-                doa_all_predictions, roots = None, None
-            return doa_prediction, doa_all_predictions, roots, Rz
+                doa_prediction, eigen_regularization = method_output
+            return doa_prediction, Rz, eigen_regularization
 
         elif self.field_type == "Near":
             if known_angles is None:

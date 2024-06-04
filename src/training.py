@@ -413,6 +413,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     RANGE_predictions = model_output[1]
                 elif training_params.training_objective.endswith("angle"):
                     DOA_predictions = model_output[0]
+                    eigen_regularization = model_output[-1]
             elif isinstance(model, TransMUSIC):
                 if training_params.training_objective == "angle":
                     DOA_predictions = model_output[0]
@@ -439,6 +440,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(DOA_predictions, DOA)
+                    train_loss += 0.1 * torch.mean(eigen_regularization, dim=0)
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
                 elif training_params.training_objective == "angle, range":
