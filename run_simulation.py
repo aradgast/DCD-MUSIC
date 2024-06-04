@@ -215,8 +215,8 @@ def __run_simulation(**kwargs):
                 criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"],
                                                                EVALUATION_PARAMS["balance_factor"])
                 # Load datasets for evaluation
-                if not (create_data or load_data):
-                    test_dataset, generic_test_dataset, samples_model = load_datasets(
+                if not create_data or load_data:
+                            generic_test_dataset, samples_model = load_datasets(
                         system_model_params=system_model_params,
                         model_type=model_config.model_type,
                         samples_size=samples_size,
