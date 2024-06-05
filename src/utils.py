@@ -174,7 +174,10 @@ def set_unified_seed(seed: int = 42):
     torch.cuda.manual_seed_all(0)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    # torch.use_deterministic_algorithms(True)
+    if torch.cuda.is_available():
+        torch.use_deterministic_algorithms(False)
+    else:
+        torch.use_deterministic_algorithms(True)
 
 
 # def get_k_angles(grid_size: float, k: int, prediction: torch.Tensor) -> torch.Tensor:

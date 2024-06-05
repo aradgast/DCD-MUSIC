@@ -65,11 +65,11 @@ if __name__ == "__main__":
         model_config["model_params"]["grid_size"] = 361
 
     training_params = {
-        "samples_size":  320,
+        "samples_size":  1280,
         "train_test_ratio": .1,
         "training_objective": "angle",       # angle, range
         "batch_size": 32,
-        "epochs": 10,
+        "epochs": 3,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,
@@ -116,10 +116,10 @@ if __name__ == "__main__":
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,
-        "CREATE_DATA": False,
+        "CREATE_DATA": True,
         "LOAD_MODEL": False,
         "TRAIN_MODEL": True,
-        "SAVE_MODEL": False,
+        "SAVE_MODEL": True,
         "EVALUATE_MODE": True,
         "PLOT_RESULTS": False
     }

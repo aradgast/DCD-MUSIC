@@ -11,7 +11,11 @@ class ESPRIT(SubspaceMethod):
 
     def forward(self, cov: torch.Tensor):
         # get the signal subspace
-        signal_subspace, _ , regularization = self.subspace_separation(cov, number_of_sources=self.system_model.params.M)
+        signal_subspace, _, sources_estimation, regularization = self.subspace_separation(
+            cov,
+            number_of_sources=self.system_model.params.M,
+            eigen_regularization=True
+        )
         # create 2 overlapping matrices
         upper = signal_subspace[:, :-1]
         lower = signal_subspace[:, 1:]
@@ -20,7 +24,7 @@ class ESPRIT(SubspaceMethod):
         eigvals_phase = torch.angle(eigvalues)
         prediction = -1 * torch.arcsin((1 / torch.pi) * eigvals_phase)
 
-        return prediction, regularization
+        return prediction, sources_estimation, regularization
 
     def __str__(self):
         return "esprit"

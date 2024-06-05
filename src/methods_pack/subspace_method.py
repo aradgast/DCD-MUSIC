@@ -13,14 +13,19 @@ class SubspaceMethod(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(SubspaceMethod, self).__init__()
         self.system_model = system_model
-        self.eigen_threshold = nn.Parameter(torch.tensor(.5), requires_grad=False)
+        self.eigen_threshold = nn.Parameter(torch.tensor(.5), requires_grad=True)
 
-    def subspace_separation(self, covariance: torch.Tensor, number_of_sources: int = None):
+    def subspace_separation(self,
+                            covariance: torch.Tensor,
+                            number_of_sources: int = None,
+                            eigen_regularization: bool = False)\
+            -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.tensor):
         """
 
         Args:
             covariance:
             number_of_sources:
+            eigen_regularization:
 
         Returns:
             the signal ana noise subspaces, both as torch.Tensor().
@@ -29,14 +34,23 @@ class SubspaceMethod(nn.Module):
         sorted_idx = torch.argsort(torch.real(eigenvalues), descending=True)
         sorted_eigvectors = torch.gather(eigenvectors, 2,
                                          sorted_idx.unsqueeze(-1).expand(-1, -1, covariance.shape[-1]).transpose(1, 2))
+        # number of sources estimation
+        real_sorted_eigenvals = torch.gather(torch.real(eigenvalues), 1, sorted_idx)
+        normalized_eigen = real_sorted_eigenvals / real_sorted_eigenvals[:, 0][:, None]
+        source_estimation = torch.linalg.norm(
+            nn.functional.relu(
+                normalized_eigen - self.eigen_threshold * torch.ones_like(normalized_eigen)),
+            dim=1, ord=0)
+
         signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
         noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
-        if True:
-            sorted_eigenvals = torch.gather(eigenvalues, 1, sorted_idx)
-            normalized_eigen = torch.real(sorted_eigenvals) / torch.real(sorted_eigenvals[:, 0][:, None])
-            eigen_regularization = (normalized_eigen[:, number_of_sources] - self.eigen_threshold) *\
+
+        if eigen_regularization:
+            eigen_regularization = (normalized_eigen[:, number_of_sources] - self.eigen_threshold) * \
                                    (normalized_eigen[:, number_of_sources + 1] - self.eigen_threshold)
-        return signal_subspace.to(device), noise_subspace.to(device), eigen_regularization
+            eigen_regularization = torch.mean(eigen_regularization) * (1 / (covariance.shape[1] - number_of_sources))
+            return signal_subspace.to(device), noise_subspace.to(device), source_estimation, eigen_regularization
+        return signal_subspace.to(device), noise_subspace.to(device), source_estimation, None
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

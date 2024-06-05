@@ -72,9 +72,9 @@ class MUSIC(SubspaceMethod):
                     for source in range(self.system_model.params.M):
                         params_source = self.forward(cov, known_angles=known_angles[:, source][:, None],
                                                      is_soft=is_soft)
-                        params[:, source] = params_source.squeeze()
+                        params[:, source] = params_source[0].squeeze()
                     return params
-        _, Un = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
+        _, Un, _, _ = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
         # self.noise_subspace = Un.cpu().detach().numpy()
         inverse_spectrum = self.get_inverse_spectrum(Un.to(device)).to(device)
         self.music_spectrum = 1 / inverse_spectrum

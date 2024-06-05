@@ -108,7 +108,7 @@ def evaluate_dnn_model(
         plot_spec: bool = False,
         figures: dict = None,
         model_type: str = "SubspaceNet",
-        is_separted: bool = False):
+        is_separted: bool = False) -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -133,6 +133,7 @@ def evaluate_dnn_model(
     overall_loss_angle = 0.0
     overall_loss_distance = 0.0
     test_length = 0
+    source_acc = None
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
@@ -228,19 +229,21 @@ def evaluate_dnn_model(
                 else:
                     eval_loss = criterion(DOA_predictions, DOA)
                     if not is_separted:
-                        eval_loss += 0.1 * torch.mean(eigen_regularization, dim=0)
+                        # eval_loss += eigen_regularization
                         pass
                     else: # Test phase
-                        Rx = model_output[1]
-                        eigen_val = torch.real(torch.linalg.eigvals(Rx))
-                        est_num_sources = torch.linalg.norm(torch.nn.functional.relu(eigen_val / torch.max(eigen_val, dim=1)[0][:, None] - 0.5), dim=1 ,ord=0)
+                        est_num_sources = model_output[1]
                         error_rate = torch.mean(torch.Tensor(est_num_sources == (DOA.shape[1] * torch.ones_like(est_num_sources))).to(torch.float32))
-                        print(f"Accuracy for number of source estimation: {100 * error_rate:.2f}%")
+                        if source_acc is None:
+                            source_acc = error_rate
+                        else:
+                            source_acc += error_rate
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model_type}")
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item() / len(dataset)
-
+    if source_acc is not None:
+        print(f"Source accuracy: {source_acc / len(dataset) * 100: .2f}%")
     # Plot spectrum for SubspaceNet model
     if plot_spec and model_type.endswith("SubspaceNet"):
         DOA_all = model_output[1]
@@ -256,6 +259,8 @@ def evaluate_dnn_model(
         overall_loss = {"Overall": overall_loss,
                         "Angle": overall_loss_angle,
                         "Distance": overall_loss_distance}
+    else:
+        overall_loss = {"Overall": overall_loss}
     return overall_loss
 
 

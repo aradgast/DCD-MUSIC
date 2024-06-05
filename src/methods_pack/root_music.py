@@ -12,7 +12,7 @@ class RootMusic(SubspaceMethod):
 
     def forward(self, cov: torch.Tensor):
         batch_size = cov.shape[0]
-        _, noise_subspace = self.subspace_separation(cov, number_of_sources=self.system_model.params.M)
+        _, noise_subspace, _ = self.subspace_separation(cov, number_of_sources=self.system_model.params.M)
         poly_generator = torch.einsum("bnk, bkn -> bnn", noise_subspace, noise_subspace.conj().transpose(1, 2))
         diag_sum = self.sum_of_diag(poly_generator)
         roots = self.find_roots(diag_sum)

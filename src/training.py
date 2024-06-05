@@ -325,15 +325,31 @@ def train(
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
     print("date and time =", dt_string)
     # Train the model
-    model, loss_train_list, loss_valid_list = train_model(
-        training_parameters, model_name=model_name, checkpoint_path=saving_path
-    )
+    if training_parameters.training_objective.lower() in ["angle, range", "range"]:
+        model, loss_train_list, loss_valid_list, loss_train_list_angles, loss_train_list_ranges, \
+        loss_valid_list_angles, loss_valid_list_ranges = train_model(training_parameters,
+                                                                     model_name=model_name,
+                                                                     checkpoint_path=saving_path)
+        if plot_curves:
+            plot_learning_curve(
+                list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
+                model_name=model.get_model_name(),
+                angle_train_loss=loss_train_list_angles,
+                angle_valid_loss=loss_valid_list_angles,
+                range_train_loss=loss_train_list_ranges,
+                range_valid_loss=loss_valid_list_ranges
+            )
+    else:
+        model, loss_train_list, loss_valid_list = train_model(training_parameters,
+                                                              model_name=model_name,
+                                                              checkpoint_path=saving_path)
+        if plot_curves:
+            plot_learning_curve(
+                list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
+                model_name=model.get_model_name())
     # Save models best weights
     torch.save(model.state_dict(), saving_path / model.get_model_file_name())
     # Plot learning and validation loss curves
-    if plot_curves:
-        plot_learning_curve(
-            list(range(training_parameters.epochs)), loss_train_list, loss_valid_list, model_name=model.get_model_name())
     return model, loss_train_list, loss_valid_list
 
 
@@ -359,6 +375,10 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     # Initialize losses
     loss_train_list = []
     loss_valid_list = []
+    loss_train_list_angles = []
+    loss_train_list_ranges = []
+    loss_valid_list_angles = []
+    loss_valid_list_ranges = []
     min_valid_loss = np.inf
     # Set initial time for start training
     since = time.time()
@@ -368,15 +388,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-        # if isinstance(model, CascadedSubspaceNet):
-        #     if epoch == int(training_params.epochs * 0.9):
-        #         training_angle_extractor = not training_angle_extractor
-        #         if training_angle_extractor:
-        #             print("Switching to training angle extractor")
-        #             if isinstance(training_params.criterion, RMSPELoss):
-        #                 training_params.criterion.adjust_balance_factor()
-        #         else:
-        #             print("turn off training angle extractor")
+        # reset gradients
+        model.zero_grad()
         train_length = 0
         overall_train_loss = 0.0
         overall_train_loss_angle = 0.0
@@ -386,75 +399,91 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model = model.to(device)
         for data in tqdm(training_params.train_dataset):
             x, true_label = data
+            # Split true label to angles and ranges, if needed
             if training_params.training_objective.lower() == "angle, range" or training_params.training_objective.lower() == "range":
-                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                RANGE = Variable(RANGE, requires_grad=True).to(device)
+                angles, ranges = torch.split(true_label, true_label.size(1) // 2, dim=1)
             elif training_params.training_objective.lower() == "angle":
                 if model.system_model.params.field_type.lower() == "near":
                     # if the data_model and the model are not synced.
-                    DOA, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                else:
-                    DOA = true_label
+                    angles, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                    ranges = None
+                else: # far field
+                    angles = true_label
+                    ranges = None
+            else:
+                raise Exception(f"train_model:"
+                                f" Unrecognized training objective : {training_params.training_objective}.")
 
-            train_length += DOA.shape[0]
+            train_length += angles.shape[0]
             # Cast observations and DoA to Variables
             x = Variable(x, requires_grad=True).to(device)
-            DOA = Variable(DOA, requires_grad=True).to(device)
+            angles = Variable(angles, requires_grad=True).to(device)
+            if ranges is not None:
+                ranges = Variable(ranges, requires_grad=True).to(device)
+
             # Get model output
-            # This if condition is mainly to spearte the case which we want to train the angle extractor.
             if isinstance(model, CascadedSubspaceNet):
                 model_output = model(x, train_angle_extractor=training_angle_extractor)
+                angels_pred = model_output[0]
+                ranges_pred = model_output[1]
             else:
                 model_output = model(x)
-            if isinstance(model, SubspaceNet):
-                # in this case there are 2 labels - angles and distances.
-                if isinstance(model, CascadedSubspaceNet) or training_params.training_objective == "angle, range":
-                    DOA_predictions = model_output[0]
-                    RANGE_predictions = model_output[1]
-                elif training_params.training_objective.endswith("angle"):
-                    DOA_predictions = model_output[0]
-                    eigen_regularization = model_output[-1]
-            elif isinstance(model, TransMUSIC):
-                if training_params.training_objective == "angle":
-                    DOA_predictions = model_output[0]
-                    prob_source_number = model_output[1]
-                elif training_params.training_objective == "angle, range":
-                    DOA_predictions, RANGE_predictions = model_output[0][:, 0], model_output[0][:, 1]
-                    prob_source_number = model_output[1]
-                estimated_source_number = torch.argmax(prob_source_number, dim=1)
+                if isinstance(model, SubspaceNet):
+                    # in this case there are 2 labels - angles and distances.
+                    if training_params.training_objective == "angle, range":
+                        angels_pred = model_output[0]
+                        ranges_pred = model_output[1]
+                    elif training_params.training_objective.endswith("angle"):
+                        angels_pred = model_output[0]
+                        source_estimation = model_output[1]
+                        eigen_regularization = model_output[2]
+                    elif training_params.training_objective.endswith("range"):
+                        raise Exception(f"train_model:"
+                                        f" If training objective is only 'range' the instance "
+                                        f"is CascadedSSN which already covered..")
+                elif isinstance(model, TransMUSIC):
+                    if training_params.training_objective == "angle":
+                        angels_pred = model_output[0]
+                        prob_source_number = model_output[1]
+                    elif training_params.training_objective == "angle, range":
+                        angels_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
+                        prob_source_number = model_output[1]
+                    estimated_source_number = torch.argmax(prob_source_number, dim=1)
 
-            else:
-                # Deep Augmented MUSIC or DeepCNN
-                DOA_predictions = model_output
+                else:
+                    # Deep Augmented MUSIC or DeepCNN
+                    angels_pred = model_output
 
             # Compute training loss
+            train_loss_angle, train_loss_distance = None, None
             if isinstance(model, DeepCNN):
-                train_loss = training_params.criterion(DOA_predictions.float(), DOA.float())
+                train_loss = training_params.criterion(angels_pred.float(), angles.float())
             elif isinstance(model, TransMUSIC):
-                DOA_predictions = DOA_predictions[:, :DOA.shape[1]]
+                angels_pred = angels_pred[:, :angles.shape[1]]
                 if training_params.training_objective == "angle":
-                    train_loss = training_params.criterion(DOA_predictions, DOA)
+                    train_loss = training_params.criterion(angels_pred, angles)
                 elif training_params.training_objective == "angle, range":
-                    RANGE_predictions = RANGE_predictions[:, :RANGE.shape[1]]
-                    train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
+                    ranges_pred = ranges_pred[:, :ranges.shape[1]]
+                    train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
-                    train_loss = training_params.criterion(DOA_predictions, DOA)
-                    train_loss += 0.1 * torch.mean(eigen_regularization, dim=0)
+                    train_loss = training_params.criterion(angels_pred, angles)
+                    # train_loss += eigen_regularization
                 elif training_params.training_objective == "range":
-                    train_loss = training_params.criterion(DOA_predictions, DOA, RANGE_predictions, RANGE)
+                    train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
                     if isinstance(training_params.criterion, RMSPELoss):
-                        train_loss, train_loss_angle, train_loss_distance = training_params.criterion(DOA_predictions,
-                                                                                                      DOA,
-                                                                                                      RANGE_predictions,
-                                                                                                      RANGE,
+                        # in the RMSPE case, we can return the loss for each part of the loss.
+                        train_loss, train_loss_angle, train_loss_distance = training_params.criterion(angels_pred,
+                                                                                                      angles,
+                                                                                                      ranges_pred,
+                                                                                                      ranges,
                                                                                                       is_separted=True)
                     elif isinstance(training_params.criterion, CartesianLoss):
-                        train_loss = training_params.criterion(DOA_predictions,
-                                                               DOA,
-                                                               RANGE_predictions,
-                                                               RANGE)
+                        train_loss = training_params.criterion(angels_pred,
+                                                               angles,
+                                                               ranges_pred,
+                                                               ranges)
             else:
                 raise Exception(f"Model type {training_params.model_type} is not defined")
             # Back-propagation stage
@@ -465,8 +494,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
 
             # optimizer update
             optimizer.step()
-            # reset gradients
-            model.zero_grad()
+
             # add batch loss to overall epoch loss
             if isinstance(training_params.criterion, nn.BCELoss):
                 # BCE is averaged
@@ -474,15 +502,18 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(training_params.criterion, RMSPELoss) or isinstance(training_params.criterion, CartesianLoss):
                 # RMSPE is averaged over the dataset size
                 overall_train_loss += train_loss.item() / len(training_params.train_dataset)
-                # overall_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
-                # overall_train_loss_distance += train_loss_distance.item() / len(training_params.train_dataset)
+                if train_loss_angle is not None and train_loss_distance is not None:
+                    overall_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
+                    overall_train_loss_distance += train_loss_distance.item() / len(training_params.train_dataset)
             else:
                 raise Exception(f"Criterion type {training_params.criterion} is not defined")
         # add epoch loss to the list
         loss_train_list.append(overall_train_loss)
+        if overall_train_loss_angle != 0.0 and overall_train_loss_distance != 0.0:
+            loss_train_list_angles.append(overall_train_loss_angle)
+            loss_train_list_ranges.append(overall_train_loss_distance)
         # Update schedular
         training_params.schedular.step()
-
 
         # Calculate evaluation loss
         valid_loss = evaluate_dnn_model(
@@ -490,48 +521,52 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             training_params.valid_dataset,
             training_params.criterion,
             model_type=training_params.model_type,
+            is_separted=True
         )
-        loss_valid_list.append(valid_loss)
+        loss_valid_list.append(valid_loss.get("Overall"))
+
         # Report results
-        print(
-            "epoch : {}/{}, Train loss = {:.6f}, Validation loss = {:.6f}".format(
-                epoch + 1, training_params.epochs, overall_train_loss, valid_loss
-            )
-        )
-        print("lr {}".format(training_params.optimizer.param_groups[0]["lr"]))
+        result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}],"
+                      f" Train loss = {overall_train_loss:.6f}, Validation loss = {valid_loss.get("Overall"):.6f}")
+
+        if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
+            loss_valid_list_angles.append(valid_loss.get("Angle"))
+            loss_valid_list_ranges.append(valid_loss.get("Distance"))
+            result_txt += f"\n Angle loss = {valid_loss.get("Angle"):.6f}, Range loss = {valid_loss.get("Distance"):.6f}"
+        result_txt += f"\n lr {training_params.optimizer.param_groups[0]["lr"]}"
+
+        print(result_txt)
         # Save best model weights for early stoppings
-        if min_valid_loss > valid_loss:
+        if min_valid_loss > valid_loss.get("Overall"):
             print(
-                f"Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model"
+                f"Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss.get("Overall"):.6f}) \t Saving The Model"
             )
-            min_valid_loss = valid_loss
+            min_valid_loss = valid_loss.get("Overall")
             best_epoch = epoch
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
             torch.save(model.state_dict(), checkpoint_path / model.get_model_file_name())
         if isinstance(model, SubspaceNet):
             model.adjust_diff_method_temperature(epoch)
-        # if isinstance(training_params.criterion, RMSPELoss):
-        #     training_params.criterion.adjust_balance_factor(overall_train_loss)
     # Training complete
     time_elapsed = time.time() - since
     print("\n--- Training summary ---")
-    print(
-        "Training complete in {:.0f}m {:.0f}s".format(
-            time_elapsed // 60, time_elapsed % 60
-        )
-    )
-    print(
-        "Minimal Validation loss: {:4f} at epoch {}".format(min_valid_loss, best_epoch)
-    )
+    print(f"Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
+    print(f"Minimal Validation loss: {min_valid_loss:4f} at epoch {best_epoch}")
 
     # load best model weights
     model.load_state_dict(best_model_wts)
     torch.save(model.state_dict(), checkpoint_path / model.get_model_file_name())
-    return model, loss_train_list, loss_valid_list
+    if len(loss_train_list_angles) > 0 and len(loss_train_list_ranges) > 0:
+        return (model, loss_train_list, loss_valid_list,
+                loss_train_list_angles, loss_train_list_ranges,
+                loss_valid_list_angles, loss_valid_list_ranges)
+    else:
+        return model, loss_train_list, loss_valid_list
 
 
-def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, model_name: str = None):
+def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, model_name: str = None,
+                        angle_train_loss=None, angle_valid_loss=None, range_train_loss=None, range_valid_loss=None):
     """
     Plot the learning curve.
 
@@ -544,12 +579,39 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
     title = "Learning Curve: Loss per Epoch"
     if model_name is not None:
         title += f" {model_name}"
-    plt.title(title)
-    plt.plot(epoch_list, train_loss, label="Train")
-    plt.plot(epoch_list, validation_loss, label="Validation")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.legend(loc="best")
+    if angle_train_loss is not None and range_train_loss is not None:
+
+        # create 3 subplots, the main one will spread over 2 cols, and the other 2 will be under it.
+        fig = plt.figure(figsize=(10, 6))
+        ax = plt.subplot2grid((2, 2), (0, 0), colspan=2)
+        ax_angle = plt.subplot2grid((2, 2), (1, 0), colspan=1)
+        ax_range = plt.subplot2grid((2, 2), (1, 1), colspan=1)
+
+        ax.set_title(title)
+        ax.plot(epoch_list, train_loss, label="Train")
+        ax.plot(epoch_list, validation_loss, label="Validation")
+        ax.set_xlabel("Epochs")
+        ax.set_ylabel("Loss")
+        ax.legend(loc="best")
+        ax_angle.plot(epoch_list, angle_train_loss, label="Train")
+        ax_angle.plot(epoch_list, angle_valid_loss, label="Validation")
+        ax_angle.set_xlabel("Epochs")
+        ax_angle.set_ylabel("Angle Loss [rad]")
+        ax_angle.legend(loc="best")
+        ax_range.plot(epoch_list, range_train_loss, label="Train")
+        ax_range.plot(epoch_list, range_valid_loss, label="Validation")
+        ax_range.set_xlabel("Epochs")
+        ax_range.set_ylabel("Range Loss [m]")
+        ax_range.legend(loc="best")
+        # tight layout
+        plt.tight_layout()
+    else:
+        plt.title(title)
+        plt.plot(epoch_list, train_loss, label="Train")
+        plt.plot(epoch_list, validation_loss, label="Validation")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
+        plt.legend(loc="best")
     # plt.show()
 
 

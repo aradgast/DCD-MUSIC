@@ -130,10 +130,12 @@ class SubspaceNet(nn.Module):
             if isinstance(self.diff_method, RootMusic):
                 doa_prediction, doa_all_predictions, roots = method_output
                 return doa_prediction, doa_all_predictions, roots
-            else:
+            elif isinstance(self.diff_method, ESPRIT):
                 # Esprit output
-                doa_prediction, eigen_regularization = method_output
-            return doa_prediction, Rz, eigen_regularization
+                doa_prediction, sources_estimation, eigen_regularization = method_output
+                return doa_prediction, sources_estimation, eigen_regularization
+            else:
+                raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
         elif self.field_type == "Near":
             if known_angles is None:
