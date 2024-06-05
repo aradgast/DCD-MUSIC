@@ -69,7 +69,7 @@ if __name__ == "__main__":
         "train_test_ratio": .1,
         "training_objective": "angle",       # angle, range
         "batch_size": 32,
-        "epochs": 3,
+        "epochs": 2,
         "optimizer": "Adam",                        # Adam, SGD
         "learning_rate": 0.0001,
         "weight_decay": 1e-9,

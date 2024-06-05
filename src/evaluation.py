@@ -107,8 +107,7 @@ def evaluate_dnn_model(
         criterion: nn.Module,
         plot_spec: bool = False,
         figures: dict = None,
-        model_type: str = "SubspaceNet",
-        is_separted: bool = False) -> dict:
+        model_type: str = "SubspaceNet") -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -128,29 +127,31 @@ def evaluate_dnn_model(
         Exception: If the model type is not defined.
     """
 
+    # TODO : need to add eval phase that not consider the regularization term.
     # Initialize values
     overall_loss = 0.0
-    overall_loss_angle = 0.0
-    overall_loss_distance = 0.0
+    overall_loss_angle = None
+    overall_loss_distance = None
+    overall_accuracy = 0.0
     test_length = 0
-    source_acc = None
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
-    with torch.no_grad():
+    with (torch.no_grad()):
         for data in dataset:
             X, true_label = data
             if model.system_model.params.field_type.endswith("Far"):
-                DOA = true_label.to(device)
+                angles = true_label.to(device)
             elif model.system_model.params.field_type.endswith("Near"):
-                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                RANGE.to(device)
+                angles, ranges = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                ranges.to(device)
 
-            test_length += DOA.shape[1]
+            test_length += angles.shape[1]
             # Convert observations and DoA to device
             X = X.to(device)
-            DOA = DOA.to(device)
+            angles = angles.to(device)
             # Get model output
+            source_estimation = None
             if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
                 if isinstance(model, CascadedSubspaceNet):
                     model_output = model(X, is_soft=False, train_angle_extractor=False)
@@ -160,20 +161,20 @@ def evaluate_dnn_model(
                 model_output = model(X)
             if isinstance(model, DeepAugmentedMUSIC):
                 # Deep Augmented MUSIC
-                DOA_predictions = model_output.to(device)
+                angles_pred = model_output.to(device)
             elif isinstance(model, DeepCNN):
                 # Deep CNN
                 if isinstance(criterion, nn.BCELoss):
                     # If evaluation performed over validation set, loss is BCE
-                    DOA_predictions = model_output.to(device)
+                    angles_pred = model_output.to(device)
                     # find peaks in the pseudo spectrum of probabilities
-                    DOA_predictions = (
-                            get_k_peaks(361, DOA.shape[1], DOA_predictions[0]) * D2R
+                    angles_pred = (
+                            get_k_peaks(361, angles.shape[1], angles_pred[0]) * D2R
                     )
-                    DOA_predictions = DOA_predictions.view(1, DOA_predictions.shape[0])
+                    angles_pred = angles_pred.view(1, angles_pred.shape[0])
                 elif isinstance(criterion, [RMSPELoss, MSPELoss]):
                     # If evaluation performed over testset, loss is RMSPE / MSPE
-                    DOA_predictions = model_output.to(device)
+                    angles_pred = model_output.to(device)
                 else:
                     raise Exception(
                         f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
@@ -181,86 +182,91 @@ def evaluate_dnn_model(
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     # 2 possible outputs: DOA and RANGE
-                    DOA_predictions = model_output[0].to(device)
-                    RANGE_predictions = model_output[1].to(device)
+                    angles_pred = model_output[0].to(device)
+                    ranges_pred = model_output[1].to(device)
                 elif model.field_type.endswith("Far"):
                     # Default - SubSpaceNet
-                    DOA_predictions = model_output[0]
-                    eigen_regularization = model_output[-1]
+                    angles_pred = model_output[0]
+                    source_estimation = model_output[1]
+                    eigen_regularization = model_output[2]
             elif isinstance(model, TransMUSIC):
                 if model.estimation_params == "angle":
-                    DOA_predictions = model_output[0]
+                    angles_pred = model_output[0]
                     prob_source_number = model_output[1]
                 elif model.estimation_params == "angle, range":
-                    DOA_predictions, RANGE_predictions = model_output[0][:, 0], model_output[0][:, 1]
+                    angles_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
                     prob_source_number = model_output[1]
-                estimated_source_number = torch.argmax(prob_source_number, dim=1)
+                source_estimation = torch.argmax(prob_source_number, dim=1)
             else:
                 raise Exception(
                     f"evaluate_dnn_model: Model type {model_type} is not defined"
                 )
             # Compute prediction loss
             if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
-                eval_loss = criterion(DOA_predictions.float(), DOA.float())
+                eval_loss = criterion(angles_pred.float(), angles.float())
             elif isinstance(model, TransMUSIC):
-                DOA_predictions = DOA_predictions[:, :DOA.shape[1]]
+                angles_pred = angles_pred[:, :angles.shape[1]]
                 if model.estimation_params == "angle":
-                    eval_loss = criterion(DOA_predictions, DOA)
+                    eval_loss = criterion(angles_pred, angles)
                 elif model.estimation_params == "angle, range":
-                    RANGE_predictions = RANGE_predictions[:, :RANGE.shape[1]]
+                    ranges_pred = ranges_pred[:, :ranges.shape[1]]
                     if isinstance(criterion, RMSPELoss):
-                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE, is_separted)
-                        if is_separted:
+                        eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges)
+                        if overall_loss_angle is not None:
+                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                        else:
+                            overall_loss_angle, overall_loss_distance = 0.0, 0.0
                             eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
                             overall_loss_angle += eval_loss_angle.item() / len(dataset)
                             overall_loss_distance += eval_loss_distance.item() / len(dataset)
+
+
                     else:
-                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE.to(device))
+                        eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     if not (isinstance(criterion, nn.BCELoss) or isinstance(criterion, CartesianLoss)):
-                        eval_loss = criterion(DOA_predictions, DOA, RANGE_predictions, RANGE.to(device), is_separted)
-                        if is_separted:
+                        eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
+                        if overall_loss_angle is not None:
+                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                        else:
+                            overall_loss_angle, overall_loss_distance = 0.0, 0.0
                             eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
                             overall_loss_angle += eval_loss_angle.item() / len(dataset)
                             overall_loss_distance += eval_loss_distance.item() / len(dataset)
                     else:
-                        eval_loss = criterion(DOA_predictions, DOA.to(device), RANGE_predictions, RANGE.to(device))
+                        eval_loss = criterion(angles_pred, angles.to(device), ranges_pred, ranges.to(device))
                 else:
-                    eval_loss = criterion(DOA_predictions, DOA)
-                    if not is_separted:
-                        # eval_loss += eigen_regularization
-                        pass
-                    else: # Test phase
-                        est_num_sources = model_output[1]
-                        error_rate = torch.mean(torch.Tensor(est_num_sources == (DOA.shape[1] * torch.ones_like(est_num_sources))).to(torch.float32))
-                        if source_acc is None:
-                            source_acc = error_rate
-                        else:
-                            source_acc += error_rate
+                    eval_loss = criterion(angles_pred, angles)
+                    eval_loss += eigen_regularization
+            if source_estimation is not None:
+                source_acc = torch.mean((
+                    source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item() / len(dataset)
+                overall_accuracy += source_acc
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model_type}")
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item() / len(dataset)
-    if source_acc is not None:
-        print(f"Source accuracy: {source_acc / len(dataset) * 100: .2f}%")
     # Plot spectrum for SubspaceNet model
     if plot_spec and model_type.endswith("SubspaceNet"):
         DOA_all = model_output[1]
         roots = model_output[2]
         plot_spectrum(
             predictions=DOA_all * R2D,
-            true_DOA=DOA[0] * R2D,
+            true_DOA=angles[0] * R2D,
             roots=roots,
             algorithm="SubNet+R-MUSIC",
             figures=figures,
         )
-    if is_separted:
-        overall_loss = {"Overall": overall_loss,
-                        "Angle": overall_loss_angle,
-                        "Distance": overall_loss_distance}
-    else:
-        overall_loss = {"Overall": overall_loss}
+    overall_loss = {"Overall": overall_loss,
+                    "Angle": overall_loss_angle,
+                    "Distance": overall_loss_distance}
+
+    if source_estimation is not None:
+        overall_loss["Accuracy"] = overall_accuracy
+
     return overall_loss
 
 
@@ -367,8 +373,7 @@ def evaluate_model_based(
         criterion: RMSPE,
         plot_spec=False,
         algorithm: str = "music",
-        figures: dict = None,
-        is_separted: bool = False):
+        figures: dict = None):
     """
     Evaluate different model-based algorithms on a given dataset.
 
@@ -487,10 +492,8 @@ def evaluate_model_based(
             else:
                 Rx = model_based.pre_processing(X, mode="sample")
             doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
-            if isinstance(criterion, RMSPELoss) and is_separted:
-                rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances,
-                                                               is_separted)
-
+            if isinstance(criterion, RMSPELoss):
+                rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances)
                 loss_list_angle.append(rmspe_angle.item())
                 loss_list_distance.append(rmspe_distance.item())
             else:
@@ -501,12 +504,11 @@ def evaluate_model_based(
             raise Exception(
                 f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
             )
-    if is_separted:
-        return {"Overall": torch.mean(torch.Tensor(loss_list)).item(),
-                "Angle": torch.mean(torch.Tensor(loss_list_angle)).item(),
-                "Distance": torch.mean(torch.Tensor(loss_list_distance)).item()}
-    else:
-        return torch.mean(torch.Tensor(loss_list)).item()
+    result = {"Overall": torch.mean(torch.Tensor(loss_list)).item()}
+    if loss_list_angle and loss_list_distance:
+        result["Angle"] = torch.mean(torch.Tensor(loss_list_angle)).item()
+        result["Distance"] = torch.mean(torch.Tensor(loss_list_distance)).item()
+    return result
 
 
 def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):
@@ -656,8 +658,7 @@ def evaluate(
             criterion=criterion,
             plot_spec=plot_spec,
             figures=figures,
-            model_type=model_name,
-            is_separted=True)
+            model_type=model_name)
         print(f"{model_name} evaluation time: {time.time() - start}")
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
@@ -681,9 +682,7 @@ def evaluate(
             criterion=criterion,
             plot_spec=plot_spec,
             algorithm=algorithm,
-            figures=figures,
-            is_separted=True
-        )
+            figures=figures)
         print(f"{algorithm} evaluation time: {time.time() - start}")
         res[algorithm] = loss
     # MLE

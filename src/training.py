@@ -325,13 +325,27 @@ def train(
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
     print("date and time =", dt_string)
     # Train the model
-    if training_parameters.training_objective.lower() in ["angle, range", "range"]:
-        model, loss_train_list, loss_valid_list, loss_train_list_angles, loss_train_list_ranges, \
-        loss_valid_list_angles, loss_valid_list_ranges = train_model(training_parameters,
-                                                                     model_name=model_name,
-                                                                     checkpoint_path=saving_path)
-        if plot_curves:
-            plot_learning_curve(
+    train_res = train_model(training_parameters,
+                            model_name=model_name,
+                            checkpoint_path=saving_path)
+    model = train_res.get("model")
+    loss_train_list = train_res.get("loss_train_list")
+    loss_valid_list = train_res.get("loss_valid_list")
+    loss_train_list_angles = train_res.get("loss_train_list_angles")
+    loss_train_list_ranges = train_res.get("loss_train_list_ranges")
+    loss_valid_list_angles = train_res.get("loss_valid_list_angles")
+    loss_valid_list_ranges = train_res.get("loss_valid_list_ranges")
+    acc_train_list = train_res.get("acc_train_list")
+    acc_valid_list = train_res.get("acc_valid_list")
+
+    if plot_curves:
+        if acc_train_list is not None and acc_valid_list is not None:
+            plot_accuracy_curve(
+                list(range(1, training_parameters.epochs + 1)), acc_train_list, acc_valid_list,
+                model_name=model.get_model_name()
+            )
+            plt.show()
+        plot_learning_curve(
                 list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
                 model_name=model.get_model_name(),
                 angle_train_loss=loss_train_list_angles,
@@ -339,21 +353,15 @@ def train(
                 range_train_loss=loss_train_list_ranges,
                 range_valid_loss=loss_valid_list_ranges
             )
-    else:
-        model, loss_train_list, loss_valid_list = train_model(training_parameters,
-                                                              model_name=model_name,
-                                                              checkpoint_path=saving_path)
-        if plot_curves:
-            plot_learning_curve(
-                list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
-                model_name=model.get_model_name())
+
+
     # Save models best weights
     torch.save(model.state_dict(), saving_path / model.get_model_file_name())
     # Plot learning and validation loss curves
     return model, loss_train_list, loss_valid_list
 
 
-def train_model(training_params: TrainingParams, model_name: str, checkpoint_path=None):
+def train_model(training_params: TrainingParams, model_name: str, checkpoint_path=None) -> dict:
     """
     Function for training the model.
 
@@ -379,6 +387,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     loss_train_list_ranges = []
     loss_valid_list_angles = []
     loss_valid_list_ranges = []
+    acc_train_list = []
+    acc_valid_list = []
     min_valid_loss = np.inf
     # Set initial time for start training
     since = time.time()
@@ -394,6 +404,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         overall_train_loss = 0.0
         overall_train_loss_angle = 0.0
         overall_train_loss_distance = 0.0
+        overall_train_acc = 0.0
         # Set model to train mode
         model.train()
         model = model.to(device)
@@ -422,6 +433,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 ranges = Variable(ranges, requires_grad=True).to(device)
 
             # Get model output
+            source_estimation = None
             if isinstance(model, CascadedSubspaceNet):
                 model_output = model(x, train_angle_extractor=training_angle_extractor)
                 angels_pred = model_output[0]
@@ -448,12 +460,15 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     elif training_params.training_objective == "angle, range":
                         angels_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
                         prob_source_number = model_output[1]
-                    estimated_source_number = torch.argmax(prob_source_number, dim=1)
+                    source_estimation = torch.argmax(prob_source_number, dim=1)
 
                 else:
                     # Deep Augmented MUSIC or DeepCNN
                     angels_pred = model_output
-
+            if source_estimation is not None:
+                overall_train_acc += (((torch.mean(
+                    (source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item()))
+                                      / len(training_params.train_dataset))
             # Compute training loss
             train_loss_angle, train_loss_distance = None, None
             if isinstance(model, DeepCNN):
@@ -468,7 +483,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angels_pred, angles)
-                    # train_loss += eigen_regularization
+                    train_loss += eigen_regularization
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
@@ -526,13 +541,18 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         loss_valid_list.append(valid_loss.get("Overall"))
 
         # Report results
-        result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}],"
+        result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}]"
                       f" Train loss = {overall_train_loss:.6f}, Validation loss = {valid_loss.get("Overall"):.6f}")
 
         if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
             loss_valid_list_angles.append(valid_loss.get("Angle"))
             loss_valid_list_ranges.append(valid_loss.get("Distance"))
             result_txt += f"\n Angle loss = {valid_loss.get("Angle"):.6f}, Range loss = {valid_loss.get("Distance"):.6f}"
+        if source_estimation is not None:
+            acc_train_list.append(overall_train_acc * 100)
+            acc_valid_list.append(valid_loss.get('Accuracy') * 100)
+            result_txt += (f"\n Accuracy for sources estimation: Train = {100 * overall_train_acc:.2f}%, "
+                           f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
         result_txt += f"\n lr {training_params.optimizer.param_groups[0]["lr"]}"
 
         print(result_txt)
@@ -557,13 +577,37 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     # load best model weights
     model.load_state_dict(best_model_wts)
     torch.save(model.state_dict(), checkpoint_path / model.get_model_file_name())
+    res = {"model": model, "loss_train_list": loss_train_list, "loss_valid_list": loss_valid_list}
     if len(loss_train_list_angles) > 0 and len(loss_train_list_ranges) > 0:
-        return (model, loss_train_list, loss_valid_list,
-                loss_train_list_angles, loss_train_list_ranges,
-                loss_valid_list_angles, loss_valid_list_ranges)
-    else:
-        return model, loss_train_list, loss_valid_list
+        res["loss_train_list_angles"] = loss_train_list_angles
+        res["loss_train_list_ranges"] = loss_train_list_ranges
+        res["loss_valid_list_angles"] = loss_valid_list_angles
+        res["loss_valid_list_ranges"] = loss_valid_list_ranges
+    if len(acc_train_list) > 0 and len(acc_valid_list) > 0:
+        res["acc_train_list"] = acc_train_list
+        res["acc_valid_list"] = acc_valid_list
+    return res
 
+def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model_name: str = None):
+    """
+    Plot the learning curve.
+
+    Args:
+    -----
+        epoch_list (list): List of epochs.
+        train_loss (list): List of training losses per epoch.
+        validation_loss (list): List of validation losses per epoch.
+    """
+    title = "Learning Curve: Accuracy per Epoch"
+    if model_name is not None:
+        title += f" {model_name}"
+    plt.title(title)
+    plt.plot(epoch_list, train_acc, label="Train")
+    plt.plot(epoch_list, validation_acc, label="Validation")
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.legend(loc="best")
+    # plt.show()
 
 def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, model_name: str = None,
                         angle_train_loss=None, angle_valid_loss=None, range_train_loss=None, range_valid_loss=None):

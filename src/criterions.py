@@ -121,7 +121,7 @@ class RMSPELoss(nn.Module):
             self.balance_factor = nn.Parameter(torch.Tensor([balance_factor])).to(device).to(torch.float64)
 
     def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
-                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None, is_separted: bool = False):
+                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None):
         """
         Compute the RMSPE loss between the predictions and target values.
         The forward method takes two input tensors: doa_predictions and doa,
@@ -168,12 +168,13 @@ class RMSPELoss(nn.Module):
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
         rmspe, min_idx = torch.min(rmspe, dim=-1)
         result = torch.mean(rmspe)
-        if is_separted:
+        if distance is None:
+            return result
+        else:
             result_angle = torch.mean(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
             result_distance = torch.mean(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
             return result, result_angle, result_distance
-        else:
-            return result
+
             # rmspe = []
             # for iter in range(doa_predictions.shape[0]):
             #     rmspe_list = []
