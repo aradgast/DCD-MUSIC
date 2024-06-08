@@ -107,7 +107,7 @@ def evaluate_dnn_model(
         criterion: nn.Module,
         plot_spec: bool = False,
         figures: dict = None,
-        model_type: str = "SubspaceNet") -> dict:
+        phase: str = "test") -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -117,7 +117,7 @@ def evaluate_dnn_model(
         criterion (nn.Module): The loss criterion for evaluation.
         plot_spec (bool, optional): Whether to plot the spectrum for SubspaceNet model. Defaults to False.
         figures (dict, optional): Dictionary containing figure objects for plotting. Defaults to None.
-        model_type (str, optional): The type of the model. Defaults to "SubspaceNet".
+
 
     Returns:
         float: The overall evaluation loss.
@@ -127,7 +127,6 @@ def evaluate_dnn_model(
         Exception: If the model type is not defined.
     """
 
-    # TODO : need to add eval phase that not consider the regularization term.
     # Initialize values
     overall_loss = 0.0
     overall_loss_angle = None
@@ -177,7 +176,8 @@ def evaluate_dnn_model(
                     angles_pred = model_output.to(device)
                 else:
                     raise Exception(
-                        f"evaluate_dnn_model: Loss criterion is not defined for {model_type} model"
+                        f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
+                        f" {model.get_model_name()} model"
                     )
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
@@ -199,7 +199,7 @@ def evaluate_dnn_model(
                 source_estimation = torch.argmax(prob_source_number, dim=1)
             else:
                 raise Exception(
-                    f"evaluate_dnn_model: Model type {model_type} is not defined"
+                    f"evaluate_dnn_model: Model {model.get_model_name()} is not defined"
                 )
             # Compute prediction loss
             if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
@@ -240,17 +240,18 @@ def evaluate_dnn_model(
                         eval_loss = criterion(angles_pred, angles.to(device), ranges_pred, ranges.to(device))
                 else:
                     eval_loss = criterion(angles_pred, angles)
-                    eval_loss += eigen_regularization
+                    if phase == "validation":
+                        eval_loss += eigen_regularization
             if source_estimation is not None:
                 source_acc = torch.mean((
                     source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item() / len(dataset)
                 overall_accuracy += source_acc
             else:
-                raise Exception(f"evaluate_dnn_model: Model type is not defined: {model_type}")
+                raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item() / len(dataset)
     # Plot spectrum for SubspaceNet model
-    if plot_spec and model_type.endswith("SubspaceNet"):
+    if plot_spec and isinstance(model, SubspaceNet):
         DOA_all = model_output[1]
         roots = model_output[2]
         plot_spectrum(
@@ -625,6 +626,7 @@ def evaluate(
         models: dict = None,
         augmented_methods: list = None,
         subspace_methods: list = None,
+        model_tmp: nn.Module = None
 ):
     """
     Wrapper function for model and algorithm evaluations.
@@ -645,7 +647,20 @@ def evaluate(
         None
     """
     res = {}
-    # Evaluate SubspaceNet + differentiable algorithm performances
+    # Evaluate DNN model if given
+    if model_tmp is not None:
+        model_test_loss = evaluate_dnn_model(
+            model=model_tmp,
+            dataset=generic_test_dataset,
+            criterion=criterion,
+            plot_spec=plot_spec,
+            figures=figures)
+        try:
+            model_name = model_tmp.get_model_name()
+        except AttributeError:
+            model_name = "DNN"
+        res[model_name] = model_test_loss
+    # Evaluate DNN models
     for model_name, params in models.items():
         model = get_model(model_name, params, system_model)
         # num_of_params = sum(p.numel() for p in model.parameters())
@@ -657,8 +672,7 @@ def evaluate(
             dataset=generic_test_dataset,
             criterion=criterion,
             plot_spec=plot_spec,
-            figures=figures,
-            model_type=model_name)
+            figures=figures)
         print(f"{model_name} evaluation time: {time.time() - start}")
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods

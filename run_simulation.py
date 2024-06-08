@@ -209,6 +209,8 @@ def __run_simulation(**kwargs):
 
             # Evaluation stage
             if evaluate_mode:
+                if not train_model:
+                    model = None
                 # Initialize figures dict for plotting
                 figures = initialize_figures()
                 # Define loss measure for evaluation
@@ -240,7 +242,8 @@ def __run_simulation(**kwargs):
                     plot_spec=False,
                     models=EVALUATION_PARAMS["models"],
                     augmented_methods=EVALUATION_PARAMS["augmented_methods"],
-                    subspace_methods=EVALUATION_PARAMS["subspace_methods"]
+                    subspace_methods=EVALUATION_PARAMS["subspace_methods"],
+                    model_tmp=model
                 )
                 plt.show()
                 print("end")

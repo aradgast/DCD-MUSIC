@@ -535,8 +535,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             model,
             training_params.valid_dataset,
             training_params.criterion,
-            model_type=training_params.model_type,
-            is_separted=True
+            phase="validation"
         )
         loss_valid_list.append(valid_loss.get("Overall"))
 

@@ -337,7 +337,8 @@ def set_dataset_filename(system_model_params: SystemModelParams, samples_size: f
         str: Suffix dataset filename
     """
     suffix_filename = (
-            f"_{system_model_params.signal_type}_"
+            f"_{system_model_params.field_type}_field_"
+            f"{system_model_params.signal_type}_"
             + f"{system_model_params.signal_nature}_{samples_size}_M={system_model_params.M}_"
             + f"N={system_model_params.N}_T={system_model_params.T}_SNR={system_model_params.snr}_"
             + f"eta={system_model_params.eta}_sv_noise_var{system_model_params.sv_noise_var}_"
