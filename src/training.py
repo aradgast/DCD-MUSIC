@@ -456,8 +456,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                     f" The sources number is not the same for all samples in the batch.")
                 else:
                     sources_num = sources_num[0]
-                model_output = model(x, sources_num=sources_num)
                 if isinstance(model, SubspaceNet):
+                    model_output = model(x, sources_num=sources_num)
                     # in this case there are 2 labels - angles and distances.
                     if training_params.training_objective == "angle, range":
                         angels_pred = model_output[0]
@@ -471,12 +471,18 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                         f" If training objective is only 'range' the instance "
                                         f"is CascadedSSN which already covered..")
                 elif isinstance(model, TransMUSIC):
+                    model_output = model(x)
                     if training_params.training_objective == "angle":
                         angels_pred = model_output[0]
                         prob_source_number = model_output[1]
                     elif training_params.training_objective == "angle, range":
                         angels_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
                         prob_source_number = model_output[1]
+                    #calculate the cross entropy loss for the source number estimation
+                    one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                           .to(device).to(torch.float32))
+                    source_est_regularization = nn.CrossEntropyLoss()(prob_source_number, one_hot_sources_num.repeat(prob_source_number.shape[0], 1))
+                    # calculate the source estimation
                     source_estimation = torch.argmax(prob_source_number, dim=1)
 
                 else:
@@ -497,6 +503,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 elif training_params.training_objective == "angle, range":
                     ranges_pred = ranges_pred[:, :ranges.shape[1]]
                     train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
+                    if isinstance(train_loss, tuple):
+                        train_loss, train_loss_angle, train_loss_distance = train_loss
+                train_loss += source_est_regularization
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angels_pred, angles)

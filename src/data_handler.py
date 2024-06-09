@@ -101,7 +101,7 @@ def create_dataset(
     else:
         for i in tqdm(range(samples_size)):
             if system_model_params.M is None:
-                M = np.random.randint(4, np.min((5, system_model_params.N-1)))
+                M = np.random.randint(2, np.min((6, system_model_params.N-1)))
             else:
                 M = system_model_params.M
             # Samples model creation

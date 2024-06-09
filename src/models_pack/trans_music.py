@@ -83,9 +83,11 @@ class TransMUSIC(nn.Module):
         self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
         if self.estimation_params == "angle":
             input_dim = self.music.angels.shape[0]
+            output_dim = self.params.N - 1
             output_dim = self.params.M
         elif self.estimation_params == "angle, range":
             input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
+            output_dim = (self.params.N - 1) * 2
             output_dim = self.params.M * 2
             self.activation = nn.LeakyReLU()
         else:
@@ -110,7 +112,7 @@ class TransMUSIC(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(in_features=64, out_features=32),
             nn.ReLU(inplace=False),
-            nn.Linear(in_features=32, out_features=4),
+            nn.Linear(in_features=32, out_features=self.params.N - 1),
             nn.Softmax(dim=1)
         ).to(device)
 
@@ -132,10 +134,10 @@ class TransMUSIC(nn.Module):
                 angles, distances = predictions[:, :predictions.shape[1] // 2], predictions[:, predictions.shape[1] // 2:]
                 distances = self.activation(distances).to(device)
                 predictions = torch.stack([angles, distances], dim=1).to(device)
-            with torch.no_grad():
-                x9 = x3.detach()
-                num_sources_est = self.source_number_estimator(x9)
-            return predictions, num_sources_est
+            # with torch.no_grad():
+            #     x9 = x3.detach()
+                prob_sources_est = self.source_number_estimator(x3)
+            return predictions, prob_sources_est
 
         elif mode == "num_source_train":
             with torch.no_grad():

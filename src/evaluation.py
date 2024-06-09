@@ -166,7 +166,11 @@ def evaluate_dnn_model(
                                     f" The sources number is not the same for all samples in the batch.")
                 else:
                     sources_num = sources_num[0]
-                model_output = model(X, sources_num=sources_num)
+                if isinstance(model, TransMUSIC):
+                    model_output = model(X)
+                else:
+                    model_output = model(X, sources_num=sources_num)
+
             if isinstance(model, DeepAugmentedMUSIC):
                 # Deep Augmented MUSIC
                 angles_pred = model_output.to(device)
@@ -226,7 +230,6 @@ def evaluate_dnn_model(
                             overall_loss_distance += eval_loss_distance.item() / len(dataset)
                         else:
                             overall_loss_angle, overall_loss_distance = 0.0, 0.0
-                            eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
                             overall_loss_angle += eval_loss_angle.item() / len(dataset)
                             overall_loss_distance += eval_loss_distance.item() / len(dataset)
 
