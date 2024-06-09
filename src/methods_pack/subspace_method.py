@@ -17,7 +17,7 @@ class SubspaceMethod(nn.Module):
 
     def subspace_separation(self,
                             covariance: torch.Tensor,
-                            number_of_sources: int = None,
+                            number_of_sources: torch.tensor = None,
                             eigen_regularization: bool = False)\
             -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.tensor):
         """
@@ -41,14 +41,14 @@ class SubspaceMethod(nn.Module):
             nn.functional.relu(
                 normalized_eigen - self.eigen_threshold * torch.ones_like(normalized_eigen)),
             dim=1, ord=0)
-
-        signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
-        noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
+        if number_of_sources is not None:
+            signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
+            noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
         if eigen_regularization:
             eigen_regularization = (normalized_eigen[:, number_of_sources - 1] - self.eigen_threshold) * \
                                    (normalized_eigen[:, number_of_sources] - self.eigen_threshold)
-            eigen_regularization = torch.mean(eigen_regularization) * (1 / (covariance.shape[1] - number_of_sources))
+            eigen_regularization = torch.mean(eigen_regularization)
             return signal_subspace.to(device), noise_subspace.to(device), source_estimation, eigen_regularization
         return signal_subspace.to(device), noise_subspace.to(device), source_estimation, None
 

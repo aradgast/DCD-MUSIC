@@ -230,9 +230,10 @@ def __run_simulation(**kwargs):
                 # model_test_dataset = torch.utils.data.DataLoader(
                 #     test_dataset, batch_size=32, shuffle=False, drop_last=True
                 # )
-                generic_test_dataset = torch.utils.data.DataLoader(
-                    generic_test_dataset, batch_size=32, shuffle=False, drop_last=True
-                )
+                batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=16)
+                generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
+                                                                   collate_fn=collate_fn,
+                                                                   batch_sampler=batch_sampler_test)
                 # Evaluate DNN models, augmented and subspace methods
                 loss = evaluate(
                     generic_test_dataset=generic_test_dataset,
@@ -358,7 +359,15 @@ def __run_simulation(**kwargs):
                 for snr, results in snr_dict.items():
                     print(f"SNR = {snr} [dB]: ")
                     for method, loss in results.items():
-                        print(f"\t{method.upper(): <20}: {loss['Overall']}")
+                        txt = f"\t{method.upper(): <20}: "
+                        for key, value in loss.items():
+                            if value is not None:
+                                if key == "Accuracy":
+                                    txt += f"{key}: {value * 100:.2f} %|"
+                                else:
+                                    txt += f"{key}: {value:.6f} |"
+
+                        print(txt)
         if save_to_file:
             sys.stdout.close()
             sys.stdout = orig_stdout

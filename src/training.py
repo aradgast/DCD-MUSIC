@@ -47,6 +47,7 @@ from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams
 from src.models import SubspaceNet, DeepCNN, DeepAugmentedMUSIC, ModelGenerator, CascadedSubspaceNet, TransMUSIC
 from src.evaluation import evaluate_dnn_model
+from src.data_handler import TimeSeriesDataset, collate_fn, SameLengthBatchSampler
 
 
 class TrainingParams(object):
@@ -279,12 +280,15 @@ class TrainingParams(object):
         )
         print("Training DataSet size", len(train_dataset))
         print("Validation DataSet size", len(valid_dataset))
+        # init sampler
+        batch_sampler_train = SameLengthBatchSampler(train_dataset, batch_size=self.batch_size)
+        batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32)
         # Transform datasets into DataLoader objects
         self.train_dataset = torch.utils.data.DataLoader(
-            train_dataset, batch_size=self.batch_size, shuffle=True, drop_last=False
+            train_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_train
         )
         self.valid_dataset = torch.utils.data.DataLoader(
-            valid_dataset, batch_size=32, shuffle=False, drop_last=True
+            valid_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_valid
         )
         return self
 
@@ -409,21 +413,28 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model.train()
         model = model.to(device)
         for data in tqdm(training_params.train_dataset):
-            x, true_label = data
+            x, sources_num, label, masks = data
             # Split true label to angles and ranges, if needed
-            if training_params.training_objective.lower() == "angle, range" or training_params.training_objective.lower() == "range":
-                angles, ranges = torch.split(true_label, true_label.size(1) // 2, dim=1)
-            elif training_params.training_objective.lower() == "angle":
-                if model.system_model.params.field_type.lower() == "near":
-                    # if the data_model and the model are not synced.
-                    angles, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                    ranges = None
-                else: # far field
-                    angles = true_label
-                    ranges = None
+            if max(sources_num) * 2 == label.shape[1]:
+                angles, ranges = torch.split(label, max(sources_num), dim=1)
+                masks, _ = torch.split(masks, max(sources_num), dim=1)
             else:
-                raise Exception(f"train_model:"
-                                f" Unrecognized training objective : {training_params.training_objective}.")
+                angles = label  # only angles
+                ranges = None
+
+            # if training_params.training_objective.lower() == "angle, range" or training_params.training_objective.lower() == "range":
+            #     angles, ranges = torch.split(true_label, true_label.size(1) // 2, dim=1)
+            # elif training_params.training_objective.lower() == "angle":
+            #     if model.system_model.params.field_type.lower() == "near":
+            #         if the data_model and the model are not synced.
+                    # angles, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
+                    # ranges = None
+                # else: # far field
+                #     angles = true_label
+                #     ranges = None
+            # else:
+            #     raise Exception(f"train_model:"
+            #                     f" Unrecognized training objective : {training_params.training_objective}.")
 
             train_length += angles.shape[0]
             # Cast observations and DoA to Variables
@@ -439,7 +450,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 angels_pred = model_output[0]
                 ranges_pred = model_output[1]
             else:
-                model_output = model(x)
+                if (sources_num != sources_num[0]).any():
+                    # in this case, the sources number is not the same for all samples in the batch
+                    raise Exception(f"train_model:"
+                                    f" The sources number is not the same for all samples in the batch.")
+                else:
+                    sources_num = sources_num[0]
+                model_output = model(x, sources_num=sources_num)
                 if isinstance(model, SubspaceNet):
                     # in this case there are 2 labels - angles and distances.
                     if training_params.training_objective == "angle, range":
@@ -467,7 +484,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     angels_pred = model_output
             if source_estimation is not None:
                 overall_train_acc += (((torch.mean(
-                    (source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item()))
+                    (source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item()))
                                       / len(training_params.train_dataset))
             # Compute training loss
             train_loss_angle, train_loss_distance = None, None
@@ -483,7 +500,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angels_pred, angles)
-                    train_loss += eigen_regularization
+                    train_loss += eigen_regularization * 1000 * training_params.learning_rate
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
@@ -535,7 +552,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             model,
             training_params.valid_dataset,
             training_params.criterion,
-            phase="validation"
+            phase="validation",
+            learning_rate=training_params.learning_rate,
         )
         loss_valid_list.append(valid_loss.get("Overall"))
 

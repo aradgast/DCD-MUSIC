@@ -9,11 +9,15 @@ class ESPRIT(SubspaceMethod):
     def __init__(self, system_model: SystemModel):
         super().__init__(system_model)
 
-    def forward(self, cov: torch.Tensor):
+    def forward(self, cov: torch.Tensor, sources_num: torch.tensor = None):
+        if sources_num is None:
+            M = self.system_model.params.M
+        else:
+            M = sources_num
         # get the signal subspace
         signal_subspace, _, sources_estimation, regularization = self.subspace_separation(
             cov,
-            number_of_sources=self.system_model.params.M,
+            number_of_sources=M,
             eigen_regularization=True
         )
         # create 2 overlapping matrices

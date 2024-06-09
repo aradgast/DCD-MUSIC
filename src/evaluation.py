@@ -107,7 +107,8 @@ def evaluate_dnn_model(
         criterion: nn.Module,
         plot_spec: bool = False,
         figures: dict = None,
-        phase: str = "test") -> dict:
+        phase: str = "test",
+        learning_rate: torch.tensor=None) -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -138,16 +139,18 @@ def evaluate_dnn_model(
     # Gradients calculation isn't required for evaluation
     with (torch.no_grad()):
         for data in dataset:
-            X, true_label = data
-            if model.system_model.params.field_type.endswith("Far"):
-                angles = true_label.to(device)
-            elif model.system_model.params.field_type.endswith("Near"):
-                angles, ranges = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                ranges.to(device)
+            x, sources_num, label, masks = data
+            # Split true label to angles and ranges, if needed
+            if max(sources_num) * 2 == label.shape[1]:
+                angles, ranges = torch.split(label, max(sources_num), dim=1)
+                masks, _ = torch.split(masks, max(sources_num), dim=1)
+            else:
+                angles = label  # only angles
+                ranges = None
 
             test_length += angles.shape[1]
             # Convert observations and DoA to device
-            X = X.to(device)
+            X = x.to(device)
             angles = angles.to(device)
             # Get model output
             source_estimation = None
@@ -157,7 +160,13 @@ def evaluate_dnn_model(
                 else:  # SubspaceNet with 2D MUSIC
                     model_output = model(X, is_soft=False)
             else:
-                model_output = model(X)
+                if (sources_num != sources_num[0]).any():
+                    # in this case, the sources number is not the same for all samples in the batch
+                    raise Exception(f"train_model:"
+                                    f" The sources number is not the same for all samples in the batch.")
+                else:
+                    sources_num = sources_num[0]
+                model_output = model(X, sources_num=sources_num)
             if isinstance(model, DeepAugmentedMUSIC):
                 # Deep Augmented MUSIC
                 angles_pred = model_output.to(device)
@@ -241,7 +250,7 @@ def evaluate_dnn_model(
                 else:
                     eval_loss = criterion(angles_pred, angles)
                     if phase == "validation":
-                        eval_loss += eigen_regularization
+                        eval_loss += eigen_regularization * learning_rate * 1000
             if source_estimation is not None:
                 source_acc = torch.mean((
                     source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item() / len(dataset)
@@ -659,7 +668,7 @@ def evaluate(
             model_name = model_tmp.get_model_name()
         except AttributeError:
             model_name = "DNN"
-        res[model_name] = model_test_loss
+        res[model_name + "_tmp"] = model_test_loss
     # Evaluate DNN models
     for model_name, params in models.items():
         model = get_model(model_name, params, system_model)

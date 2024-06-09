@@ -70,7 +70,7 @@ class SubspaceNet(nn.Module):
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
 
-    def forward(self, x: torch.Tensor, is_soft=True, known_angles=None):
+    def forward(self, x: torch.Tensor, sources_num: torch.tensor=None, is_soft=True, known_angles=None):
         """
         Performs the forward pass of the SubspaceNet.
 
@@ -126,7 +126,7 @@ class SubspaceNet(nn.Module):
         # Feed surrogate covariance to the differentiable subspace algorithm
 
         if self.field_type == "Far":
-            method_output = self.diff_method(Rz)
+            method_output = self.diff_method(Rz, sources_num)
             if isinstance(self.diff_method, RootMusic):
                 doa_prediction, doa_all_predictions, roots = method_output
                 return doa_prediction, doa_all_predictions, roots
@@ -154,6 +154,8 @@ class SubspaceNet(nn.Module):
         Rx_tau = torch.zeros(batch_size, self.tau, 2 * self.N, self.N, device=device)
         meu = torch.mean(x, dim=-1, keepdim=True).to(device)
         center_x = x - meu
+        if center_x.dim() == 2:
+            center_x = center_x[None, :, :]
 
         for i in range(self.tau):
             x1 = center_x[:, :, :center_x.shape[-1] - i].to(torch.complex128)
@@ -166,10 +168,14 @@ class SubspaceNet(nn.Module):
 
 
     def get_model_file_name(self):
+        if self.system_model.params.M is None:
+            M = "rand"
+        else:
+            M = self.system_model.params.M
         return f"SubspaceNet_" + \
                 f"N={self.N}_" + \
                 f"tau={self.tau}_" + \
-                f"M={self.system_model.params.M}_" + \
+                f"M={M}_" + \
                 f"{self.system_model.params.signal_type}_" + \
                 f"SNR={self.system_model.params.snr}_" + \
                 f"diff_method={self.diff_method}_" + \
