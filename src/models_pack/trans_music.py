@@ -88,7 +88,7 @@ class TransMUSIC(nn.Module):
         elif self.estimation_params == "angle, range":
             input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
             output_dim = (self.params.N - 1) * 2
-            output_dim = self.params.M * 2
+            output_dim = (self.params.M) * 2
             self.activation = nn.LeakyReLU()
         else:
             raise ValueError(f"TransMUSIC.__init__: unrecognized estimation parameter {self.estimation_params}")
@@ -112,7 +112,7 @@ class TransMUSIC(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(in_features=64, out_features=32),
             nn.ReLU(inplace=False),
-            nn.Linear(in_features=32, out_features=self.params.N - 1),
+            nn.Linear(in_features=32, out_features=4),
             nn.Softmax(dim=1)
         ).to(device)
 
@@ -121,34 +121,28 @@ class TransMUSIC(nn.Module):
         x = self.pre_processing(x)
         # The input X is [size, 16200] batch_ Size=16, input dimension N*2, sequence length T
         size = x.shape[0]  # Get batch size
+
+        x3 = self._get_noise_subspace(x)
+
+        x4 = x3.reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
+        Un = torch.complex(x4[:, :N, :].to(device), x4[:, N:, :].to(device)).to(torch.complex32) # feature vector  [size, N, N]
+        spectrum = self.music.get_music_spectrum_from_noise_subspace(Un).to(device)  # Calculate spectrum
+        x7 = spectrum.float().to(device)
+        x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
+        predictions = self.output(x7).to(device)
+        if self.estimation_params == "angle, range":
+            angles, distances = predictions[:, :predictions.shape[1] // 2], predictions[:, predictions.shape[1] // 2:]
+            distances = self.activation(distances).to(device)
+            predictions = torch.stack([angles, distances], dim=1).to(device)
         if mode == "subspace_train":
-            x3 = self._get_noise_subspace(x)
-
-            x4 = x3.reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
-            Un = torch.complex(x4[:, :N, :].to(device), x4[:, N:, :].to(device)).to(torch.complex32) # feature vector  [size, N, N]
-            spectrum = self.music.get_music_spectrum_from_noise_subspace(Un).to(device)  # Calculate spectrum
-            x7 = spectrum.float().to(device)
-            x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
-            predictions = self.output(x7).to(device)
-            if self.estimation_params == "angle, range":
-                angles, distances = predictions[:, :predictions.shape[1] // 2], predictions[:, predictions.shape[1] // 2:]
-                distances = self.activation(distances).to(device)
-                predictions = torch.stack([angles, distances], dim=1).to(device)
-            # with torch.no_grad():
-            #     x9 = x3.detach()
-                prob_sources_est = self.source_number_estimator(x3)
-            return predictions, prob_sources_est
-
-        elif mode == "num_source_train":
             with torch.no_grad():
-                x3 = self._get_noise_subspace(x)
-            x9 = x3.detach()
-            num_sources_est = self.source_number_estimator(x9)
-
-            return num_sources_est
-
+                x9 = x3.detach()
+            prob_sources_est = self.source_number_estimator(x9)
+        elif mode == "num_source_train":
+            prob_sources_est = self.source_number_estimator(x3)
         else:
             raise ValueError(f"TransMUSIC.forward: Unrecognized {mode}")
+        return predictions, prob_sources_est
 
     def _get_noise_subspace(self, x):
         x = self.norm(x.to(torch.float32)).to(device)  # Become [size, 16200]

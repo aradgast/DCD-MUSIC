@@ -45,7 +45,8 @@ from sklearn.model_selection import train_test_split
 from src.utils import *
 from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams
-from src.models import SubspaceNet, DeepCNN, DeepAugmentedMUSIC, ModelGenerator, CascadedSubspaceNet, TransMUSIC
+from src.models import (SubspaceNet, DeepCNN, DeepAugmentedMUSIC,
+                        ModelGenerator, CascadedSubspaceNet, TransMUSIC, DeepRootMUSIC)
 from src.evaluation import evaluate_dnn_model
 from src.data_handler import TimeSeriesDataset, collate_fn, SameLengthBatchSampler
 
@@ -236,7 +237,7 @@ class TrainingParams(object):
         )
         return self
 
-    def set_criterion(self, criterion:str, balance_factor: float = None):
+    def set_criterion(self, criterion: str, balance_factor: float = None):
         """
         Sets the loss criterion for training.
 
@@ -350,14 +351,13 @@ def train(
             )
             plt.show()
         plot_learning_curve(
-                list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
-                model_name=model.get_model_name(),
-                angle_train_loss=loss_train_list_angles,
-                angle_valid_loss=loss_valid_list_angles,
-                range_train_loss=loss_train_list_ranges,
-                range_valid_loss=loss_valid_list_ranges
-            )
-
+            list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
+            model_name=model.get_model_name(),
+            angle_train_loss=loss_train_list_angles,
+            angle_valid_loss=loss_valid_list_angles,
+            range_train_loss=loss_train_list_ranges,
+            range_valid_loss=loss_valid_list_ranges
+        )
 
     # Save models best weights
     torch.save(model.state_dict(), saving_path / model.get_model_file_name())
@@ -383,6 +383,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     """
     # Initialize model and optimizer
     model = training_params.model
+    model = model.to(device)
     optimizer = training_params.optimizer
     # Initialize losses
     loss_train_list = []
@@ -394,6 +395,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     acc_train_list = []
     acc_valid_list = []
     min_valid_loss = np.inf
+    if isinstance(model, TransMUSIC):
+        ce_loss = nn.CrossEntropyLoss()
+        transmusic_mode = "subspace_train"
     # Set initial time for start training
     since = time.time()
     training_angle_extractor = False
@@ -405,13 +409,19 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         # reset gradients
         model.zero_grad()
         train_length = 0
-        overall_train_loss = 0.0
-        overall_train_loss_angle = 0.0
-        overall_train_loss_distance = 0.0
-        overall_train_acc = 0.0
+        epoch_train_loss = 0.0
+        epoch_train_loss_angle = 0.0
+        epoch_train_loss_distance = 0.0
+        epoch_train_acc = 0.0
+        # init tmp loss values
+        train_loss, train_loss_angle, train_loss_distance = None, None, None
+        # init source estimation
+        source_estimation = None
+        ranges = None
+        # if epoch == int(0.95 * training_params.epochs):
+        #     transmusic_mode = "num_source_train"
         # Set model to train mode
         model.train()
-        model = model.to(device)
         for data in tqdm(training_params.train_dataset):
             x, sources_num, label, masks = data
             # Split true label to angles and ranges, if needed
@@ -420,22 +430,15 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 masks, _ = torch.split(masks, max(sources_num), dim=1)
             else:
                 angles = label  # only angles
-                ranges = None
+            # Check if the sources number is the same for all samples in the batch
+            if (sources_num != sources_num[0]).any():
+                # in this case, the sources number is not the same for all samples in the batch
+                raise Exception(f"train_model:"
+                                f" The sources number is not the same for all samples in the batch.")
+            else:
+                sources_num = sources_num[0]
 
-            # if training_params.training_objective.lower() == "angle, range" or training_params.training_objective.lower() == "range":
-            #     angles, ranges = torch.split(true_label, true_label.size(1) // 2, dim=1)
-            # elif training_params.training_objective.lower() == "angle":
-            #     if model.system_model.params.field_type.lower() == "near":
-            #         if the data_model and the model are not synced.
-                    # angles, _ = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                    # ranges = None
-                # else: # far field
-                #     angles = true_label
-                #     ranges = None
-            # else:
-            #     raise Exception(f"train_model:"
-            #                     f" Unrecognized training objective : {training_params.training_objective}.")
-
+            # Update train length
             train_length += angles.shape[0]
             # Cast observations and DoA to Variables
             x = Variable(x, requires_grad=True).to(device)
@@ -443,90 +446,91 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             if ranges is not None:
                 ranges = Variable(ranges, requires_grad=True).to(device)
 
+            ############################################################################################################
             # Get model output
-            source_estimation = None
             if isinstance(model, CascadedSubspaceNet):
                 model_output = model(x, train_angle_extractor=training_angle_extractor)
-                angels_pred = model_output[0]
+                angles_pred = model_output[0]
                 ranges_pred = model_output[1]
-            else:
-                if (sources_num != sources_num[0]).any():
-                    # in this case, the sources number is not the same for all samples in the batch
-                    raise Exception(f"train_model:"
-                                    f" The sources number is not the same for all samples in the batch.")
+            elif isinstance(model, SubspaceNet):
+                model_output = model(x, sources_num=sources_num)
+                # in this case there are 2 labels - angles and distances.
+                if training_params.training_objective == "angle, range":
+                    angles_pred = model_output[0]
+                    ranges_pred = model_output[1]
+                elif training_params.training_objective.endswith("angle"):
+                    angles_pred = model_output[0]
+                    source_estimation = model_output[1]
+                    eigen_regularization = model_output[2]
                 else:
-                    sources_num = sources_num[0]
-                if isinstance(model, SubspaceNet):
-                    model_output = model(x, sources_num=sources_num)
-                    # in this case there are 2 labels - angles and distances.
-                    if training_params.training_objective == "angle, range":
-                        angels_pred = model_output[0]
-                        ranges_pred = model_output[1]
-                    elif training_params.training_objective.endswith("angle"):
-                        angels_pred = model_output[0]
-                        source_estimation = model_output[1]
-                        eigen_regularization = model_output[2]
-                    elif training_params.training_objective.endswith("range"):
-                        raise Exception(f"train_model:"
-                                        f" If training objective is only 'range' the instance "
-                                        f"is CascadedSSN which already covered..")
-                elif isinstance(model, TransMUSIC):
-                    model_output = model(x)
-                    if training_params.training_objective == "angle":
-                        angels_pred = model_output[0]
-                        prob_source_number = model_output[1]
-                    elif training_params.training_objective == "angle, range":
-                        angels_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
-                        prob_source_number = model_output[1]
-                    #calculate the cross entropy loss for the source number estimation
-                    one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                           .to(device).to(torch.float32))
-                    source_est_regularization = nn.CrossEntropyLoss()(prob_source_number, one_hot_sources_num.repeat(prob_source_number.shape[0], 1))
-                    # calculate the source estimation
-                    source_estimation = torch.argmax(prob_source_number, dim=1)
+                    raise Exception(f"train_model: Unrecognized training objective"
+                                    f" {training_params.training_objective}, for SubspaceNet model")
+            elif isinstance(model, TransMUSIC):
+                model_output = model(x, mode=transmusic_mode)
+                if training_params.training_objective == "angle":
+                    angles_pred = model_output[0]
+                    prob_source_number = model_output[1]
+                elif training_params.training_objective == "angle, range":
+                    angles_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
+                    prob_source_number = model_output[1]
+                # calculate the cross entropy loss for the source number estimation
+                one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                       .to(device).to(torch.float32))
+                source_est_regularization = ce_loss(prob_source_number, one_hot_sources_num.repeat(
+                    prob_source_number.shape[0], 1))
+                # calculate the source estimation
+                source_estimation = torch.argmax(prob_source_number, dim=1)
 
-                else:
-                    # Deep Augmented MUSIC or DeepCNN
-                    angels_pred = model_output
+            elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
+                                                                                              DeepAugmentedMUSIC):
+                # Deep Augmented MUSIC or DeepCNN or DeepRootMUSIC
+                model_output = model(x)
+                angles_pred = model_output
+                raise Exception(f"train_model: those model weren't tested yet."
+                                f" Deep Augmented MUSIC or DeepCNN or DeepRootMUSIC")
+            ############################################################################################################
+            # calculate the accuracy for the source estimation
             if source_estimation is not None:
-                overall_train_acc += (((torch.mean(
+                epoch_train_acc += (((torch.mean(
                     (source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item()))
                                       / len(training_params.train_dataset))
+            ############################################################################################################
             # Compute training loss
-            train_loss_angle, train_loss_distance = None, None
-            if isinstance(model, DeepCNN):
-                train_loss = training_params.criterion(angels_pred.float(), angles.float())
-            elif isinstance(model, TransMUSIC):
-                angels_pred = angels_pred[:, :angles.shape[1]]
+            if isinstance(model, TransMUSIC):
+                angles_pred = angles_pred[:, :angles.shape[1]]
                 if training_params.training_objective == "angle":
-                    train_loss = training_params.criterion(angels_pred, angles)
+                    train_loss = training_params.criterion(angles_pred, angles)
                 elif training_params.training_objective == "angle, range":
                     ranges_pred = ranges_pred[:, :ranges.shape[1]]
-                    train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
+                    train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss
-                train_loss += source_est_regularization
+                if source_est_regularization is not None and transmusic_mode == "num_source_train":
+                    train_loss += source_est_regularization
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
-                    train_loss = training_params.criterion(angels_pred, angles)
-                    train_loss += eigen_regularization * 1000 * training_params.learning_rate
+                    train_loss = training_params.criterion(angles_pred, angles)
+                    if eigen_regularization is not None:
+                        train_loss += eigen_regularization * 1000 * training_params.learning_rate
                 elif training_params.training_objective == "range":
-                    train_loss = training_params.criterion(angels_pred, angles, ranges_pred, ranges)
+                    train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
                     if isinstance(training_params.criterion, RMSPELoss):
                         # in the RMSPE case, we can return the loss for each part of the loss.
-                        train_loss, train_loss_angle, train_loss_distance = training_params.criterion(angels_pred,
-                                                                                                      angles,
-                                                                                                      ranges_pred,
-                                                                                                      ranges,
-                                                                                                      is_separted=True)
-                    elif isinstance(training_params.criterion, CartesianLoss):
-                        train_loss = training_params.criterion(angels_pred,
+                        train_loss = training_params.criterion(angles_pred,
                                                                angles,
                                                                ranges_pred,
                                                                ranges)
+                if isinstance(train_loss, tuple):
+                    train_loss, train_loss_angle, train_loss_distance = train_loss
+            elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
+                                                                                              DeepAugmentedMUSIC):
+                train_loss = training_params.criterion(angles_pred.float(), angles.float())
+                raise Exception(f"train_model: those model weren't tested yet."
+                                f" Deep Augmented MUSIC or DeepCNN or DeepRootMUSIC")
             else:
                 raise Exception(f"Model type {training_params.model_type} is not defined")
+            ############################################################################################################
             # Back-propagation stage
             try:
                 train_loss.backward(retain_graph=True)
@@ -539,20 +543,22 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             # add batch loss to overall epoch loss
             if isinstance(training_params.criterion, nn.BCELoss):
                 # BCE is averaged
-                overall_train_loss += train_loss.item() * len(data[0])
-            elif isinstance(training_params.criterion, RMSPELoss) or isinstance(training_params.criterion, CartesianLoss):
-                # RMSPE is averaged over the dataset size
-                overall_train_loss += train_loss.item() / len(training_params.train_dataset)
+                epoch_train_loss += train_loss.item() * len(data[0])
+            elif isinstance(training_params.criterion, RMSPELoss) or isinstance(training_params.criterion,
+                                                                                CartesianLoss):
+                epoch_train_loss += train_loss.item() / len(training_params.train_dataset)
                 if train_loss_angle is not None and train_loss_distance is not None:
-                    overall_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
-                    overall_train_loss_distance += train_loss_distance.item() / len(training_params.train_dataset)
+                    epoch_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
+                    epoch_train_loss_distance += train_loss_distance.item() / len(training_params.train_dataset)
             else:
                 raise Exception(f"Criterion type {training_params.criterion} is not defined")
-        # add epoch loss to the list
-        loss_train_list.append(overall_train_loss)
-        if overall_train_loss_angle != 0.0 and overall_train_loss_distance != 0.0:
-            loss_train_list_angles.append(overall_train_loss_angle)
-            loss_train_list_ranges.append(overall_train_loss_distance)
+
+        ################################################################################################################
+        # End of epoch. Calculate the average loss
+        loss_train_list.append(epoch_train_loss)
+        if epoch_train_loss_angle != 0.0 and epoch_train_loss_distance != 0.0:
+            loss_train_list_angles.append(epoch_train_loss_angle)
+            loss_train_list_ranges.append(epoch_train_loss_distance)
         # Update schedular
         training_params.schedular.step()
 
@@ -568,21 +574,21 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
 
         # Report results
         result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}]"
-                      f" Train loss = {overall_train_loss:.6f}, Validation loss = {valid_loss.get("Overall"):.6f}")
+                      f" Train loss = {epoch_train_loss:.6f}, Validation loss = {valid_loss.get("Overall"):.6f}")
 
         if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
             loss_valid_list_angles.append(valid_loss.get("Angle"))
             loss_valid_list_ranges.append(valid_loss.get("Distance"))
-            result_txt += f"\n Angle loss = {valid_loss.get("Angle"):.6f}, Range loss = {valid_loss.get("Distance"):.6f}"
+            result_txt += f"\nAngle loss = {valid_loss.get("Angle"):.6f}, Range loss = {valid_loss.get("Distance"):.6f}"
         if source_estimation is not None:
-            acc_train_list.append(overall_train_acc * 100)
+            acc_train_list.append(epoch_train_acc * 100)
             acc_valid_list.append(valid_loss.get('Accuracy') * 100)
-            result_txt += (f"\n Accuracy for sources estimation: Train = {100 * overall_train_acc:.2f}%, "
+            result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                            f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
-        result_txt += f"\n lr {training_params.optimizer.param_groups[0]["lr"]}"
+        result_txt += f"\nlr {training_params.optimizer.param_groups[0]["lr"]}"
 
         print(result_txt)
-        # Save best model weights for early stoppings
+        # Save best model weights
         if min_valid_loss > valid_loss.get("Overall"):
             print(
                 f"Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss.get("Overall"):.6f}) \t Saving The Model"
@@ -614,6 +620,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         res["acc_valid_list"] = acc_valid_list
     return res
 
+
 def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model_name: str = None):
     """
     Plot the learning curve.
@@ -634,6 +641,7 @@ def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model
     plt.ylabel("Accuracy")
     plt.legend(loc="best")
     # plt.show()
+
 
 def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, model_name: str = None,
                         angle_train_loss=None, angle_valid_loss=None, range_train_loss=None, range_valid_loss=None):
@@ -743,18 +751,18 @@ def get_simulation_filename(
     File name to a simulation ran.
     """
     return (
-            f"{model_config.model.get_model_name()}_"
-            f"{model_config.model.get_model_params()}_"
-            f"N={system_model_params.N}_"
-            f"M={system_model_params.M}_"
-            f"T={system_model_params.T}_"
-            f"SNR_{system_model_params.snr}_"
-            f"{system_model_params.signal_type}_"
-            f"{system_model_params.field_type}_field_"
-            f"{system_model_params.signal_nature}"
-            f"_eta={system_model_params.eta}_"
-            f"bias={system_model_params.bias}_"
-            f"sv_noise={system_model_params.sv_noise_var}"
+        f"{model_config.model.get_model_name()}_"
+        f"{model_config.model.get_model_params()}_"
+        f"N={system_model_params.N}_"
+        f"M={system_model_params.M}_"
+        f"T={system_model_params.T}_"
+        f"SNR_{system_model_params.snr}_"
+        f"{system_model_params.signal_type}_"
+        f"{system_model_params.field_type}_field_"
+        f"{system_model_params.signal_nature}"
+        f"_eta={system_model_params.eta}_"
+        f"bias={system_model_params.bias}_"
+        f"sv_noise={system_model_params.sv_noise_var}"
     )
 
 
@@ -785,13 +793,13 @@ def get_model_filename(system_model_params: SystemModelParams, model_name: str):
         )
     else:
         return (
-            f"{model_name}_"
-            + f"N={system_model_params.N}_"
-            + f"tau={model_config.tau}_"
-            + f"M={system_model_params.M}_"
-            + f"{system_model_params.signal_type}_"
-            + f"SNR={system_model_params.snr}_"
-            + f"diff_method={model_config.diff_method}_"
-            + f"{system_model_params.field_type}_field_"
-            + f"{system_model_params.signal_nature}"
+                f"{model_name}_"
+                + f"N={system_model_params.N}_"
+                + f"tau={model_config.tau}_"
+                + f"M={system_model_params.M}_"
+                + f"{system_model_params.signal_type}_"
+                + f"SNR={system_model_params.snr}_"
+                + f"diff_method={model_config.diff_method}_"
+                + f"{system_model_params.field_type}_field_"
+                + f"{system_model_params.signal_nature}"
         )

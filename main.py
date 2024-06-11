@@ -62,11 +62,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024 * 1,
-    "train_test_ratio": .1,
+    "samples_size": 1024 * 100,
+    "train_test_ratio": .05,
     "training_objective": "angle, range",       # angle, range
-    "batch_size": 256,
-    "epochs": 100,
+    "batch_size": 512,
+    "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -113,11 +113,11 @@ evaluation_params = {
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": True,
-    "LOAD_MODEL": True,
+    "CREATE_DATA": False,
+    "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
     "SAVE_MODEL": True,
-    "EVALUATE_MODE": True,
+    "EVALUATE_MODE": False,
     "PLOT_RESULTS": False
 }
 

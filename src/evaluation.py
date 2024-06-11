@@ -132,12 +132,16 @@ def evaluate_dnn_model(
     overall_loss = 0.0
     overall_loss_angle = None
     overall_loss_distance = None
-    overall_accuracy = 0.0
+    overall_accuracy = None
     test_length = 0
+    ranges = None
+    source_estimation = None
+    if isinstance(model, TransMUSIC):
+        ce_loss = nn.CrossEntropyLoss()
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
-    with (torch.no_grad()):
+    with torch.no_grad():
         for data in dataset:
             x, sources_num, label, masks = data
             # Split true label to angles and ranges, if needed
@@ -146,34 +150,52 @@ def evaluate_dnn_model(
                 masks, _ = torch.split(masks, max(sources_num), dim=1)
             else:
                 angles = label  # only angles
-                ranges = None
+            # Check if the sources number is the same for all samples in the batch
+            if (sources_num != sources_num[0]).any():
+                # in this case, the sources number is not the same for all samples in the batch
+                raise Exception(f"train_model:"
+                                f" The sources number is not the same for all samples in the batch.")
+            else:
+                sources_num = sources_num[0]
 
-            test_length += angles.shape[1]
+            test_length += angles.shape[0]
             # Convert observations and DoA to device
             X = x.to(device)
             angles = angles.to(device)
+            ############################################################################################################
             # Get model output
-            source_estimation = None
-            if isinstance(model, SubspaceNet) and model.field_type.endswith("Near"):
-                if isinstance(model, CascadedSubspaceNet):
-                    model_output = model(X, is_soft=False, train_angle_extractor=False)
-                else:  # SubspaceNet with 2D MUSIC
-                    model_output = model(X, is_soft=False)
-            else:
-                if (sources_num != sources_num[0]).any():
-                    # in this case, the sources number is not the same for all samples in the batch
-                    raise Exception(f"train_model:"
-                                    f" The sources number is not the same for all samples in the batch.")
-                else:
-                    sources_num = sources_num[0]
-                if isinstance(model, TransMUSIC):
-                    model_output = model(X)
-                else:
-                    model_output = model(X, sources_num=sources_num)
+            if isinstance(model, CascadedSubspaceNet):
+                model_output = model(X, is_soft=False, train_angle_extractor=False)
+                angles_pred = model_output[0].to(device)
+                ranges_pred = model_output[1].to(device)
+            elif isinstance(model, SubspaceNet):
+                model_output = model(x, sources_num=sources_num)
+                if model.field_type.endswith("Near"):
+                    angles_pred = model_output[0].to(device)
+                    ranges_pred = model_output[1].to(device)
+                elif model.field_type.endswith("Far"):
+                    angles_pred = model_output[0].to(device)
+                    source_estimation = model_output[1].to(device)
+                    eigen_regularization = model_output[2].to(device)
+            elif isinstance(model, TransMUSIC):
+                model_output = model(X)
+                if model.estimation_params == "angle":
+                    angles_pred = model_output[0].to(device)
+                    prob_source_number = model_output[1].to(device)
+                elif model.estimation_params == "angle, range":
+                    angles_pred, ranges_pred = model_output[0][:, 0].to(device), model_output[0][:, 1].to(device)
+                    prob_source_number = model_output[1].to(device)
+                source_estimation = torch.argmax(prob_source_number, dim=1)
+                # CE loss
+                one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                       .to(device).to(torch.float32))
+                source_est_regularization = ce_loss(prob_source_number, one_hot_sources_num.repeat(
+                    prob_source_number.shape[0], 1))
 
-            if isinstance(model, DeepAugmentedMUSIC):
+            elif isinstance(model, DeepAugmentedMUSIC) or isinstance(model, DeepRootMUSIC):
                 # Deep Augmented MUSIC
                 angles_pred = model_output.to(device)
+                raise Exception("evaluate_dnn_model: DeepAugmentedMUSIC model was not tested")
             elif isinstance(model, DeepCNN):
                 # Deep CNN
                 if isinstance(criterion, nn.BCELoss):
@@ -192,28 +214,20 @@ def evaluate_dnn_model(
                         f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
                         f" {model.get_model_name()} model"
                     )
-            elif isinstance(model, SubspaceNet):
-                if model.field_type.endswith("Near"):
-                    # 2 possible outputs: DOA and RANGE
-                    angles_pred = model_output[0].to(device)
-                    ranges_pred = model_output[1].to(device)
-                elif model.field_type.endswith("Far"):
-                    # Default - SubSpaceNet
-                    angles_pred = model_output[0]
-                    source_estimation = model_output[1]
-                    eigen_regularization = model_output[2]
-            elif isinstance(model, TransMUSIC):
-                if model.estimation_params == "angle":
-                    angles_pred = model_output[0]
-                    prob_source_number = model_output[1]
-                elif model.estimation_params == "angle, range":
-                    angles_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
-                    prob_source_number = model_output[1]
-                source_estimation = torch.argmax(prob_source_number, dim=1)
+                raise Exception("evaluate_dnn_model: DeepCNN model was not tested")
+
             else:
                 raise Exception(
                     f"evaluate_dnn_model: Model {model.get_model_name()} is not defined"
                 )
+            ############################################################################################################
+            if source_estimation is not None:
+                source_acc = torch.mean((
+                    source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item()
+                if overall_accuracy is None:
+                    overall_accuracy = 0.0
+                overall_accuracy += source_acc / len(dataset)
+            ############################################################################################################
             # Compute prediction loss
             if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(angles_pred.float(), angles.float())
@@ -232,32 +246,28 @@ def evaluate_dnn_model(
                             overall_loss_angle, overall_loss_distance = 0.0, 0.0
                             overall_loss_angle += eval_loss_angle.item() / len(dataset)
                             overall_loss_distance += eval_loss_distance.item() / len(dataset)
-
-
-                    else:
+                    elif isinstance(criterion, CartesianLoss):
                         eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
+                    else:
+                        raise Exception(f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
+                                        f" {model.get_model_name()} model")
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
-                    if not (isinstance(criterion, nn.BCELoss) or isinstance(criterion, CartesianLoss)):
+                    if isinstance(criterion, RMSPELoss):
                         eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
-                        if overall_loss_angle is not None:
-                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
-                        else:
+                        if overall_loss_angle is None:
                             overall_loss_angle, overall_loss_distance = 0.0, 0.0
-                            eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
-                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
-                    else:
+
+                        overall_loss_angle += eval_loss_angle.item() / len(dataset)
+                        overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                    elif isinstance(criterion, CartesianLoss):
                         eval_loss = criterion(angles_pred, angles.to(device), ranges_pred, ranges.to(device))
-                else:
+                elif model.field_type.endswith("Far"):
                     eval_loss = criterion(angles_pred, angles)
+                    # add eigen regularization to the loss if phase is validation
                     if phase == "validation":
                         eval_loss += eigen_regularization * learning_rate * 1000
-            if source_estimation is not None:
-                source_acc = torch.mean((
-                    source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item() / len(dataset)
-                overall_accuracy += source_acc
+
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")
             # add the batch evaluation loss to epoch loss
