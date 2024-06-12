@@ -174,7 +174,7 @@ class TrainingParams(object):
             self.model.load_state_dict(torch.load(loading_path, map_location=device), strict=False)
         except FileNotFoundError as e:
             print(e)
-            print("#" * 40 + "Nothing will be loaded" + "#" * 40)
+            print(f"\nTrainingParams.load_model: Model not found in {loading_path}")
         return self
 
     def set_optimizer(self, optimizer: str, learning_rate: float, weight_decay: float):
@@ -345,7 +345,7 @@ def train(
     loss_valid_list_ranges = train_res.get("loss_valid_list_ranges")
     acc_train_list = train_res.get("acc_train_list")
     acc_valid_list = train_res.get("acc_valid_list")
-
+    figures_saving_path = Path(saving_path).parent / "simulations" / "results" / "plots"
     if plot_curves:
         if acc_train_list is not None and acc_valid_list is not None:
             fig_acc = plot_accuracy_curve(
@@ -353,7 +353,7 @@ def train(
                 model_name=model.get_model_name()
             )
             if save_figures:
-                fig_acc.savefig(saving_path / f"Accuracy_{model.get_model_name()}_{dt_string_for_save}.png")
+                fig_acc.savefig(figures_saving_path / f"Accuracy_{model.get_model_name()}_{dt_string_for_save}.png")
             fig_acc.show()
         fig_loss = plot_learning_curve(
             list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
@@ -364,7 +364,7 @@ def train(
             range_valid_loss=loss_valid_list_ranges
         )
         if save_figures:
-            fig_loss.savefig(saving_path / f"Loss_{model.get_model_name()}_{dt_string_for_save}.png")
+            fig_loss.savefig(figures_saving_path / f"Loss_{model.get_model_name()}_{dt_string_for_save}.png")
         fig_loss.show()
 
     # Save models best weights
@@ -403,19 +403,20 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     acc_train_list = []
     acc_valid_list = []
     min_valid_loss = np.inf
+    train_length = training_params.train_dataset.batch_sampler.get_data_source_length()
     if isinstance(model, TransMUSIC):
         ce_loss = nn.CrossEntropyLoss()
         transmusic_mode = "subspace_train"
+    training_angle_extractor = False
+    if training_params.training_objective.endswith("angle, range") and isinstance(model, CascadedSubspaceNet):
+        training_angle_extractor = True
+
     # Set initial time for start training
     since = time.time()
-    training_angle_extractor = False
-    if training_params.training_objective.endswith("angle, range"):
-        training_angle_extractor = True
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
 
-        train_length = 0
         epoch_train_loss = 0.0
         epoch_train_loss_angle = 0.0
         epoch_train_loss_distance = 0.0
@@ -425,13 +426,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         # init source estimation
         source_estimation = None
         ranges = None
-        if epoch == int(0.5 * training_params.epochs):
+        if isinstance(model, TransMUSIC) and epoch == int(0.8 * training_params.epochs):
             transmusic_mode = "num_source_train"
             print("Switching to num_source_train mode for TransMUSIC model")
         # Set model to train mode
         model.train()
         for data in tqdm(training_params.train_dataset):
-            x, sources_num, label, masks = data #
+            x, sources_num, label, masks = data
             # Split true label to angles and ranges, if needed
             if max(sources_num) * 2 == label.shape[1]:
                 angles, ranges = torch.split(label, max(sources_num), dim=1)
@@ -446,8 +447,6 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             else:
                 sources_num = sources_num[0]
 
-            # Update train length
-            train_length += angles.shape[0]
             # Cast observations and DoA to Variables
             x = Variable(x, requires_grad=True).to(device)
             angles = Variable(angles, requires_grad=True).to(device)
@@ -460,12 +459,15 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 model_output = model(x, train_angle_extractor=training_angle_extractor)
                 angles_pred = model_output[0]
                 ranges_pred = model_output[1]
+                source_estimation = model_output[2]
             elif isinstance(model, SubspaceNet):
                 model_output = model(x, sources_num=sources_num)
                 # in this case there are 2 labels - angles and distances.
                 if training_params.training_objective == "angle, range":
                     angles_pred = model_output[0]
                     ranges_pred = model_output[1]
+                    source_estimation = model_output[2]
+                    eigen_regularization = model_output[3]
                 elif training_params.training_objective.endswith("angle"):
                     angles_pred = model_output[0]
                     source_estimation = model_output[1]
@@ -485,7 +487,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
                                        .to(device).to(torch.float32))
                 source_est_regularization = ce_loss(prob_source_number, one_hot_sources_num.repeat(
-                    prob_source_number.shape[0], 1))
+                    prob_source_number.shape[0], 1)) * x.shape[0]
                 # calculate the source estimation
                 source_estimation = torch.argmax(prob_source_number, dim=1)
 
@@ -499,8 +501,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             ############################################################################################################
             # calculate the accuracy for the source estimation
             if source_estimation is not None:
-                epoch_train_acc += (((torch.sum(
-                    (source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item())))
+                epoch_train_acc += ((((torch.sum(
+                    (source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item()))))
 
             ############################################################################################################
             # Compute training loss
@@ -514,12 +516,12 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss
                 if source_est_regularization is not None and transmusic_mode == "num_source_train":
-                    train_loss += source_est_regularization
+                    train_loss += source_est_regularization * 0.1
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angles_pred, angles)
                     if eigen_regularization is not None:
-                        train_loss += eigen_regularization * 1000 * training_params.learning_rate
+                        train_loss += eigen_regularization * training_params.learning_rate * 10000
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
@@ -530,6 +532,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                                            ranges)
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss
+                    if eigen_regularization is not None:
+                        train_loss += eigen_regularization * training_params.learning_rate * 10000
             elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
                                                                                               DeepAugmentedMUSIC):
                 train_loss = training_params.criterion(angles_pred.float(), angles.float())

@@ -18,7 +18,7 @@ from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
 from src.models_pack.deep_cnn import DeepCNN
 from src.models_pack.deep_root_music import DeepRootMUSIC
 
-warnings.simplefilter("ignore")
+# warnings.simplefilter("ignore")
 
 
 class ModelGenerator(object):

@@ -26,13 +26,13 @@ from src.training import *
 from run_simulation import run_simulation
 
 # Initialization
-warnings.simplefilter("ignore")
+# warnings.simplefilter("ignore")
 os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [],
-    "non-coherent": [0],
+    "coherent": [-10, -5, 0, 5, 10],
+    "non-coherent": [-10, -5, 0, 5, 10],
 }
 
 system_model_params = {
@@ -47,13 +47,13 @@ system_model_params = {
     "sv_noise_var": 0
 }
 model_config = {
-    "model_type": "TransMUSIC",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
+    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Near"     # Near, Far
+    model_config["model_params"]["field_type"] = "Far"     # Near, Far
 
 elif model_config.get("model_type") == "CascadedSubspaceNet":
     model_config["model_params"]["tau"] = 8
@@ -62,10 +62,10 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 1024 * 64,
     "train_test_ratio": .1,
-    "training_objective": "angle, range",       # angle, range
-    "batch_size": 128,
+    "training_objective": "angle",       # angle, range
+    "batch_size": 256,
     "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
@@ -76,11 +76,11 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-    "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
+    "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
     "balance_factor": 1.0                 # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
-    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
+    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
     "balance_factor": training_params["balance_factor"],
     "models": {
                 # "CascadedSubspaceNet": {"tau": 8},
@@ -116,14 +116,13 @@ simulation_commands = {
     "CREATE_DATA": False,
     "LOAD_MODEL": True,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }
 
 if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
-    # hold values for different scenarios, currently only for SNR and signal nature
 
     start = time.time()
     loss = run_simulation(simulation_commands=simulation_commands,

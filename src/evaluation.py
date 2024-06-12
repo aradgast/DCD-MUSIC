@@ -133,7 +133,7 @@ def evaluate_dnn_model(
     overall_loss_angle = None
     overall_loss_distance = None
     overall_accuracy = None
-    test_length = 0
+    test_length = dataset.batch_sampler.get_data_source_length()
     ranges = None
     source_estimation = None
     if isinstance(model, TransMUSIC):
@@ -158,7 +158,6 @@ def evaluate_dnn_model(
             else:
                 sources_num = sources_num[0]
 
-            test_length += angles.shape[0]
             # Convert observations and DoA to device
             x = x.to(device)
             angles = angles.to(device)
@@ -168,11 +167,14 @@ def evaluate_dnn_model(
                 model_output = model(x, is_soft=False, train_angle_extractor=False)
                 angles_pred = model_output[0].to(device)
                 ranges_pred = model_output[1].to(device)
+                source_estimation = model_output[2].to(device)
             elif isinstance(model, SubspaceNet):
                 model_output = model(x, sources_num=sources_num)
                 if model.field_type.endswith("Near"):
                     angles_pred = model_output[0].to(device)
                     ranges_pred = model_output[1].to(device)
+                    source_estimation = model_output[2].to(device)
+                    eigen_regularization = model_output[3].to(device)
                 elif model.field_type.endswith("Far"):
                     angles_pred = model_output[0].to(device)
                     source_estimation = model_output[1].to(device)
@@ -190,7 +192,7 @@ def evaluate_dnn_model(
                 source_estimation = torch.argmax(prob_source_number, dim=1)
                 # CE loss
                 one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                       .to(device).to(torch.float32))
+                                       .to(device).to(torch.float32)) * x.shape[0]
                 source_est_regularization = ce_loss(prob_source_number, one_hot_sources_num.repeat(
                     prob_source_number.shape[0], 1))
 
@@ -225,7 +227,7 @@ def evaluate_dnn_model(
             ############################################################################################################
             if source_estimation is not None:
                 source_acc = torch.sum((
-                    source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item()
+                    source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item()
                 if overall_accuracy is None:
                     overall_accuracy = 0.0
                 overall_accuracy += source_acc
@@ -267,8 +269,8 @@ def evaluate_dnn_model(
                 elif model.field_type.endswith("Far"):
                     eval_loss = criterion(angles_pred, angles)
                     # add eigen regularization to the loss if phase is validation
-                    if phase == "validation":
-                        eval_loss += eigen_regularization * learning_rate * 1000
+                if phase == "validation":
+                    eval_loss += eigen_regularization * learning_rate * 10000
 
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")

@@ -167,12 +167,12 @@ class RMSPELoss(nn.Module):
             rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
         rmspe, min_idx = torch.min(rmspe, dim=-1)
-        result = torch.mean(rmspe)
+        result = torch.sum(rmspe)
         if distance is None:
             return result
         else:
-            result_angle = torch.mean(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
-            result_distance = torch.mean(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
+            result_angle = torch.sum(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
+            result_distance = torch.sum(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
             return result, result_angle, result_distance
 
             # rmspe = []

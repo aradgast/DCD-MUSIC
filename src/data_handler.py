@@ -30,6 +30,7 @@ Attributes:
 
 # Imports
 import itertools
+import warnings
 
 import torch
 from tqdm import tqdm
@@ -292,8 +293,9 @@ def load_datasets(
                 datasets_path / "train" / model_trainingset_filename
             )
             datasets.append(train_dataset)
-        except:
-            raise Exception("load_datasets: Training dataset doesn't exist")
+        except Exception as e:
+            print(e)
+            Exception(f"load_datasets: Training dataset doesn't exist")
     # Load test dataset
     # try:
     #     test_dataset = read_data(datasets_path / "test" / model_dataset_filename)
@@ -306,14 +308,16 @@ def load_datasets(
             datasets_path / "test" / generic_dataset_filename
         )
         datasets.append(generic_test_dataset)
-    except:
-        raise Exception("load_datasets: Generic test dataset doesn't exist")
+    except Exception as e:
+        print(e)
+        Exception(f"load_datasets: Generic test dataset doesn't exist")
     # Load samples models
     try:
         samples_model = read_data(datasets_path / "test" / samples_model_filename)
         datasets.append(samples_model)
-    except:
-        raise Exception("load_datasets: Samples model dataset doesn't exist")
+    except Exception as e:
+        print(e)
+        Exception(f"load_datasets: Samples model dataset doesn't exist")
     return datasets
 
 
@@ -415,7 +419,9 @@ class SameLengthBatchSampler(Sampler):
             if len(indices) < min_length:
                 min_length = len(indices)
         if max_length * 0.4 > min_length:
-            raise ValueError("SameLengthBatchSampler: There is a bias in the labels")
+            # raise ValueError("SameLengthBatchSampler: There is a bias in the labels")
+            warnings.warn("SameLengthBatchSampler: There is a bias in the labels")
+            print(f"max_length: {max_length}, min_length: {min_length}")
 
         batches = []
         for indices in length_to_indices.values():
@@ -434,3 +440,6 @@ class SameLengthBatchSampler(Sampler):
 
     def __len__(self):
         return len(self.batches)
+
+    def get_data_source_length(self):
+        return len(self.data_source)

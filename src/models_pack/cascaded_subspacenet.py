@@ -36,9 +36,9 @@ class CascadedSubspaceNet(SubspaceNet):
         Returns
             The distance prediction.
          """
-        angles = self.extract_angles(Rx_tau, train_angle_extractor=train_angle_extractor)
-        angles, distances, Rx = super().forward(Rx_tau, is_soft=is_soft, known_angles=angles)
-        return angles, distances
+        angles, sources_estimation = self.extract_angles(Rx_tau, train_angle_extractor=train_angle_extractor)
+        _, distances, Rx = super().forward(Rx_tau, is_soft=is_soft, known_angles=angles)
+        return angles, distances, sources_estimation
 
     def __init_angle_extractor(self, path: str = None):
         self.angle_extractor = SubspaceNet(tau=self.tau,
@@ -75,13 +75,13 @@ class CascadedSubspaceNet(SubspaceNet):
         if not train_angle_extractor:
             with torch.no_grad():
                 self.angle_extractor.eval()
-                angles = self.angle_extractor(Rx_tau)[0]
+                angles, sources_estimation, _ = self.angle_extractor(Rx_tau)
                 self.angle_extractor.train()
             # angles = torch.sort(angles, dim=1)[0]
         else:
-            angles = self.angle_extractor(Rx_tau)[0]
+            angles, sources_estimation, _ = self.angle_extractor(Rx_tau)
             # angles = torch.sort(angles, dim=1)[0]
-        return angles
+        return angles, sources_estimation
 
     def get_model_file_name(self):
         return f"CascadedSubspaceNet_" + \

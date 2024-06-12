@@ -115,7 +115,9 @@ def __run_simulation(**kwargs):
                     )
                 except Exception as e:
                     print(e)
-                    print("Dataset not found")
+                    print("#############################################")
+                    print("Error loading datasets")
+                    print("#############################################")
                     create_data = True
                     load_data = False
             if create_data and not load_data:
@@ -176,7 +178,7 @@ def __run_simulation(**kwargs):
                     except Exception as e:
                         print("#############################################")
                         print(e)
-                        print("Model not found.")
+                        print("simulation_parameters.load_model: Error loading model")
                         print("#############################################")
 
                 # Print training simulation details
@@ -197,16 +199,16 @@ def __run_simulation(**kwargs):
                 if save_model:
                     torch.save(model.state_dict(),
                             saving_path / "final_models" / Path(model.get_model_file_name()))
-                # Plots saving
-                if save_to_file:
-                    plt.savefig(
-                        simulations_path
-                        / "results"
-                        / "plots"
-                        / Path(dt_string_for_save + r".png")
-                    )
-                else:
-                    plt.show()
+                # # Plots saving
+                # if save_to_file:
+                #     plt.savefig(
+                #         simulations_path
+                #         / "results"
+                #         / "plots"
+                #         / Path(dt_string_for_save + r".png")
+                #     )
+                # else:
+                #     plt.show()
 
             # Evaluation stage
             if evaluate_mode:
@@ -255,6 +257,7 @@ def __run_simulation(**kwargs):
                     sys.stdout = orig_stdout
     if res is not None:
         if SIMULATION_COMMANDS["PLOT_RESULTS"] == True:
+            plt_acc = False
             for signal_nature, snr_dict in res.items():
                 if snr_dict:
                     # plt.figure()
@@ -270,8 +273,17 @@ def __run_simulation(**kwargs):
                                     # plt_res[method].append(loss_["Overall"])
                                     plt_res[method]["Angle"].append(loss_["Angle"])
                                     plt_res[method]["Distance"].append(loss_["Distance"])
-
-                            fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
+                                    if loss_.get("Accuracy") is not None:
+                                        if "Accuracy" not in plt_res[method].keys():
+                                            plt_res[method]["Accuracy"] = []
+                                            plt_acc = True
+                                        plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+                            if SYSTEM_MODEL_PARAMS.get("M") is None:
+                                suptitle = "Different number of "
+                            else:
+                                suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
+                            suptitle += f"{signal_nature} sources results"
+                            fig.suptitle(suptitle)
                             for method, loss_ in plt_res.items():
                                 if method == "CRB":
                                     line_style = "-."
@@ -291,11 +303,27 @@ def __run_simulation(**kwargs):
                             ax2.set_title("Distance RMSE")
                             ax1.set_yscale("log")
                             ax2.set_yscale("log")
-                            plt.savefig(os.path.join(simulations_path,
+                            fig.savefig(os.path.join(simulations_path,
                                                      "results",
                                                      "plots",
                                                      f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
-                            plt.show()
+                            fig.show()
+                            if plt_acc:
+                                fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                                for method, loss_ in plt_res.items():
+                                    if loss_.get("Accuracy") is not None:
+                                        ax.plot(snr_values, loss_["Accuracy"], label=method, linestyle=line_style)
+                                ax.legend()
+                                ax.grid()
+                                ax.set_xlabel("SNR [dB]")
+                                ax.set_ylabel("Accuracy [%]")
+                                ax.set_title("Accuracy")
+                                ax.set_yscale("linear")
+                                fig.savefig(os.path.join(simulations_path,
+                                                         "results",
+                                                         "plots",
+                                                         f"summary_acc_{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                                fig.show()
                         else: #FAR
                             fig, ax = plt.subplots(1, 1, figsize=(15, 5))
                             snr_values = snr_dict.keys()
@@ -305,8 +333,17 @@ def __run_simulation(**kwargs):
                                     if method not in plt_res:
                                         plt_res[method] = {"Overall": []}
                                     plt_res[method]["Overall"].append(loss_["Overall"])
-
-                            fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
+                                    if loss_.get("Accuracy") is not None:
+                                        if "Accuracy" not in plt_res[method].keys():
+                                            plt_res[method]["Accuracy"] = []
+                                            plt_acc = True
+                                        plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+                            if SYSTEM_MODEL_PARAMS.get("M") is None:
+                                suptitle = "Different number of "
+                            else:
+                                suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
+                            suptitle += f"{signal_nature} sources results"
+                            fig.suptitle(suptitle)
                             for method, loss_ in plt_res.items():
                                 ax.plot(snr_values, loss_["Overall"], label=method)
                             ax.legend()
@@ -315,11 +352,27 @@ def __run_simulation(**kwargs):
                             ax.set_ylabel("RMSE [rad]")
                             ax.set_title("Overall RMSPE loss")
                             ax.set_yscale("log")
-                            plt.savefig(os.path.join(simulations_path,
+                            fig.savefig(os.path.join(simulations_path,
                                                      "results",
                                                      "plots",
                                                      f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
-                            plt.show()
+                            fig.show()
+                            if plt_acc:
+                                fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                                for method, loss_ in plt_res.items():
+                                    if loss_.get("Accuracy") is not None:
+                                        ax.plot(snr_values, loss_["Accuracy"], label=method)
+                                ax.legend()
+                                ax.grid()
+                                ax.set_xlabel("SNR [dB]")
+                                ax.set_ylabel("Accuracy [%]")
+                                ax.set_title("Accuracy")
+                                ax.set_yscale("linear")
+                                fig.savefig(os.path.join(simulations_path,
+                                                         "results",
+                                                         "plots",
+                                                         f"summary_acc_{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                                fig.show()
 
                     elif isinstance(criterion, CartesianLoss):
                         fig, ax = plt.subplots(1, 1, figsize=(15, 5))
@@ -330,8 +383,17 @@ def __run_simulation(**kwargs):
                                 if method not in plt_res:
                                     plt_res[method] = {"Overall": []}
                                 plt_res[method]["Overall"].append(loss_["Overall"])
-
-                        fig.suptitle(f"{SYSTEM_MODEL_PARAMS['M']} {signal_nature} sources results")
+                                if loss_.get("Accuracy") is not None:
+                                    if "Accuracy" not in plt_res[method].keys():
+                                        plt_res[method]["Accuracy"] = []
+                                        plt_acc = True
+                                    plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+                        if SYSTEM_MODEL_PARAMS.get("M") is None:
+                            suptitle = "Different number of "
+                        else:
+                            suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
+                        suptitle += f"{signal_nature} sources results"
+                        fig.suptitle(suptitle)
                         for method, loss_ in plt_res.items():
                             if method == "CRB":
                                 line_style = "-."
@@ -344,11 +406,27 @@ def __run_simulation(**kwargs):
                         ax.set_ylabel("RMSE [m]")
                         ax.set_title("Overall RMSE - Cartesian Loss")
                         ax.set_yscale("log")
-                        plt.savefig(os.path.join(simulations_path,
+                        fig.savefig(os.path.join(simulations_path,
                                                  "results",
                                                  "plots",
                                                  f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
-                        plt.show()
+                        fig.show()
+                        if plt_acc:
+                            fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                            for method, loss_ in plt_res.items():
+                                if loss_.get("Accuracy") is not None:
+                                    ax.plot(snr_values, loss_["Accuracy"], label=method)
+                            ax.legend()
+                            ax.grid()
+                            ax.set_xlabel("SNR [dB]")
+                            ax.set_ylabel("Accuracy [%]")
+                            ax.set_title("Accuracy")
+                            ax.set_yscale("linear")
+                            fig.savefig(os.path.join(simulations_path,
+                                                     "results",
+                                                     "plots",
+                                                     f"summary_acc_{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                            fig.show()
         if save_to_file:
             file_path = (
                     simulations_path / "results" / "scores" / Path(dt_string_for_save +"_summary" + ".txt")

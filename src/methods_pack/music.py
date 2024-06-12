@@ -74,7 +74,7 @@ class MUSIC(SubspaceMethod):
                                                      is_soft=is_soft)
                         params[:, source] = params_source[0].squeeze()
                     return params
-        _, Un, _, _ = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
+        _, Un, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
         # self.noise_subspace = Un.cpu().detach().numpy()
         inverse_spectrum = self.get_inverse_spectrum(Un.to(device)).to(device)
         self.music_spectrum = 1 / inverse_spectrum
@@ -83,7 +83,10 @@ class MUSIC(SubspaceMethod):
         # self.music_spectrum = torch.pow(self.music_spectrum, 5)
         #####
         params = self.peak_finder(is_soft)
-        return params
+        if self.estimation_params in ["angle", "range"]:
+            return params
+        elif self.estimation_params == "angle, range":
+            return params, source_estimation, eigen_regularization
 
     def get_music_spectrum_from_noise_subspace(self, Un):
         inverse_spectrum = self.get_inverse_spectrum(Un.to(torch.complex128))
@@ -384,18 +387,18 @@ class MUSIC(SubspaceMethod):
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360, device=device,
+            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720, device=device,
                                        dtype=torch.float64).requires_grad_(True).to(torch.float64)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360,
+                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720,
                                            device=device).requires_grad_(True).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
-                self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .5, device=device,
+                self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .1, device=device,
                                               dtype=torch.float64).requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"
