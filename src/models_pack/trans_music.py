@@ -20,6 +20,15 @@ from src.utils import *
 from src.methods_pack.music import MUSIC
 
 
+class ShiftedReLU(nn.ReLU):
+    def __init__(self, shift=0.5):
+        super(ShiftedReLU, self).__init__()
+        self.shift = shift
+
+    def forward(self, input):
+        return super(ShiftedReLU, self).forward(input) + self.shift
+
+
 class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model: int, max_len: int = 5000):
@@ -83,13 +92,17 @@ class TransMUSIC(nn.Module):
         self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
         if self.estimation_params == "angle":
             input_dim = self.music.angels.shape[0]
-            output_dim = self.params.N - 1
-            output_dim = self.params.M
+            if self.music.system_model.params.M is not None:
+                output_dim = self.music.system_model.params.M
+            else:
+                output_dim = self.music.system_model.params.N - 1
         elif self.estimation_params == "angle, range":
             input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
-            output_dim = (self.params.N - 1) * 2
-            output_dim = (self.params.M) * 2
-            self.activation = nn.LeakyReLU()
+            if self.music.system_model.params.M is not None:
+                output_dim = self.music.system_model.params.M * 2
+            else:
+                output_dim = (self.music.system_model.params.N - 1) * 2
+            self.activation = ShiftedReLU(shift=np.floor(self.music.system_model.fresnel)).to(device)
         else:
             raise ValueError(f"TransMUSIC.__init__: unrecognized estimation parameter {self.estimation_params}")
         self.output = nn.Sequential(
@@ -101,7 +114,7 @@ class TransMUSIC(nn.Module):
             nn.Linear(in_features=self.N * 2, out_features=self.N * 2),
             nn.ReLU(inplace=False),
             nn.Linear(in_features=self.N * 2, out_features=output_dim)
-            ).to(device)
+        ).to(device)
 
         self.source_number_estimator = nn.Sequential(
             nn.Linear(in_features=2 * self.N ** 2, out_features=128),
@@ -112,7 +125,7 @@ class TransMUSIC(nn.Module):
             nn.ReLU(inplace=False),
             nn.Linear(in_features=64, out_features=32),
             nn.ReLU(inplace=False),
-            nn.Linear(in_features=32, out_features=4),
+            nn.Linear(in_features=32, out_features=self.params.N - 1),
             nn.Softmax(dim=1)
         ).to(device)
 
@@ -120,24 +133,25 @@ class TransMUSIC(nn.Module):
         N = self.N
         x = self.pre_processing(x)
         # The input X is [size, 16200] batch_ Size=16, input dimension N*2, sequence length T
+
         size = x.shape[0]  # Get batch size
 
         x3 = self._get_noise_subspace(x)
 
         x4 = x3.reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
-        Un = torch.complex(x4[:, :N, :].to(device), x4[:, N:, :].to(device)).to(torch.complex32) # feature vector  [size, N, N]
-        spectrum = self.music.get_music_spectrum_from_noise_subspace(Un).to(device)  # Calculate spectrum
+        Un = torch.complex(x4[:, :N, :], x4[:, N:, :]).to(torch.complex32)  # feature vector  [size, N, N]
+        spectrum = self.music.get_music_spectrum_from_noise_subspace(Un)  # Calculate spectrum
         x7 = spectrum.float().to(device)
         x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
         predictions = self.output(x7).to(device)
         if self.estimation_params == "angle, range":
-            angles, distances = predictions[:, :predictions.shape[1] // 2], predictions[:, predictions.shape[1] // 2:]
+            angles, distances = torch.split(predictions, predictions.shape[-1] // 2, dim=1)
             distances = self.activation(distances).to(device)
-            predictions = torch.stack([angles, distances], dim=1).to(device)
+            predictions = torch.concatenate([angles, distances], dim=1).to(device)
         if mode == "subspace_train":
             with torch.no_grad():
                 x9 = x3.detach()
-            prob_sources_est = self.source_number_estimator(x9)
+                prob_sources_est = self.source_number_estimator(x9)
         elif mode == "num_source_train":
             prob_sources_est = self.source_number_estimator(x3)
         else:

@@ -281,16 +281,18 @@ class TrainingParams(object):
         )
         print("Training DataSet size", len(train_dataset))
         print("Validation DataSet size", len(valid_dataset))
+
         # init sampler
         batch_sampler_train = SameLengthBatchSampler(train_dataset, batch_size=self.batch_size)
         batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32)
         # Transform datasets into DataLoader objects
         self.train_dataset = torch.utils.data.DataLoader(
-            train_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_train
+            train_dataset,collate_fn=collate_fn, batch_sampler=batch_sampler_train
         )
         self.valid_dataset = torch.utils.data.DataLoader(
-            valid_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_valid
+            valid_dataset,collate_fn=collate_fn, batch_sampler=batch_sampler_valid
         )
+
         return self
 
 
@@ -299,6 +301,7 @@ def train(
         model_name: str,
         plot_curves: bool = True,
         saving_path: Path = None,
+        save_figures: bool = False,
 ):
     """
     Wrapper function for training the model.
@@ -345,12 +348,14 @@ def train(
 
     if plot_curves:
         if acc_train_list is not None and acc_valid_list is not None:
-            plot_accuracy_curve(
+            fig_acc = plot_accuracy_curve(
                 list(range(1, training_parameters.epochs + 1)), acc_train_list, acc_valid_list,
                 model_name=model.get_model_name()
             )
-            plt.show()
-        plot_learning_curve(
+            if save_figures:
+                fig_acc.savefig(saving_path / f"Accuracy_{model.get_model_name()}_{dt_string_for_save}.png")
+            fig_acc.show()
+        fig_loss = plot_learning_curve(
             list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
             model_name=model.get_model_name(),
             angle_train_loss=loss_train_list_angles,
@@ -358,6 +363,9 @@ def train(
             range_train_loss=loss_train_list_ranges,
             range_valid_loss=loss_valid_list_ranges
         )
+        if save_figures:
+            fig_loss.savefig(saving_path / f"Loss_{model.get_model_name()}_{dt_string_for_save}.png")
+        fig_loss.show()
 
     # Save models best weights
     torch.save(model.state_dict(), saving_path / model.get_model_file_name())
@@ -406,8 +414,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     print("\n---Start Training Stage ---\n")
     # Run over all epochs
     for epoch in range(training_params.epochs):
-        # reset gradients
-        model.zero_grad()
+
         train_length = 0
         epoch_train_loss = 0.0
         epoch_train_loss_angle = 0.0
@@ -418,12 +425,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         # init source estimation
         source_estimation = None
         ranges = None
-        # if epoch == int(0.95 * training_params.epochs):
-        #     transmusic_mode = "num_source_train"
+        if epoch == int(0.5 * training_params.epochs):
+            transmusic_mode = "num_source_train"
+            print("Switching to num_source_train mode for TransMUSIC model")
         # Set model to train mode
         model.train()
         for data in tqdm(training_params.train_dataset):
-            x, sources_num, label, masks = data
+            x, sources_num, label, masks = data #
             # Split true label to angles and ranges, if needed
             if max(sources_num) * 2 == label.shape[1]:
                 angles, ranges = torch.split(label, max(sources_num), dim=1)
@@ -471,7 +479,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     angles_pred = model_output[0]
                     prob_source_number = model_output[1]
                 elif training_params.training_objective == "angle, range":
-                    angles_pred, ranges_pred = model_output[0][:, 0], model_output[0][:, 1]
+                    angles_pred, ranges_pred = torch.split(model_output[0], model_output[0].shape[1] // 2, dim=1)
                     prob_source_number = model_output[1]
                 # calculate the cross entropy loss for the source number estimation
                 one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
@@ -491,9 +499,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             ############################################################################################################
             # calculate the accuracy for the source estimation
             if source_estimation is not None:
-                epoch_train_acc += (((torch.mean(
-                    (source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item()))
-                                      / len(training_params.train_dataset))
+                epoch_train_acc += (((torch.sum(
+                    (source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item())))
+
             ############################################################################################################
             # Compute training loss
             if isinstance(model, TransMUSIC):
@@ -515,14 +523,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
-                    if isinstance(training_params.criterion, RMSPELoss):
-                        # in the RMSPE case, we can return the loss for each part of the loss.
-                        train_loss = training_params.criterion(angles_pred,
-                                                               angles,
-                                                               ranges_pred,
-                                                               ranges)
-                if isinstance(train_loss, tuple):
-                    train_loss, train_loss_angle, train_loss_distance = train_loss
+                    # in the RMSPE case, we can return the loss for each part of the loss.
+                    train_loss = training_params.criterion(angles_pred,
+                                                           angles,
+                                                           ranges_pred,
+                                                           ranges)
+                    if isinstance(train_loss, tuple):
+                        train_loss, train_loss_angle, train_loss_distance = train_loss
             elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
                                                                                               DeepAugmentedMUSIC):
                 train_loss = training_params.criterion(angles_pred.float(), angles.float())
@@ -539,21 +546,28 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
 
             # optimizer update
             optimizer.step()
-
+            # reset gradients
+            model.zero_grad()
             # add batch loss to overall epoch loss
             if isinstance(training_params.criterion, nn.BCELoss):
                 # BCE is averaged
                 epoch_train_loss += train_loss.item() * len(data[0])
             elif isinstance(training_params.criterion, RMSPELoss) or isinstance(training_params.criterion,
                                                                                 CartesianLoss):
-                epoch_train_loss += train_loss.item() / len(training_params.train_dataset)
+                epoch_train_loss += train_loss.item()
                 if train_loss_angle is not None and train_loss_distance is not None:
-                    epoch_train_loss_angle += train_loss_angle.item() / len(training_params.train_dataset)
-                    epoch_train_loss_distance += train_loss_distance.item() / len(training_params.train_dataset)
+                    epoch_train_loss_angle += train_loss_angle.item()
+                    epoch_train_loss_distance += train_loss_distance.item()
             else:
                 raise Exception(f"Criterion type {training_params.criterion} is not defined")
 
         ################################################################################################################
+        epoch_train_loss /= train_length
+        if train_loss_angle is not None and train_loss_distance is not None:
+            epoch_train_loss_angle /= train_length
+            epoch_train_loss_distance /= train_length
+        if source_estimation is not None:
+            epoch_train_acc /= train_length
         # End of epoch. Calculate the average loss
         loss_train_list.append(epoch_train_loss)
         if epoch_train_loss_angle != 0.0 and epoch_train_loss_distance != 0.0:
@@ -631,6 +645,7 @@ def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model
         train_loss (list): List of training losses per epoch.
         validation_loss (list): List of validation losses per epoch.
     """
+    figure = plt.figure(figsize=(10, 6))
     title = "Learning Curve: Accuracy per Epoch"
     if model_name is not None:
         title += f" {model_name}"
@@ -640,7 +655,7 @@ def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model
     plt.xlabel("Epochs")
     plt.ylabel("Accuracy")
     plt.legend(loc="best")
-    # plt.show()
+    return figure
 
 
 def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, model_name: str = None,
@@ -684,13 +699,14 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
         # tight layout
         plt.tight_layout()
     else:
+        fig = plt.figure(figsize=(10, 6))
         plt.title(title)
         plt.plot(epoch_list, train_loss, label="Train")
         plt.plot(epoch_list, validation_loss, label="Validation")
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
         plt.legend(loc="best")
-    # plt.show()
+    return fig
 
 
 def simulation_summary(

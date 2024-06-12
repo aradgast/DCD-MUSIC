@@ -37,7 +37,7 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": 2,                                     # number of sources
+    "M": None,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -51,9 +51,9 @@ model_config = {
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
+    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Far"     # Near, Far
+    model_config["model_params"]["field_type"] = "Near"     # Near, Far
 
 elif model_config.get("model_type") == "CascadedSubspaceNet":
     model_config["model_params"]["tau"] = 8
@@ -62,10 +62,10 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024 * 100,
-    "train_test_ratio": .05,
+    "samples_size": 1024,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",       # angle, range
-    "batch_size": 512,
+    "batch_size": 128,
     "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
@@ -114,10 +114,10 @@ evaluation_params = {
 simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": False,
-    "LOAD_MODEL": False,
+    "LOAD_MODEL": True,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
-    "EVALUATE_MODE": False,
+    "SAVE_MODEL": False,
+    "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }
 

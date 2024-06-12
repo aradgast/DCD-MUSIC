@@ -461,7 +461,7 @@ class CartesianLoss(nn.Module):
         loss = torch.sqrt(torch.sum(error ** 2, dim=-1))
         loss = torch.mean(loss, dim=-1)
         loss = torch.min(loss, dim=-1)
-        return torch.mean(loss[0])
+        return torch.sum(loss[0])
         # loss = []
         # for batch in range(number_of_samples):
         #     loss_per_sample = []

@@ -101,7 +101,7 @@ def create_dataset(
     else:
         for i in tqdm(range(samples_size)):
             if system_model_params.M is None:
-                M = np.random.randint(2, np.min((3, system_model_params.N-1)))
+                M = np.random.randint(2, np.min((6, system_model_params.N-1)))
             else:
                 M = system_model_params.M
             # Samples model creation
@@ -406,12 +406,26 @@ class SameLengthBatchSampler(Sampler):
             if source_num not in length_to_indices:
                 length_to_indices[source_num] = []
             length_to_indices[source_num].append(idx)
+        # check that there is not bais in the labels
+        max_length = 0
+        min_length = np.inf
+        for indices in length_to_indices.values():
+            if len(indices) > max_length:
+                max_length = len(indices)
+            if len(indices) < min_length:
+                min_length = len(indices)
+        if max_length * 0.4 > min_length:
+            raise ValueError("SameLengthBatchSampler: There is a bias in the labels")
 
         batches = []
         for indices in length_to_indices.values():
             for i in range(0, len(indices), self.batch_size):
                 batches.append(indices[i:i + self.batch_size])
-
+        # Shuffle the batches
+        np.random.shuffle(batches)
+        # shuffle the indices in each batch
+        for batch in batches:
+            np.random.shuffle(batch)
         return batches
 
     def __iter__(self):

@@ -143,7 +143,7 @@ def evaluate_dnn_model(
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for data in dataset:
-            x, sources_num, label, masks = data
+            x, sources_num, label, masks = data #
             # Split true label to angles and ranges, if needed
             if max(sources_num) * 2 == label.shape[1]:
                 angles, ranges = torch.split(label, max(sources_num), dim=1)
@@ -160,12 +160,12 @@ def evaluate_dnn_model(
 
             test_length += angles.shape[0]
             # Convert observations and DoA to device
-            X = x.to(device)
+            x = x.to(device)
             angles = angles.to(device)
             ############################################################################################################
             # Get model output
             if isinstance(model, CascadedSubspaceNet):
-                model_output = model(X, is_soft=False, train_angle_extractor=False)
+                model_output = model(x, is_soft=False, train_angle_extractor=False)
                 angles_pred = model_output[0].to(device)
                 ranges_pred = model_output[1].to(device)
             elif isinstance(model, SubspaceNet):
@@ -178,12 +178,14 @@ def evaluate_dnn_model(
                     source_estimation = model_output[1].to(device)
                     eigen_regularization = model_output[2].to(device)
             elif isinstance(model, TransMUSIC):
-                model_output = model(X)
+                model_output = model(x)
                 if model.estimation_params == "angle":
                     angles_pred = model_output[0].to(device)
                     prob_source_number = model_output[1].to(device)
                 elif model.estimation_params == "angle, range":
-                    angles_pred, ranges_pred = model_output[0][:, 0].to(device), model_output[0][:, 1].to(device)
+                    angles_pred, ranges_pred = torch.split(model_output[0], model_output[0].shape[1] // 2, dim=1)
+                    angles_pred = angles_pred.to(device)
+                    ranges_pred = ranges_pred.to(device)
                     prob_source_number = model_output[1].to(device)
                 source_estimation = torch.argmax(prob_source_number, dim=1)
                 # CE loss
@@ -222,11 +224,11 @@ def evaluate_dnn_model(
                 )
             ############################################################################################################
             if source_estimation is not None:
-                source_acc = torch.mean((
+                source_acc = torch.sum((
                     source_estimation == angles.shape[1] * torch.ones_like(source_estimation)).float()).item()
                 if overall_accuracy is None:
                     overall_accuracy = 0.0
-                overall_accuracy += source_acc / len(dataset)
+                overall_accuracy += source_acc
             ############################################################################################################
             # Compute prediction loss
             if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
@@ -240,12 +242,12 @@ def evaluate_dnn_model(
                     if isinstance(criterion, RMSPELoss):
                         eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges)
                         if overall_loss_angle is not None:
-                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                            overall_loss_angle += eval_loss_angle.item()
+                            overall_loss_distance += eval_loss_distance.item()
                         else:
                             overall_loss_angle, overall_loss_distance = 0.0, 0.0
-                            overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                            overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                            overall_loss_angle += eval_loss_angle.item()
+                            overall_loss_distance += eval_loss_distance.item()
                     elif isinstance(criterion, CartesianLoss):
                         eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
                     else:
@@ -258,8 +260,8 @@ def evaluate_dnn_model(
                         if overall_loss_angle is None:
                             overall_loss_angle, overall_loss_distance = 0.0, 0.0
 
-                        overall_loss_angle += eval_loss_angle.item() / len(dataset)
-                        overall_loss_distance += eval_loss_distance.item() / len(dataset)
+                        overall_loss_angle += eval_loss_angle.item()
+                        overall_loss_distance += eval_loss_distance.item()
                     elif isinstance(criterion, CartesianLoss):
                         eval_loss = criterion(angles_pred, angles.to(device), ranges_pred, ranges.to(device))
                 elif model.field_type.endswith("Far"):
@@ -271,7 +273,14 @@ def evaluate_dnn_model(
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")
             # add the batch evaluation loss to epoch loss
-            overall_loss += eval_loss.item() / len(dataset)
+            overall_loss += eval_loss.item()
+            ############################################################################################################
+    overall_loss /= test_length
+    if overall_loss_angle is not None and overall_loss_distance is not None:
+        overall_loss_angle /= test_length
+        overall_loss_distance /= test_length
+    if overall_accuracy is not None:
+        overall_accuracy /= test_length
     # Plot spectrum for SubspaceNet model
     if plot_spec and isinstance(model, SubspaceNet):
         DOA_all = model_output[1]

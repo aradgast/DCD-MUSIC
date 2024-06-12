@@ -191,6 +191,7 @@ def __run_simulation(**kwargs):
                     training_parameters=simulation_parameters,
                     model_name=simulation_filename,
                     saving_path=saving_path,
+                    save_figures=save_to_file,
                 )
                 # Save model weights
                 if save_model:
