@@ -23,6 +23,7 @@ This script defines some helpful functions:
 # Imports
 import numpy as np
 import torch
+torch.cuda.empty_cache()
 import random
 import scipy
 import warnings

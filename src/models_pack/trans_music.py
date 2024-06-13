@@ -141,7 +141,7 @@ class TransMUSIC(nn.Module):
         x3 = self._get_noise_subspace(x)
         if mode == "subspace_train":
             x4 = x3.reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
-            Un = torch.complex(x4[:, :N, :], x4[:, N:, :]).to(torch.complex32)  # feature vector  [size, N, N]
+            Un = torch.complex(x4[:, :N, :], x4[:, N:, :]).to(torch.complex128)  # feature vector  [size, N, N]
             spectrum = self.music.get_music_spectrum_from_noise_subspace(Un)  # Calculate spectrum
             x7 = spectrum.float().to(device)
             x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
@@ -171,7 +171,7 @@ class TransMUSIC(nn.Module):
         return predictions, prob_sources_est
 
     def _get_noise_subspace(self, x):
-        x = self.norm(x.to(torch.float32)).to(device)  # Become [size, 16200]
+        x = self.norm(x.to(torch.float32)).to(device)  # Become [size, N * 2, T]
 
         x = x.permute(2, 0, 1).float().to(device)  # Exchange dimension becomes [T, size, N * 2]
 
@@ -189,6 +189,8 @@ class TransMUSIC(nn.Module):
         The input data is a complex signal of size [batch_size, N, T] and the input of the model need to be real signal
         of size [batch_size, 2N, T]
         """
+        if x.dim() == 2:
+            x = x[None, :, :]
         x = torch.concatenate([x.real, x.imag], dim=1)
         return x
 

@@ -394,11 +394,11 @@ class MUSIC(SubspaceMethod):
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720,
+                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360,
                                            device=device).requires_grad_(True).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
-                self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .1, device=device,
+                self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .5, device=device,
                                               dtype=torch.float64).requires_grad_(True)
             else:
                 raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"

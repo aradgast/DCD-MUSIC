@@ -37,7 +37,7 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": None,                                     # number of sources
+    "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -47,7 +47,7 @@ system_model_params = {
     "sv_noise_var": 0
 }
 model_config = {
-    "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "TransMUSIC",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -64,9 +64,9 @@ elif model_config.get("model_type") == "DeepCNN":
 training_params = {
     "samples_size": 1024 * 64,
     "train_test_ratio": .1,
-    "training_objective": "angle",       # angle, range
+    "training_objective": "angle, range",       # angle, range
     "batch_size": 256,
-    "epochs": 150,
+    "epochs": 100,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -76,11 +76,11 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-    "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
+    "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
     "balance_factor": 1.0                 # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
-    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe
+    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe
     "balance_factor": training_params["balance_factor"],
     "models": {
                 # "CascadedSubspaceNet": {"tau": 8},
@@ -112,12 +112,12 @@ evaluation_params = {
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": False,
-    "CREATE_DATA": False,
-    "LOAD_MODEL": True,
+    "SAVE_TO_FILE": True,
+    "CREATE_DATA": True,
+    "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
     "SAVE_MODEL": True,
-    "EVALUATE_MODE": True,
+    "EVALUATE_MODE": False,
     "PLOT_RESULTS": False
 }
 
