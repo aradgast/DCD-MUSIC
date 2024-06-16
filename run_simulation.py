@@ -26,7 +26,7 @@ def __run_simulation(**kwargs):
             print(f"{M} {mode} sources: {snr_list}")
 
     now = datetime.now()
-    plot_path = Path.cwd() / "plots"
+    plot_path = Path(__file__).parent / "plots"
     plot_path.mkdir(parents=True, exist_ok=True)
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
     # torch.set_printoptions(precision=12)
@@ -39,7 +39,7 @@ def __run_simulation(**kwargs):
             set_unified_seed()
 
             # Initialize paths
-            external_data_path = Path.cwd() / "data"
+            external_data_path = Path(__file__).parent / "data"
             scenario_data_path = "uniform_bias_spacing"
             datasets_path = external_data_path / "datasets" / scenario_data_path
             simulations_path = external_data_path / "simulations"
