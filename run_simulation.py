@@ -16,6 +16,14 @@ def __run_simulation(**kwargs):
     TRAINING_PARAMS = kwargs["training_params"]
     EVALUATION_PARAMS = kwargs["evaluation_params"]
     scenario_dict = kwargs["scenario_dict"]
+    print("Running simulation...")
+    print("Scenrios that will be tested: ")
+    M = SYSTEM_MODEL_PARAMS.get("M")
+    if M is None:
+        M = "Different number of"
+    for mode, snr_list in scenario_dict.items():
+        if snr_list:
+            print(f"{M} {mode} sources: {snr_list}")
 
     now = datetime.now()
     plot_path = Path.cwd() / "plots"
@@ -236,7 +244,11 @@ def __run_simulation(**kwargs):
                 batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=16)
                 generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                                    collate_fn=collate_fn,
-                                                                   batch_sampler=batch_sampler_test)
+                                                                   batch_sampler=batch_sampler_test,
+                                                                   shuffle=False)
+                # generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
+                #                                                    shuffle=False, drop_last=False,
+                #                                                      batch_size=32)
                 # Evaluate DNN models, augmented and subspace methods
                 loss = evaluate(
                     generic_test_dataset=generic_test_dataset,
@@ -262,7 +274,7 @@ def __run_simulation(**kwargs):
                 if snr_dict:
                     # plt.figure()
                     if isinstance(criterion, RMSPELoss):
-                        if system_model.params.field_type == "Near":
+                        if "Distance" in snr_dict[list(snr_dict.keys())[0]].keys():
                             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
                             snr_values = snr_dict.keys()
                             plt_res = {}

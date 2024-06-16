@@ -250,11 +250,15 @@ class ModelGenerator(object):
         """
 
         """
+        if self.system_model.params.M is None:
+            M = "rand"
+        else:
+            M = self.system_model.params.M
         tau = self.model_params.get("tau")
         path = f"SubspaceNet_" + \
             f"N={self.system_model.params.N}_" + \
             f"tau={tau}_" + \
-            f"M={self.system_model.params.M}_" + \
+            f"M={M}_" + \
             f"{self.system_model.params.signal_type}_" + \
             f"SNR={self.system_model.params.snr}_" + \
             f"diff_method=esprit_" + \

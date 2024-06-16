@@ -399,9 +399,12 @@ def collate_fn(batch):
 
 
 class SameLengthBatchSampler(Sampler):
-    def __init__(self, data_source, batch_size):
+    def __init__(self, data_source, batch_size, shuffle=True):
+        super().__init__(data_source)
         self.data_source = data_source
         self.batch_size = batch_size
+        self.shuffle = shuffle
+
         self.batches = self._create_batches()
 
     def _create_batches(self):
@@ -427,11 +430,12 @@ class SameLengthBatchSampler(Sampler):
         for indices in length_to_indices.values():
             for i in range(0, len(indices), self.batch_size):
                 batches.append(indices[i:i + self.batch_size])
-        # Shuffle the batches
-        np.random.shuffle(batches)
-        # shuffle the indices in each batch
-        for batch in batches:
-            np.random.shuffle(batch)
+        if self.shuffle:
+            # Shuffle the batches
+            np.random.shuffle(batches)
+            # shuffle the indices in each batch
+            for batch in batches:
+                np.random.shuffle(batch)
         return batches
 
     def __iter__(self):
@@ -443,3 +447,6 @@ class SameLengthBatchSampler(Sampler):
 
     def get_data_source_length(self):
         return len(self.data_source)
+
+    def get_max_batch_length(self):
+        return max([len(batch) for batch in self.batches])

@@ -195,9 +195,13 @@ class TransMUSIC(nn.Module):
         return x
 
     def get_model_file_name(self):
+        if self.system_model.params.M is None:
+            M = "rand"
+        else:
+            M = self.system_model.params.M
         return f"TransMUSIC_" + \
             f"N={self.N}_" + \
-            f"M={self.system_model.params.M}_" + \
+            f"M={M}_" + \
             f"{self.system_model.params.signal_type}_" + \
             f"SNR={self.system_model.params.snr}_" + \
             f"{self.system_model.params.field_type}_field_" + \

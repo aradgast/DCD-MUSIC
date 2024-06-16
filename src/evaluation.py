@@ -133,9 +133,11 @@ def evaluate_dnn_model(
     overall_loss_angle = None
     overall_loss_distance = None
     overall_accuracy = None
-    test_length = dataset.batch_sampler.get_data_source_length()
+    test_length = dataset.batch_sampler.get_data_source_length() #TODO
+    # test_length = len(dataset)
     ranges = None
     source_estimation = None
+    eigen_regularization = None
     if isinstance(model, TransMUSIC):
         ce_loss = nn.CrossEntropyLoss()
     # Set model to eval mode
@@ -143,11 +145,12 @@ def evaluate_dnn_model(
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for data in dataset:
-            x, sources_num, label, masks = data #
+            x, sources_num, label, masks = data #TODO
+            # x, sources_num, label = data #TODO
             # Split true label to angles and ranges, if needed
             if max(sources_num) * 2 == label.shape[1]:
                 angles, ranges = torch.split(label, max(sources_num), dim=1)
-                masks, _ = torch.split(masks, max(sources_num), dim=1)
+                masks, _ = torch.split(masks, max(sources_num), dim=1) #TODO
             else:
                 angles = label  # only angles
             # Check if the sources number is the same for all samples in the batch
@@ -164,7 +167,7 @@ def evaluate_dnn_model(
             ############################################################################################################
             # Get model output
             if isinstance(model, CascadedSubspaceNet):
-                model_output = model(x, is_soft=False, train_angle_extractor=False)
+                model_output = model(x, sources_num,is_soft=False, train_angle_extractor=False)
                 angles_pred = model_output[0].to(device)
                 ranges_pred = model_output[1].to(device)
                 source_estimation = model_output[2].to(device)
@@ -269,8 +272,8 @@ def evaluate_dnn_model(
                 elif model.field_type.endswith("Far"):
                     eval_loss = criterion(angles_pred, angles)
                     # add eigen regularization to the loss if phase is validation
-                if phase == "validation":
-                    eval_loss += eigen_regularization * learning_rate * 10000
+                if phase == "validation" and eigen_regularization is not None:
+                    eval_loss += eigen_regularization * learning_rate * 100
 
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")

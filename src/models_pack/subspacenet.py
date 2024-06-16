@@ -142,7 +142,8 @@ class SubspaceNet(nn.Module):
                 doa_prediction, distance_prediction, sources_estimation, eigen_regularization = self.diff_method(Rz, is_soft=is_soft)
                 return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
             else:  # the angles are known
-                distance_prediction = self.diff_method(cov=Rz, known_angles=known_angles, is_soft=is_soft)
+                distance_prediction = self.diff_method(cov=Rz, number_of_sources=sources_num,
+                                                       known_angles=known_angles, is_soft=is_soft)
                 return known_angles, distance_prediction, Rz
 
     def pre_processing(self, x):
@@ -165,23 +166,6 @@ class SubspaceNet(nn.Module):
             Rx_tau[:, i, :, :] = Rx_lag
 
         return Rx_tau
-
-
-    def get_model_file_name(self):
-        if self.system_model.params.M is None:
-            M = "rand"
-        else:
-            M = self.system_model.params.M
-        return f"SubspaceNet_" + \
-                f"N={self.N}_" + \
-                f"tau={self.tau}_" + \
-                f"M={M}_" + \
-                f"{self.system_model.params.signal_type}_" + \
-                f"SNR={self.system_model.params.snr}_" + \
-                f"diff_method={self.diff_method}_" + \
-                f"{self.system_model.params.field_type}_field_" +  \
-                f"{self.system_model.params.signal_nature}"
-
 
     def set_diff_method(self, diff_method: str, system_model):
         """Sets the differentiable subspace method for training subspaceNet.
@@ -249,6 +233,21 @@ class SubspaceNet(nn.Module):
         tau = self.tau
         diff_method = self.diff_method
         return f"tau={tau}_diff_method={diff_method}"
+
+    def get_model_file_name(self):
+        if self.system_model.params.M is None:
+            M = "rand"
+        else:
+            M = self.system_model.params.M
+        return f"SubspaceNet_" + \
+            f"N={self.N}_" + \
+            f"tau={self.tau}_" + \
+            f"M={M}_" + \
+            f"{self.system_model.params.signal_type}_" + \
+            f"SNR={self.system_model.params.snr}_" + \
+            f"diff_method={self.diff_method}_" + \
+            f"{self.system_model.params.field_type}_field_" + \
+            f"{self.system_model.params.signal_nature}"
 
 class SubspaceNetEsprit(SubspaceNet):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,

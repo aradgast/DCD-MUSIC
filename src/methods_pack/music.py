@@ -30,7 +30,7 @@ class MUSIC(SubspaceMethod):
         self.music_spectrum = None
         self.__define_grid_params()
         if self.estimation_params == "range":
-            self.cell_size = int(self.distances.shape[0] * 0.05)
+            self.cell_size = int(self.distances.shape[0] * 0.2)
         elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.2)
             self.cell_size_distance = int(self.distances.shape[0] * 0.2)
@@ -45,7 +45,7 @@ class MUSIC(SubspaceMethod):
         self.noise_subspace = None
         # self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
 
-    def forward(self, cov: torch.Tensor, known_angles=None, known_distances=None, is_soft: bool = True):
+    def forward(self, cov: torch.Tensor, number_of_sources:int,known_angles=None, known_distances=None, is_soft: bool = True):
         """
 
         Parameters
@@ -62,19 +62,23 @@ class MUSIC(SubspaceMethod):
             (self.estimation_params == "range") - torch.Tensor with the predicted ranges
             (self.estimation_params == "angle, range") - tuple, each one of the elements is torch.Tensor for the predicted param.
         """
+        if self.system_model.params.M is not None:
+            M = self.system_model.params.M
+        else:
+            M = number_of_sources
         # single param estimation: the search grid should be updated for each batch, else, it's the same search grid.
         if self.system_model.params.field_type.startswith("Near"):
             if self.estimation_params in ["angle", "range"]:
                 if known_angles.shape[-1] == 1:
                     self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
                 else:
-                    params = torch.zeros((cov.shape[0], self.system_model.params.M), dtype=torch.float64, device=device)
-                    for source in range(self.system_model.params.M):
-                        params_source = self.forward(cov, known_angles=known_angles[:, source][:, None],
+                    params = torch.zeros((cov.shape[0], M), dtype=torch.float64, device=device)
+                    for source in range(M):
+                        params_source = self.forward(cov, number_of_sources=M,known_angles=known_angles[:, source][:, None],
                                                      is_soft=is_soft)
-                        params[:, source] = params_source[0].squeeze()
+                        params[:, source] = params_source.squeeze().requires_grad_(True)
                     return params
-        _, Un, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), self.system_model.params.M)
+        _, Un, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), M)
         # self.noise_subspace = Un.cpu().detach().numpy()
         inverse_spectrum = self.get_inverse_spectrum(Un.to(device)).to(device)
         self.music_spectrum = 1 / inverse_spectrum
@@ -271,8 +275,11 @@ class MUSIC(SubspaceMethod):
             cell_idx = (top_indxs - self.cell_size + torch.arange(2 * self.cell_size + 1, dtype=torch.long,
                                                                   device=device))
             cell_idx %= self.music_spectrum.shape[1]
+            # if False:
+            #     for batch in range(self.music_spectrum.shape[0]):
+            #         cell_idx[batch][cell_idx[batch] < 0] = top_indxs[batch]
             cell_idx = cell_idx.unsqueeze(-1)
-            metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx)
+            metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx).requires_grad_(True)
             soft_max = torch.softmax(metrix_thr, dim=1)
             soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max).to(device)
         else:

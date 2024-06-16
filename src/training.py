@@ -284,7 +284,7 @@ class TrainingParams(object):
 
         # init sampler
         batch_sampler_train = SameLengthBatchSampler(train_dataset, batch_size=self.batch_size)
-        batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32)
+        batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32, shuffle=False)
         # Transform datasets into DataLoader objects
         self.train_dataset = torch.utils.data.DataLoader(
             train_dataset,collate_fn=collate_fn, batch_sampler=batch_sampler_train
@@ -292,7 +292,12 @@ class TrainingParams(object):
         self.valid_dataset = torch.utils.data.DataLoader(
             valid_dataset,collate_fn=collate_fn, batch_sampler=batch_sampler_valid
         )
-
+        # self.train_dataset = torch.utils.data.DataLoader(
+        #     train_dataset, shuffle=True, batch_size=self.batch_size, drop_last=False
+        # )
+        # self.valid_dataset = torch.utils.data.DataLoader(
+        #     valid_dataset, shuffle=False, batch_size=32, drop_last=True
+        # )
         return self
 
 
@@ -403,7 +408,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     acc_train_list = []
     acc_valid_list = []
     min_valid_loss = np.inf
-    train_length = training_params.train_dataset.batch_sampler.get_data_source_length()
+    train_length = training_params.train_dataset.batch_sampler.get_data_source_length() #TODO
+    # train_length = len(training_params.train_dataset)
     if isinstance(model, TransMUSIC):
         ce_loss = nn.CrossEntropyLoss()
         transmusic_mode = "subspace_train"
@@ -426,17 +432,19 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         # init source estimation
         source_estimation = None
         ranges = None
+        eigen_regularization = None
         if isinstance(model, TransMUSIC) and epoch == int(0.8 * training_params.epochs):
             transmusic_mode = "num_source_train"
             print("Switching to num_source_train mode for TransMUSIC model")
         # Set model to train mode
         model.train()
         for data in tqdm(training_params.train_dataset):
-            x, sources_num, label, masks = data
+            x, sources_num, label, masks = data #TODO
+            # x, sources_num, label = data
             # Split true label to angles and ranges, if needed
             if max(sources_num) * 2 == label.shape[1]:
                 angles, ranges = torch.split(label, max(sources_num), dim=1)
-                masks, _ = torch.split(masks, max(sources_num), dim=1)
+                masks, _ = torch.split(masks, max(sources_num), dim=1) #TODO
             else:
                 angles = label  # only angles
             # Check if the sources number is the same for all samples in the batch
@@ -456,7 +464,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             ############################################################################################################
             # Get model output
             if isinstance(model, CascadedSubspaceNet):
-                model_output = model(x, train_angle_extractor=training_angle_extractor)
+                model_output = model(x, sources_num,train_angle_extractor=training_angle_extractor)
                 angles_pred = model_output[0]
                 ranges_pred = model_output[1]
                 source_estimation = model_output[2]
@@ -516,12 +524,10 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss
                 if source_est_regularization is not None and transmusic_mode == "num_source_train":
-                    train_loss += source_est_regularization * 0.1
+                    train_loss += source_est_regularization * training_params.learning_rate * 1000
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angles_pred, angles)
-                    if eigen_regularization is not None:
-                        train_loss += eigen_regularization * training_params.learning_rate * 10000
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
@@ -530,10 +536,10 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                                            angles,
                                                            ranges_pred,
                                                            ranges)
-                    if isinstance(train_loss, tuple):
-                        train_loss, train_loss_angle, train_loss_distance = train_loss
-                    if eigen_regularization is not None:
-                        train_loss += eigen_regularization * training_params.learning_rate * 10000
+                if isinstance(train_loss, tuple):
+                    train_loss, train_loss_angle, train_loss_distance = train_loss
+                if eigen_regularization is not None:
+                    train_loss += eigen_regularization * training_params.learning_rate * 100
             elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
                                                                                               DeepAugmentedMUSIC):
                 train_loss = training_params.criterion(angles_pred.float(), angles.float())
@@ -541,10 +547,11 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                 f" Deep Augmented MUSIC or DeepCNN or DeepRootMUSIC")
             else:
                 raise Exception(f"Model type {training_params.model_type} is not defined")
+
             ############################################################################################################
             # Back-propagation stage
             try:
-                train_loss.backward(retain_graph=True)
+                train_loss.backward(retain_graph=False)
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
 
@@ -592,24 +599,24 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
 
         # Report results
         result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}]"
-                      f" Train loss = {epoch_train_loss:.6f}, Validation loss = {valid_loss.get("Overall"):.6f}")
+                      f" Train loss = {epoch_train_loss:.6f}, Validation loss = {valid_loss.get('Overall'):.6f}")
 
         if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
             loss_valid_list_angles.append(valid_loss.get("Angle"))
             loss_valid_list_ranges.append(valid_loss.get("Distance"))
-            result_txt += f"\nAngle loss = {valid_loss.get("Angle"):.6f}, Range loss = {valid_loss.get("Distance"):.6f}"
+            result_txt += f"\nAngle loss = {valid_loss.get('Angle'):.6f}, Range loss = {valid_loss.get('Distance'):.6f}"
         if source_estimation is not None:
             acc_train_list.append(epoch_train_acc * 100)
             acc_valid_list.append(valid_loss.get('Accuracy') * 100)
             result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                            f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
-        result_txt += f"\nlr {training_params.optimizer.param_groups[0]["lr"]}"
+        result_txt += f"\nlr {training_params.optimizer.param_groups[0]['lr']}"
 
         print(result_txt)
         # Save best model weights
         if min_valid_loss > valid_loss.get("Overall"):
             print(
-                f"Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss.get("Overall"):.6f}) \t Saving The Model"
+                f"Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss.get('Overall'):.6f}) \t Saving The Model"
             )
             min_valid_loss = valid_loss.get("Overall")
             best_epoch = epoch

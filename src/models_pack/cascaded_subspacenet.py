@@ -21,7 +21,7 @@ class CascadedSubspaceNet(SubspaceNet):
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
 
-    def forward(self, Rx_tau: torch.Tensor, is_soft: bool = True, train_angle_extractor: bool = False):
+    def forward(self, x: torch.Tensor, number_of_sources:int, is_soft: bool = True, train_angle_extractor: bool = False):
         """
         Performs the forward pass of the CascadedSubspaceNet. Using the subspaceNet forward but,
         calling the angle extractor method first.
@@ -36,8 +36,9 @@ class CascadedSubspaceNet(SubspaceNet):
         Returns
             The distance prediction.
          """
-        angles, sources_estimation = self.extract_angles(Rx_tau, train_angle_extractor=train_angle_extractor)
-        _, distances, Rx = super().forward(Rx_tau, is_soft=is_soft, known_angles=angles)
+        angles, sources_estimation = self.extract_angles(
+            x, number_of_sources, train_angle_extractor=train_angle_extractor)
+        _, distances, Rx = super().forward(x, sources_num=number_of_sources,is_soft=is_soft, known_angles=angles)
         return angles, distances, sources_estimation
 
     def __init_angle_extractor(self, path: str = None):
@@ -61,7 +62,7 @@ class CascadedSubspaceNet(SubspaceNet):
             print("######################################################################################")
 
 
-    def extract_angles(self, Rx_tau: torch.Tensor, train_angle_extractor: bool = False):
+    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources:int,train_angle_extractor: bool = False):
         """
 
         Args:
@@ -75,19 +76,23 @@ class CascadedSubspaceNet(SubspaceNet):
         if not train_angle_extractor:
             with torch.no_grad():
                 self.angle_extractor.eval()
-                angles, sources_estimation, _ = self.angle_extractor(Rx_tau)
+                angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
                 self.angle_extractor.train()
             # angles = torch.sort(angles, dim=1)[0]
         else:
-            angles, sources_estimation, _ = self.angle_extractor(Rx_tau)
+            angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
             # angles = torch.sort(angles, dim=1)[0]
         return angles, sources_estimation
 
     def get_model_file_name(self):
+        if self.system_model.params.M is None:
+            M = "rand"
+        else:
+            M = self.system_model.params.M
         return f"CascadedSubspaceNet_" + \
                f"N={self.N}_" + \
                f"tau={self.tau}_" + \
-               f"M={self.system_model.params.M}_" + \
+               f"M={M}_" + \
                f"{self.system_model.params.signal_type}_" + \
                f"SNR={self.system_model.params.snr}_" + \
                f"{self.system_model.params.signal_nature}"

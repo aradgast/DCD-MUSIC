@@ -496,7 +496,7 @@ def set_criterions(criterion_name: str, balance_factor: float = 0.6):
     elif criterion_name.startswith("rmse"):
         global BALANCE_FACTOR
         BALANCE_FACTOR = 0
-        criterion = RMSELoss()
+        criterion = RMSPELoss(balance_factor)
         subspace_criterion = RMSPELoss(balance_factor)
     elif criterion_name.startswith("cartesian"):
         criterion = CartesianLoss()
