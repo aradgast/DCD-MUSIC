@@ -51,9 +51,9 @@ model_config = {
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
+    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Far"     # Near, Far
+    model_config["model_params"]["field_type"] = "Near"     # Near, Far
 
 elif model_config.get("model_type") == "CascadedSubspaceNet":
     model_config["model_params"]["tau"] = 8
@@ -62,11 +62,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024 * 100,
-    "train_test_ratio": .05,
-    "training_objective": "angle",       # angle, range
+    "samples_size": 1024,
+    "train_test_ratio": .1,
+    "training_objective": "angle, range",       # angle, range
     "batch_size": 256,
-    "epochs": 150,
+    "epochs": 5,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,

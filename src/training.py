@@ -434,7 +434,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         source_estimation = None
         ranges = None
         eigen_regularization = None
-        if isinstance(model, TransMUSIC) and epoch == int(0.8 * training_params.epochs):
+        if isinstance(model, TransMUSIC) and epoch == int(0.95 * training_params.epochs):
             transmusic_mode = "num_source_train"
             print("Switching to num_source_train mode for TransMUSIC model")
         # Set model to train mode
@@ -552,7 +552,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             ############################################################################################################
             # Back-propagation stage
             try:
-                train_loss.backward(retain_graph=False)
+                train_loss.backward(retain_graph=True)
             except RuntimeError as r:
                 raise Exception(f"linalg error: \n{r}")
 

@@ -18,7 +18,7 @@ class SubspaceMethod(nn.Module):
     def subspace_separation(self,
                             covariance: torch.Tensor,
                             number_of_sources: torch.tensor = None,
-                            eigen_regularization: bool = False)\
+                            eigen_regularization: bool = True)\
             -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.tensor):
         """
 

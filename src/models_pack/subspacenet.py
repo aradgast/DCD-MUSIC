@@ -139,7 +139,9 @@ class SubspaceNet(nn.Module):
 
         elif self.field_type == "Near":
             if known_angles is None:
-                doa_prediction, distance_prediction, sources_estimation, eigen_regularization = self.diff_method(Rz, is_soft=is_soft)
+                predictions, sources_estimation, eigen_regularization = self.diff_method(
+                    Rz, number_of_sources=sources_num, is_soft=is_soft)
+                doa_prediction, distance_prediction = predictions
                 return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
             else:  # the angles are known
                 distance_prediction = self.diff_method(cov=Rz, number_of_sources=sources_num,
