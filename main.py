@@ -31,8 +31,8 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [],
-    "non-coherent": [5],
+    "coherent": [1],
+    "non-coherent": [],
 }
 
 system_model_params = {
@@ -62,15 +62,15 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024 * 64,
-    "train_test_ratio": .1,
+    "samples_size": 1024 * 100,
+    "train_test_ratio": .05,
     "training_objective": "angle",       # angle, range
     "batch_size": 256,
-    "epochs": 100,
+    "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
-    "learning_rate": 0.001,
+    "learning_rate": 0.0001,
     "weight_decay": 1e-9,
-    "step_size": 30,
+    "step_size": 70,
     "gamma": 0.5,
     "true_doa_train": None,                 # if set, this doa will be set to all samples in the train dataset
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
@@ -116,7 +116,7 @@ simulation_commands = {
     "CREATE_DATA": False,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }

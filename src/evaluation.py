@@ -108,7 +108,7 @@ def evaluate_dnn_model(
         plot_spec: bool = False,
         figures: dict = None,
         phase: str = "test",
-        learning_rate: torch.tensor=None) -> dict:
+        regularization: int=None) -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -272,8 +272,11 @@ def evaluate_dnn_model(
                 elif model.field_type.endswith("Far"):
                     eval_loss = criterion(angles_pred, angles)
                     # add eigen regularization to the loss if phase is validation
-                if phase == "validation" and eigen_regularization is not None:
-                    eval_loss += eigen_regularization * learning_rate * 100
+                # if phase == "validation" and eigen_regularization is not None:
+                #     if regularization:
+                #         eval_loss += eigen_regularization
+                #     else:
+                #         eval_loss += eigen_regularization * 0.01
 
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")

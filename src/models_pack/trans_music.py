@@ -149,7 +149,7 @@ class TransMUSIC(nn.Module):
             if self.estimation_params == "angle, range":
                 angles, distances = torch.split(predictions, predictions.shape[-1] // 2, dim=1)
                 distances = self.activation(distances).to(device)
-                predictions = torch.concatenate([angles, distances], dim=1).to(device)
+                predictions = torch.cat([angles, distances], dim=1).to(device)
             with torch.no_grad():
                 x9 = x3.detach()
                 prob_sources_est = self.source_number_estimator(x9)
@@ -165,7 +165,7 @@ class TransMUSIC(nn.Module):
                 if self.estimation_params == "angle, range":
                     angles, distances = torch.split(predictions, predictions.shape[-1] // 2, dim=1)
                     distances = self.activation(distances).to(device)
-                    predictions = torch.concatenate([angles, distances], dim=1).to(device)
+                    predictions = torch.cat([angles, distances], dim=1).to(device)
         else:
             raise ValueError(f"TransMUSIC.forward: Unrecognized {mode}")
         return predictions, prob_sources_est
@@ -191,7 +191,7 @@ class TransMUSIC(nn.Module):
         """
         if x.dim() == 2:
             x = x[None, :, :]
-        x = torch.concatenate([x.real, x.imag], dim=1)
+        x = torch.cat([x.real, x.imag], dim=1)
         return x
 
     def get_model_file_name(self):

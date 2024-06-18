@@ -27,6 +27,7 @@ Attributes:
 ----------
 None
 """
+import warnings
 
 # Imports
 import torch
@@ -538,12 +539,12 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                                            ranges)
                 if isinstance(train_loss, tuple):
                     train_loss, train_loss_angle, train_loss_distance = train_loss
-                if eigen_regularization is not None:
-                    train_loss += eigen_regularization * training_params.learning_rate * 100
+                # if eigen_regularization is not None:
+                #     train_loss += eigen_regularization * training_params.learning_rate * 100
             elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
                                                                                               DeepAugmentedMUSIC):
                 train_loss = training_params.criterion(angles_pred.float(), angles.float())
-                raise Exception(f"train_model: those model weren't tested yet."
+                warnings.warn(f"train_model: those model weren't tested yet."
                                 f" Deep Augmented MUSIC or DeepCNN or DeepRootMUSIC")
             else:
                 raise Exception(f"Model type {training_params.model_type} is not defined")
@@ -593,7 +594,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             training_params.valid_dataset,
             training_params.criterion,
             phase="validation",
-            learning_rate=training_params.learning_rate,
+            regularization=epoch < int(0.8 * training_params.epochs),
         )
         loss_valid_list.append(valid_loss.get("Overall"))
 

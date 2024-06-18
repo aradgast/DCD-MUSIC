@@ -52,6 +52,7 @@ def __run_simulation(**kwargs):
             datasets_path.mkdir(parents=True, exist_ok=True)
             simulations_path.mkdir(parents=True, exist_ok=True)
             saving_path.mkdir(parents=True, exist_ok=True)
+            (saving_path / "final_models").mkdir(parents=True, exist_ok=True)
 
             # Initialize time and date
             now = datetime.now()
