@@ -144,8 +144,8 @@ class SubspaceNet(nn.Module):
                 doa_prediction, distance_prediction = predictions
                 return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
             else:  # the angles are known
-                distance_prediction = self.diff_method(cov=Rz, number_of_sources=sources_num,
-                                                       known_angles=known_angles, is_soft=is_soft)
+                distance_prediction = self.diff_method(
+                    cov=Rz, number_of_sources=sources_num, known_angles=known_angles, is_soft=is_soft)
                 return known_angles, distance_prediction, Rz
 
     def pre_processing(self, x):

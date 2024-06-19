@@ -74,7 +74,7 @@ class MUSIC(SubspaceMethod):
                 else:
                     params = torch.zeros((cov.shape[0], M), dtype=torch.float64, device=device)
                     for source in range(M):
-                        params_source = self.forward(cov, number_of_sources=M,known_angles=known_angles[:, source][:, None],
+                        params_source, _, _ = self.forward(cov, number_of_sources=M,known_angles=known_angles[:, source][:, None],
                                                      is_soft=is_soft)
                         params[:, source] = params_source.squeeze().requires_grad_(True)
                     return params
@@ -87,10 +87,8 @@ class MUSIC(SubspaceMethod):
         # self.music_spectrum = torch.pow(self.music_spectrum, 5)
         #####
         params = self.peak_finder(is_soft, M)
-        if self.estimation_params in ["angle", "range"]:
-            return params
-        elif self.estimation_params == "angle, range":
-            return params, source_estimation, eigen_regularization
+
+        return params, source_estimation, eigen_regularization
 
     def get_music_spectrum_from_noise_subspace(self, Un):
         inverse_spectrum = self.get_inverse_spectrum(Un.to(torch.complex128))
@@ -339,14 +337,14 @@ class MUSIC(SubspaceMethod):
     def _peak_finder_1D(self, search_space, source_num: int = None):
         if source_num is None:
             source_num = self.system_model.params.M
-        predict_param = torch.zeros(self.music_spectrum.shape[0], source_num, device=device)
+        predict_param = torch.zeros(self.music_spectrum.shape[0], 1, device=device)
         for batch in range(self.music_spectrum.shape[0]):
             music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
             # Find spectrum peaks
             peaks = list(sc.signal.find_peaks(music_spectrum)[0])
             # Sort the peak by their amplitude
             peaks.sort(key=lambda x: music_spectrum[x], reverse=True)
-            tmp = search_space[peaks[0:source_num]]
+            tmp = search_space[peaks[0:1]]
             if tmp.nelement() == 0:
                 rand_idx = torch.randint(self.distances.shape[0], (1,))
                 tmp = self.distances[rand_idx]

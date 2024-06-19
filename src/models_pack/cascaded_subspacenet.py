@@ -5,6 +5,7 @@ import os
 from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
 from src.utils import *
+from pathlib import Path
 
 
 class CascadedSubspaceNet(SubspaceNet):
@@ -50,7 +51,7 @@ class CascadedSubspaceNet(SubspaceNet):
         self._load_state_for_angle_extractor(path)
 
     def _load_state_for_angle_extractor(self, path: str = None):
-        cwd = os.getcwd()
+        cwd = Path(__file__).parent.parent.parent
         if path is None or path == "":
             path = self.angle_extractor.get_model_file_name()
         ref_path = os.path.join(cwd, "data", "weights", "final_models", path)
