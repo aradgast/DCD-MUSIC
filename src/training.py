@@ -102,6 +102,8 @@ class TrainingParams(object):
             self.training_objective = "range"
         elif training_objective.lower() == "angle, range":
             self.training_objective = "angle, range"
+        elif training_objective.lower() == "source_estimation":
+            self.training_objective = "source_estimation"
         else:
             raise Exception(f"TrainingParams.set_training_objective:"
                             f" Unrecognized training objective : {training_objective}.")
@@ -258,6 +260,8 @@ class TrainingParams(object):
             self.criterion = RMSPELoss(balance_factor=balance_factor)
         elif criterion.startswith("cartesian") and self.training_objective == "angle, range":
             self.criterion = CartesianLoss()
+        elif criterion.startswith("ce") and self.training_objective == "source_estimation":
+            self.criterion = nn.CrossEntropyLoss(reduction="sum")
         else:
             raise Exception(
                 f"TrainingParams.set_criterion: criterion {criterion} is not defined"
@@ -412,11 +416,16 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     train_length = training_params.train_dataset.batch_sampler.get_data_source_length() #TODO
     # train_length = len(training_params.train_dataset)
     if isinstance(model, TransMUSIC):
-        ce_loss = nn.CrossEntropyLoss()
-        transmusic_mode = "subspace_train"
+        if training_params.training_objective == "source_estimation":
+            transmusic_mode = "num_source_train"
+        else:
+            transmusic_mode = "subspace_train"
     training_angle_extractor = False
-    if training_params.training_objective.endswith("angle, range") and isinstance(model, CascadedSubspaceNet):
-        training_angle_extractor = True
+    if isinstance(model, CascadedSubspaceNet):
+        if training_params.training_objective == "angle, range":
+            training_angle_extractor = True
+        elif training_params.training_objective == "range":
+            training_angle_extractor = False
 
     # Set initial time for start training
     since = time.time()
@@ -434,9 +443,9 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         source_estimation = None
         ranges = None
         eigen_regularization = None
-        if isinstance(model, TransMUSIC) and epoch == int(0.95 * training_params.epochs):
-            transmusic_mode = "num_source_train"
-            print("Switching to num_source_train mode for TransMUSIC model")
+        # if isinstance(model, TransMUSIC) and epoch == int(0.95 * training_params.epochs):
+        #     transmusic_mode = "num_source_train"
+        #     print("Switching to num_source_train mode for TransMUSIC model")
         # Set model to train mode
         model.train()
         for data in tqdm(training_params.train_dataset):
@@ -492,11 +501,13 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 elif training_params.training_objective == "angle, range":
                     angles_pred, ranges_pred = torch.split(model_output[0], model_output[0].shape[1] // 2, dim=1)
                     prob_source_number = model_output[1]
-                # calculate the cross entropy loss for the source number estimation
-                one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                       .to(device).to(torch.float32))
-                source_est_regularization = ce_loss(prob_source_number, one_hot_sources_num.repeat(
-                    prob_source_number.shape[0], 1)) * x.shape[0]
+                if training_params.training_objective == "source_estimation":
+                    prob_source_number = model_output[1]
+                    # calculate the cross entropy loss for the source number estimation
+                    one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                            .to(device).to(torch.float32))
+                    source_est_regularization = training_params.criterion(prob_source_number, one_hot_sources_num.repeat(
+                        prob_source_number.shape[0], 1)) * x.shape[0]
                 # calculate the source estimation
                 source_estimation = torch.argmax(prob_source_number, dim=1)
 
@@ -516,16 +527,17 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             ############################################################################################################
             # Compute training loss
             if isinstance(model, TransMUSIC):
-                angles_pred = angles_pred[:, :angles.shape[1]]
-                if training_params.training_objective == "angle":
-                    train_loss = training_params.criterion(angles_pred, angles)
-                elif training_params.training_objective == "angle, range":
-                    ranges_pred = ranges_pred[:, :ranges.shape[1]]
-                    train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
-                    if isinstance(train_loss, tuple):
-                        train_loss, train_loss_angle, train_loss_distance = train_loss
-                if source_est_regularization is not None and transmusic_mode == "num_source_train":
-                    train_loss += source_est_regularization * training_params.learning_rate * 1000
+                if training_params.training_objective == "source_estimation":
+                    train_loss = source_est_regularization
+                else:
+                    angles_pred = angles_pred[:, :angles.shape[1]]
+                    if training_params.training_objective == "angle":
+                        train_loss = training_params.criterion(angles_pred, angles)
+                    elif training_params.training_objective == "angle, range":
+                        ranges_pred = ranges_pred[:, :ranges.shape[1]]
+                        train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
+                        if isinstance(train_loss, tuple):
+                            train_loss, train_loss_angle, train_loss_distance = train_loss
             elif isinstance(model, SubspaceNet):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angles_pred, angles)
@@ -570,6 +582,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 if train_loss_angle is not None and train_loss_distance is not None:
                     epoch_train_loss_angle += train_loss_angle.item()
                     epoch_train_loss_distance += train_loss_distance.item()
+            elif isinstance(training_params.criterion, nn.CrossEntropyLoss):
+                epoch_train_loss += train_loss.item()
             else:
                 raise Exception(f"Criterion type {training_params.criterion} is not defined")
 

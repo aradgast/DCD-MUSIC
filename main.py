@@ -31,13 +31,13 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [5, 10],
+    "coherent": [-10, -5, 0, 5, 10],
     "non-coherent": [],
 }
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": 2,                                     # number of sources
+    "M": None,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -47,7 +47,7 @@ system_model_params = {
     "sv_noise_var": 0
 }
 model_config = {
-    "model_type": "CascadedSubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "TransMUSIC",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -62,11 +62,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 1024 * 100,
     "train_test_ratio": .1,
-    "training_objective": "range",       # angle, range
+    "training_objective": "source_estimation",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 5,
+    "epochs": 50,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -76,11 +76,11 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-    "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
+    "criterion": "CE",                   # rmse, rmspe, mse, mspe, bce, cartesian
     "balance_factor": 0.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
-    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": training_params["balance_factor"],
     "models": {
                 # "CascadedSubspaceNet": {"tau": 8},
@@ -112,9 +112,9 @@ evaluation_params = {
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": False,
+    "SAVE_TO_FILE": True,
     "CREATE_DATA": False,
-    "LOAD_MODEL": False,
+    "LOAD_MODEL": True,
     "TRAIN_MODEL": True,
     "SAVE_MODEL": True,
     "EVALUATE_MODE": True,

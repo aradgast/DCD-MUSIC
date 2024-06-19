@@ -104,7 +104,7 @@ class TransMUSIC(nn.Module):
                 output_dim = (self.music.system_model.params.N - 1) * 2
             # self.activation = ShiftedReLU(shift=np.floor(self.music.system_model.fresnel)).to(device)
             # self.activation = nn.ReLU().to(device)
-            self.activation = nn.LeakyReLU(negative_slope=0.01).to(device)
+            self.activation = nn.LeakyReLU(negative_slope=0.0001).to(device)
         else:
             raise ValueError(f"TransMUSIC.__init__: unrecognized estimation parameter {self.estimation_params}")
         self.output = nn.Sequential(

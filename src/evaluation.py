@@ -139,7 +139,7 @@ def evaluate_dnn_model(
     source_estimation = None
     eigen_regularization = None
     if isinstance(model, TransMUSIC):
-        ce_loss = nn.CrossEntropyLoss()
+        ce_loss = nn.CrossEntropyLoss(reduction="sum")
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
@@ -239,25 +239,28 @@ def evaluate_dnn_model(
             if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
                 eval_loss = criterion(angles_pred.float(), angles.float())
             elif isinstance(model, TransMUSIC):
-                angles_pred = angles_pred[:, :angles.shape[1]]
-                if model.estimation_params == "angle":
-                    eval_loss = criterion(angles_pred, angles)
-                elif model.estimation_params == "angle, range":
-                    ranges_pred = ranges_pred[:, :ranges.shape[1]]
-                    if isinstance(criterion, RMSPELoss):
-                        eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges)
-                        if overall_loss_angle is not None:
-                            overall_loss_angle += eval_loss_angle.item()
-                            overall_loss_distance += eval_loss_distance.item()
+                if isinstance(criterion, nn.CrossEntropyLoss):
+                    eval_loss = source_est_regularization
+                else:
+                    angles_pred = angles_pred[:, :angles.shape[1]]
+                    if model.estimation_params == "angle":
+                        eval_loss = criterion(angles_pred, angles)
+                    elif model.estimation_params == "angle, range":
+                        ranges_pred = ranges_pred[:, :ranges.shape[1]]
+                        if isinstance(criterion, RMSPELoss):
+                            eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges)
+                            if overall_loss_angle is not None:
+                                overall_loss_angle += eval_loss_angle.item()
+                                overall_loss_distance += eval_loss_distance.item()
+                            else:
+                                overall_loss_angle, overall_loss_distance = 0.0, 0.0
+                                overall_loss_angle += eval_loss_angle.item()
+                                overall_loss_distance += eval_loss_distance.item()
+                        elif isinstance(criterion, CartesianLoss):
+                            eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
                         else:
-                            overall_loss_angle, overall_loss_distance = 0.0, 0.0
-                            overall_loss_angle += eval_loss_angle.item()
-                            overall_loss_distance += eval_loss_distance.item()
-                    elif isinstance(criterion, CartesianLoss):
-                        eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
-                    else:
-                        raise Exception(f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
-                                        f" {model.get_model_name()} model")
+                            raise Exception(f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
+                                            f" {model.get_model_name()} model")
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     if isinstance(criterion, RMSPELoss):
