@@ -752,10 +752,14 @@ def simulation_summary(
     phase
 
     """
+    if system_model_params.M is None:
+        M = "Random"
+    else:
+        M = system_model_params.M
     print("\n--- New Simulation ---\n")
     print(f"Description: Simulation of {model_type}, {phase} stage")
     print("System model parameters:")
-    print(f"Number of sources = {system_model_params.M}")
+    print(f"Number of sources = {M}")
     print(f"Number of sensors = {system_model_params.N}")
     print(f"field_type = {system_model_params.field_type}")
     print(f"signal_type = {system_model_params.signal_type}")

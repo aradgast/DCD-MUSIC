@@ -375,7 +375,7 @@ class MUSIC(SubspaceMethod):
             peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
             # convert the peaks to 2d indices
             original_idx = np.array(np.unravel_index(peaks, music_spectrum.shape))
-            if self.system_model.params.M > 1:
+            if source_num > 1:
                 original_idx = keep_far_enough_points(original_idx, source_num, 30)
             original_idx = original_idx[:, 0:source_num]
             predict_theta[batch] = angels[original_idx[0]]

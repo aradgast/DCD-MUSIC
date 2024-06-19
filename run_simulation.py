@@ -16,7 +16,17 @@ def __run_simulation(**kwargs):
     TRAINING_PARAMS = kwargs["training_params"]
     EVALUATION_PARAMS = kwargs["evaluation_params"]
     scenario_dict = kwargs["scenario_dict"]
+    save_to_file = SIMULATION_COMMANDS["SAVE_TO_FILE"]  # Saving results to file or present them over CMD
+    create_data = SIMULATION_COMMANDS["CREATE_DATA"]  # Creating new dataset
+    load_model = SIMULATION_COMMANDS["LOAD_MODEL"]  # Load specific model for training
+    train_model = SIMULATION_COMMANDS["TRAIN_MODEL"]  # Applying training operation
+    save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Saving tuned model
+    evaluate_mode = SIMULATION_COMMANDS["EVALUATE_MODE"]  # Evaluating desired algorithms
+    load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
+    if train_model:
+        print("Training model - ", MODEL_CONFIG.get("model_type"))
+        print("Training objective - ", TRAINING_PARAMS.get("training_objective"))
     print("Scenrios that will be tested: ")
     M = SYSTEM_MODEL_PARAMS.get("M")
     if M is None:
@@ -60,19 +70,18 @@ def __run_simulation(**kwargs):
             dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
             # Operations commands
 
-            save_to_file = SIMULATION_COMMANDS["SAVE_TO_FILE"]  # Saving results to file or present them over CMD
-            create_data = SIMULATION_COMMANDS["CREATE_DATA"]  # Creating new dataset
-            load_model = SIMULATION_COMMANDS["LOAD_MODEL"]  # Load specific model for training
-            train_model = SIMULATION_COMMANDS["TRAIN_MODEL"]  # Applying training operation
-            save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Saving tuned model
-            evaluate_mode = SIMULATION_COMMANDS["EVALUATE_MODE"]  # Evaluating desired algorithms
-            load_data = not create_data  # Loading data from exist dataset
+
 
             # Saving simulation scores to external file
+            suffix = ""
+            if train_model:
+                suffix += f"_train_{MODEL_CONFIG.get("model_type")}_{TRAINING_PARAMS.get("training_objective")}"
+            suffix += f"_{mode}_SNR_{snr}.txt"
+
             if save_to_file:
                 orig_stdout = sys.stdout
                 file_path = (
-                        simulations_path / "results" / "scores" / Path(dt_string_for_save + f"_{mode}_SNR_{snr}" +".txt")
+                        simulations_path / "results" / "scores" / Path(dt_string_for_save + suffix)
                 )
                 sys.stdout = open(file_path, "w")
             # Define system model parameters
@@ -281,16 +290,20 @@ def __run_simulation(**kwargs):
                             plt_res = {}
                             for snr, results in snr_dict.items():
                                 for method, loss_ in results.items():
-                                    if method not in plt_res:
-                                        plt_res[method] = {"Angle": [], "Distance": []}
+                                    if plt_res.get(method) is None:
+                                        if plt_res[method].get("Accuracy") is not None:
+                                            key = method + f": {loss_['Accuracy'] * 100:.2f} %"
+                                        else:
+                                            key = method
+                                        plt_res[key] = {"Angle": [], "Distance": []}
                                     # plt_res[method].append(loss_["Overall"])
-                                    plt_res[method]["Angle"].append(loss_["Angle"])
-                                    plt_res[method]["Distance"].append(loss_["Distance"])
+                                    plt_res[key]["Angle"].append(loss_["Angle"])
+                                    plt_res[key]["Distance"].append(loss_["Distance"])
                                     if loss_.get("Accuracy") is not None:
-                                        if "Accuracy" not in plt_res[method].keys():
-                                            plt_res[method]["Accuracy"] = []
+                                        if "Accuracy" not in plt_res[key].keys():
+                                            plt_res[key]["Accuracy"] = []
                                             plt_acc = True
-                                        plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+                                        plt_res[key]["Accuracy"].append(loss_["Accuracy"])
                             if SYSTEM_MODEL_PARAMS.get("M") is None:
                                 suptitle = "Different number of "
                             else:
@@ -393,7 +406,7 @@ def __run_simulation(**kwargs):
                         plt_res = {}
                         for snr, results in snr_dict.items():
                             for method, loss_ in results.items():
-                                if method not in plt_res:
+                                if plt_res.get(method) is None:
                                     plt_res[method] = {"Overall": []}
                                 plt_res[method]["Overall"].append(loss_["Overall"])
                                 if loss_.get("Accuracy") is not None:
@@ -412,7 +425,11 @@ def __run_simulation(**kwargs):
                                 line_style = "-."
                             else:
                                 line_style = None
-                            ax.plot(snr_values, loss_["Overall"], label=method, linestyle=line_style)
+                            if loss_.get("Accuracy") is not None:
+                                label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
+                            else:
+                                label = method
+                            ax.plot(snr_values, loss_["Overall"], label=label, linestyle=line_style)
                         ax.legend()
                         ax.grid()
                         ax.set_xlabel("SNR [dB]")

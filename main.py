@@ -31,7 +31,7 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [-10],
+    "coherent": [-10, 0, 10],
     "non-coherent": [],
 }
 
@@ -62,11 +62,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
-    "train_test_ratio": 1,
+    "samples_size": 1024 * 100,
+    "train_test_ratio": .5,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 50,
+    "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -85,9 +85,9 @@ evaluation_params = {
     "models": {
                 # "CascadedSubspaceNet": {"tau": 8},
                 "SubspaceNet": {"tau": 8,
-                                "diff_method": "esprit",
-                                "field_type": "Far"},
-                "TransMUSIC": {},
+                                "diff_method": "music_2D",
+                                "field_type": "Near"},
+                # "TransMUSIC": {},
 
             },
     "augmented_methods": [
@@ -107,15 +107,15 @@ evaluation_params = {
         # "sps_music_1d"
         # "bb-music",
         # "music_2D",
-        # "sps_music_2D",
+        "sps_music_2D",
         # "CRB"
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": False,
+    "SAVE_TO_FILE": True,
     "CREATE_DATA": False,
-    "LOAD_MODEL": True,
-    "TRAIN_MODEL": False,
+    "LOAD_MODEL": False,
+    "TRAIN_MODEL": True,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False

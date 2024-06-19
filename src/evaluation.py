@@ -433,26 +433,41 @@ def evaluate_model_based(
     loss_list = []
     loss_list_angle = []
     loss_list_distance = []
+    acc_list = []
     if algorithm.lower() == "crb":
         if system_model.params.signal_nature.lower() == "non-coherent":
             crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
             return crb
     model_based = get_model_based_method(algorithm, system_model)
     for i, data in enumerate(dataset):
-        X, doa = data
-        # X = X[0]
+        x, sources_num, label, masks = data
+        if max(sources_num) * 2 == label.shape[1]:
+            angles, ranges = torch.split(label, max(sources_num), dim=1)
+            angles = angles.to(device)
+            ranges = ranges.to(device)
+            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
+        else:
+            angles = label  # only angles
+            angles = angles.to(device)
+        # Check if the sources number is the same for all samples in the batch
+        if (sources_num != sources_num[0]).any():
+            # in this case, the sources number is not the same for all samples in the batch
+            raise Exception(f"train_model:"
+                            f" The sources number is not the same for all samples in the batch.")
+        else:
+            sources_num = sources_num[0]
         # Root-MUSIC algorithms
         if algorithm.endswith("r-music"):
             root_music = RootMusic(system_model)
             if algorithm.startswith("sps"):
                 # Spatial smoothing
                 predictions, roots, predictions_all, _, M = root_music.narrowband(
-                    X=X, mode="spatial_smoothing"
+                    X=x, mode="spatial_smoothing"
                 )
             else:
                 # Conventional
                 predictions, roots, predictions_all, _, M = root_music.narrowband(
-                    X=X, mode="sample"
+                    X=x, mode="sample"
                 )
             # If the amount of predictions is less than the amount of sources
             predictions = add_random_predictions(M, predictions, algorithm)
@@ -472,13 +487,13 @@ def evaluate_model_based(
         elif algorithm.endswith("music_1d"):
             if algorithm.startswith("bb"):
                 # Broadband MUSIC
-                predictions, spectrum, M = model_based(X=X)
+                predictions, spectrum, M = model_based(X=x)
             elif algorithm.startswith("sps"):
                 # Spatial smoothing
-                Rx = model_based.pre_processing(X, mode="sps")
+                Rx = model_based.pre_processing(x, mode="sps")
             elif algorithm.startswith("music"):
                 # Conventional
-                Rx = model_based.pre_processing(X, mode="sample")
+                Rx = model_based.pre_processing(x, mode="sample")
             predictions = model_based(Rx, is_soft=False)
             # If the amount of predictions is less than the amount of sources
             # predictions = add_random_predictions(M, predictions, algorithm)
@@ -521,22 +536,21 @@ def evaluate_model_based(
                     figures=figures,
                 )
         elif algorithm.endswith("2D"):
-            y = doa
-            doa, distances = y[:, :y.shape[-1] // 2], y[:, y.shape[-1] // 2:]
-            doa = doa.to(device)
-            distances = distances.to(device)
             if algorithm.startswith("sps"):
-                Rx = model_based.pre_processing(X, mode="sps")
+                Rx = model_based.pre_processing(x, mode="sps")
             else:
-                Rx = model_based.pre_processing(X, mode="sample")
-            doa_prediction, distance_prediction = model_based(Rx, is_soft=False)
+                Rx = model_based.pre_processing(x, mode="sample")
+            predictions, sources_num_estimation, _ = model_based(Rx, number_of_sources=sources_num, is_soft=False)
+            angles_prediction, ranges_prediction = predictions
             if isinstance(criterion, RMSPELoss):
-                rmspe, rmspe_angle, rmspe_distance = criterion(doa_prediction, doa, distance_prediction, distances)
+                rmspe, rmspe_angle, rmspe_distance = criterion(angles_prediction, angles, ranges_prediction, ranges)
                 loss_list_angle.append(rmspe_angle.item())
                 loss_list_distance.append(rmspe_distance.item())
             else:
-                rmspe = criterion(doa_prediction, doa, distance_prediction, distances)
-            loss_list.append(rmspe.item())
+                rmspe = criterion(angles_prediction, angles, ranges_prediction, ranges)
+            loss_list.append(rmspe.item() / x.shape[0])
+            acc_tmp = torch.mean((sources_num_estimation == sources_num).float()).item()
+            acc_list.append(acc_tmp)
 
         else:
             raise Exception(
@@ -546,6 +560,8 @@ def evaluate_model_based(
     if loss_list_angle and loss_list_distance:
         result["Angle"] = torch.mean(torch.Tensor(loss_list_angle)).item()
         result["Distance"] = torch.mean(torch.Tensor(loss_list_distance)).item()
+    if acc_list:
+        result["Accuracy"] = torch.mean(torch.Tensor(acc_list)).item()
     return result
 
 
