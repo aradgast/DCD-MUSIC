@@ -46,8 +46,9 @@ class SubspaceMethod(nn.Module):
             noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
         if eigen_regularization:
-            eigen_regularization = (normalized_eigen[:, number_of_sources - 1] - self.eigen_threshold) * \
-                                   (normalized_eigen[:, number_of_sources] - self.eigen_threshold)
+            # eigen_regularization = (real_sorted_eigenvals[:, number_of_sources - 1] - self.eigen_threshold) * \
+            #                        (real_sorted_eigenvals[:, number_of_sources] - self.eigen_threshold)
+            eigen_regularization = torch.sum(normalized_eigen[:, number_of_sources:], dim=1) / torch.sum(normalized_eigen[:, :number_of_sources], dim=1)
             eigen_regularization = torch.sum(eigen_regularization)
             # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
             return signal_subspace.to(device), noise_subspace.to(device), source_estimation, eigen_regularization

@@ -107,8 +107,7 @@ def evaluate_dnn_model(
         criterion: nn.Module,
         plot_spec: bool = False,
         figures: dict = None,
-        phase: str = "test",
-        regularization: int=None) -> dict:
+        phase: str = "test") -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -133,8 +132,7 @@ def evaluate_dnn_model(
     overall_loss_angle = None
     overall_loss_distance = None
     overall_accuracy = None
-    test_length = dataset.batch_sampler.get_data_source_length() #TODO
-    # test_length = len(dataset)
+    test_length = 0
     ranges = None
     source_estimation = None
     eigen_regularization = None
@@ -160,7 +158,7 @@ def evaluate_dnn_model(
                                 f" The sources number is not the same for all samples in the batch.")
             else:
                 sources_num = sources_num[0]
-
+            test_length += x.shape[0]
             # Convert observations and DoA to device
             x = x.to(device)
             angles = angles.to(device)
@@ -276,10 +274,7 @@ def evaluate_dnn_model(
                     eval_loss = criterion(angles_pred, angles)
                     # add eigen regularization to the loss if phase is validation
                 # if phase == "validation" and eigen_regularization is not None:
-                #     if regularization:
-                #         eval_loss += eigen_regularization
-                #     else:
-                #         eval_loss += eigen_regularization * 0.01
+                #     eval_loss += eigen_regularization * 0.01
 
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")

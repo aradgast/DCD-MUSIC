@@ -413,7 +413,6 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
     acc_train_list = []
     acc_valid_list = []
     min_valid_loss = np.inf
-    train_length = training_params.train_dataset.batch_sampler.get_data_source_length() #TODO
     # train_length = len(training_params.train_dataset)
     if isinstance(model, TransMUSIC):
         if training_params.training_objective == "source_estimation":
@@ -448,6 +447,8 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         #     print("Switching to num_source_train mode for TransMUSIC model")
         # Set model to train mode
         model.train()
+        train_length = 0
+
         for data in tqdm(training_params.train_dataset):
             x, sources_num, label, masks = data #TODO
             # x, sources_num, label = data
@@ -464,7 +465,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                                 f" The sources number is not the same for all samples in the batch.")
             else:
                 sources_num = sources_num[0]
-
+            train_length += x.shape[0]
             # Cast observations and DoA to Variables
             x = Variable(x, requires_grad=True).to(device)
             angles = Variable(angles, requires_grad=True).to(device)
@@ -552,7 +553,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 if isinstance(train_loss, tuple):
                     train_loss, train_loss_angle, train_loss_distance = train_loss
                 # if eigen_regularization is not None:
-                #     train_loss += eigen_regularization * training_params.learning_rate * 100
+                #     train_loss += eigen_regularization * 0.01
             elif isinstance(model, DeepCNN) or isinstance(model, DeepRootMUSIC) or isinstance(model,
                                                                                               DeepAugmentedMUSIC):
                 train_loss = training_params.criterion(angles_pred.float(), angles.float())
@@ -607,8 +608,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             model,
             training_params.valid_dataset,
             training_params.criterion,
-            phase="validation",
-            regularization=epoch < int(0.8 * training_params.epochs),
+            phase="validation"
         )
         loss_valid_list.append(valid_loss.get("Overall"))
 

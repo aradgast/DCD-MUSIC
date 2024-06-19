@@ -242,7 +242,7 @@ def __run_simulation(**kwargs):
                 # model_test_dataset = torch.utils.data.DataLoader(
                 #     test_dataset, batch_size=32, shuffle=False, drop_last=True
                 # )
-                batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=16)
+                batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=8)
                 generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                                    collate_fn=collate_fn,
                                                                    batch_sampler=batch_sampler_test,
