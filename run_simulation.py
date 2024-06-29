@@ -25,8 +25,8 @@ def __run_simulation(**kwargs):
     load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
     if train_model:
-        print("Training model - ", MODEL_CONFIG.get("model_type"))
-        print("Training objective - ", TRAINING_PARAMS.get("training_objective"))
+        print("Training model - ", MODEL_CONFIG.get('model_type'))
+        print("Training objective - ", TRAINING_PARAMS.get('training_objective'))
     print("Scenrios that will be tested: ")
     M = SYSTEM_MODEL_PARAMS.get("M")
     if M is None:
@@ -75,7 +75,7 @@ def __run_simulation(**kwargs):
             # Saving simulation scores to external file
             suffix = ""
             if train_model:
-                suffix += f"_train_{MODEL_CONFIG.get("model_type")}_{TRAINING_PARAMS.get("training_objective")}"
+                suffix += f"_train_{MODEL_CONFIG.get('model_type')}_{TRAINING_PARAMS.get('training_objective')}"
             suffix += f"_{mode}_SNR_{snr}.txt"
 
             if save_to_file:

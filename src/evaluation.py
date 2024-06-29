@@ -29,6 +29,8 @@ evaluate: Wrapper function for model and algorithm evaluations.
 """
 import os
 import time
+import warnings
+
 import numpy as np
 import torch.linalg
 # Imports
@@ -107,7 +109,8 @@ def evaluate_dnn_model(
         criterion: nn.Module,
         plot_spec: bool = False,
         figures: dict = None,
-        phase: str = "test") -> dict:
+        phase: str = "test",
+        eigen_regula_weight = None) -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -144,6 +147,8 @@ def evaluate_dnn_model(
     with torch.no_grad():
         for data in dataset:
             x, sources_num, label, masks = data #TODO
+            if x.dim() == 2:
+                x = x.unsqueeze(0)
             # x, sources_num, label = data #TODO
             # Split true label to angles and ranges, if needed
             if max(sources_num) * 2 == label.shape[1]:
@@ -273,8 +278,8 @@ def evaluate_dnn_model(
                 elif model.field_type.endswith("Far"):
                     eval_loss = criterion(angles_pred, angles)
                     # add eigen regularization to the loss if phase is validation
-                # if phase == "validation" and eigen_regularization is not None:
-                #     eval_loss += eigen_regularization * 0.01
+                if phase == "validation" and eigen_regularization is not None:
+                    eval_loss += eigen_regularization * eigen_regula_weight
 
             else:
                 raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")
@@ -441,6 +446,8 @@ def evaluate_model_based(
     model_based = get_model_based_method(algorithm, system_model)
     for i, data in enumerate(dataset):
         x, sources_num, label, masks = data
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
         if max(sources_num) * 2 == label.shape[1]:
             angles, ranges = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(device)
@@ -553,9 +560,7 @@ def evaluate_model_based(
             acc_list.append(acc_tmp)
 
         else:
-            raise Exception(
-                f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
-            )
+            warnings.warn(f"evaluate_augmented_model: Algorithm {algorithm} is not supported.")
     result = {"Overall": torch.mean(torch.Tensor(loss_list)).item()}
     if loss_list_angle and loss_list_distance:
         result["Angle"] = torch.mean(torch.Tensor(loss_list_angle)).item()
@@ -602,7 +607,7 @@ def evaluate_crb(dataset: list,
             distances = []
             ucrb_cartzien = None
             for i, data in enumerate(dataset):
-                _, labels = data
+                _, _, labels, _ = data
                 angles.extend(*labels[:, :labels.shape[1] // 2][None, :].detach().numpy())
                 distances.extend(*labels[:, labels.shape[1] // 2:][None, :].detach().numpy())
             angles = np.array(angles)
