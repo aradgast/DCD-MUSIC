@@ -18,7 +18,7 @@ class SubspaceMethod(nn.Module):
     def subspace_separation(self,
                             covariance: torch.Tensor,
                             number_of_sources: torch.tensor = None,
-                            eigen_regularization: bool = True)\
+                            eigen_regularization: bool = True) \
             -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.tensor):
         """
 
@@ -41,17 +41,36 @@ class SubspaceMethod(nn.Module):
             nn.functional.relu(
                 normalized_eigen - self.eigen_threshold * torch.ones_like(normalized_eigen)),
             dim=1, ord=0)
-        if number_of_sources is not None:
+        if number_of_sources is None:
+            warnings.warn("Number of sources is not defined, using the number of sources estimation.")
+            signal_subspace = sorted_eigvectors[:, :, :source_estimation]
+            noise_subspace = sorted_eigvectors[:, :, source_estimation:]
+        else:
             signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
             noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
         if eigen_regularization:
-            eigen_regularization = (normalized_eigen[:, number_of_sources - 1] - self.eigen_threshold) * \
-                                   (normalized_eigen[:, number_of_sources] - self.eigen_threshold)
-            eigen_regularization = torch.sum(eigen_regularization)
-            # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
-            return signal_subspace.to(device), noise_subspace.to(device), source_estimation, eigen_regularization
-        return signal_subspace.to(device), noise_subspace.to(device), source_estimation, None
+            l_eig = self.eigen_regularization(normalized_eigen, number_of_sources)
+        else:
+            l_eig = None
+
+        return signal_subspace.to(device), noise_subspace.to(device), source_estimation, l_eig
+
+    def eigen_regularization(self, normalized_eigenvalues: torch.Tensor, number_of_sources: int):
+        """
+
+        Args:
+            normalized_eigenvalues:
+            number_of_sources:
+
+        Returns:
+
+        """
+        l_eig = (normalized_eigenvalues[:, number_of_sources - 1] - self.eigen_threshold) * \
+                (normalized_eigenvalues[:, number_of_sources] - self.eigen_threshold)
+        l_eig = torch.sum(l_eig)
+        # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
+        return l_eig
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

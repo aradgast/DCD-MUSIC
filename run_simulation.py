@@ -429,13 +429,14 @@ def __run_simulation(**kwargs):
                                 label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
                             else:
                                 label = method
-                            ax.plot(snr_values, loss_["Overall"], label=label, linestyle=line_style)
+                            if not np.isnan((loss_.get("Overall"))).any():
+                                ax.plot(snr_values, loss_["Overall"], label=label, linestyle=line_style)
                         ax.legend()
                         ax.grid()
                         ax.set_xlabel("SNR [dB]")
                         ax.set_ylabel("RMSE [m]")
                         ax.set_title("Overall RMSE - Cartesian Loss")
-                        ax.set_yscale("log")
+                        ax.set_yscale("linear")
                         fig.savefig(os.path.join(simulations_path,
                                                  "results",
                                                  "plots",
@@ -445,7 +446,7 @@ def __run_simulation(**kwargs):
                             fig, ax = plt.subplots(1, 1, figsize=(15, 5))
                             for method, loss_ in plt_res.items():
                                 if loss_.get("Accuracy") is not None:
-                                    ax.plot(snr_values, loss_["Accuracy"], label=method)
+                                    ax.plot(snr_values, np.array(loss_["Accuracy"]) * 100, label=method)
                             ax.legend()
                             ax.grid()
                             ax.set_xlabel("SNR [dB]")
@@ -468,7 +469,7 @@ def __run_simulation(**kwargs):
                 for snr, results in snr_dict.items():
                     print(f"SNR = {snr} [dB]: ")
                     for method, loss in results.items():
-                        txt = f"\t{method.upper(): <20}: "
+                        txt = f"\t{method.upper(): <30}: "
                         for key, value in loss.items():
                             if value is not None:
                                 if key == "Accuracy":

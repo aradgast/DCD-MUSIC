@@ -134,6 +134,9 @@ class SubspaceNet(nn.Module):
                 # Esprit output
                 doa_prediction, sources_estimation, eigen_regularization = method_output
                 return doa_prediction, sources_estimation, eigen_regularization
+            elif isinstance(self.diff_method, MUSIC):
+                doa_prediction, sources_estimation, eigen_regularization = method_output
+                return doa_prediction, sources_estimation, eigen_regularization
             else:
                 raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
@@ -186,6 +189,8 @@ class SubspaceNet(nn.Module):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
                 self.diff_method = ESPRIT(system_model=system_model)
+            elif diff_method.startswith("music_1D"):
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle")
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
@@ -222,7 +227,7 @@ class SubspaceNet(nn.Module):
 
     def get_diff_method_temperature(self):
         if isinstance(self.diff_method, MUSIC):
-            if self.diff_method.estimation_params == "range":
+            if self.diff_method.estimation_params in ["angle", "range"]:
                 return self.diff_method.cell_size
             elif self.diff_method.estimation_params == "angle, range":
                 return {"angle_cell_size": self.diff_method.cell_size_angle,

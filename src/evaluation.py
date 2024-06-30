@@ -27,28 +27,24 @@ evaluate: Wrapper function for model and algorithm evaluations.
 
 
 """
+# Imports
 import os
 import time
-import warnings
-
 import numpy as np
 import torch.linalg
-# Imports
 import torch.nn as nn
-from src.utils import *
+from pathlib import Path
 
-from src.criterions import RMSPELoss, MSPELoss, RMSELoss, CartesianLoss
-from src.criterions import RMSPE, MSPE
-# import methods
+# Internal imports
+from src.utils import *
+from src.criterions import (RMSPELoss, MSPELoss, RMSELoss, CartesianLoss, RMSPE, MSPE)
 from src.methods import MVDR
 from src.methods_pack.music import MUSIC
 from src.methods_pack.root_music import RootMusic
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
-# import models
 from src.models import (ModelGenerator, SubspaceNet, CascadedSubspaceNet, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
-
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel, SystemModelParams
 
@@ -84,7 +80,7 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
         .set_model()
     )
     model = model_config.model
-    path = os.path.join(os.getcwd(), "data", "weights", "final_models", model.get_model_file_name())
+    path = os.path.join(Path(__file__).parent.parent, "data", "weights", "final_models", model.get_model_file_name())
     try:
         model.load_state_dict(torch.load(path))
     except FileNotFoundError as e:
@@ -93,13 +89,13 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
         print("####################################")
         try:
             print(f"Model {model_name} not found in final_models, trying to load from temp weights.")
-            path = os.path.join(os.getcwd(), "data", "weights", model.get_model_file_name())
+            path = os.path.join(Path(__file__).parent.parent, "data", "weights", model.get_model_file_name())
             model.load_state_dict(torch.load(path))
         except FileNotFoundError as e:
             print("####################################")
             print(e)
             print("####################################")
-            print(f"Model {model_name} not found")
+            warnings.warn(f"get_model: Model {model_name} not found")
     return model.to(device)
 
 

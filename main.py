@@ -33,15 +33,15 @@ plt.close("all")
 
 scenario_dict = {
     "coherent": [10],
-    "non-coherent": [],
+    "non-coherent": [10],
 }
 
 system_model_params = {
-    "N": 15,                                    # number of antennas
-    "M": None,                                     # number of sources
+    "N": 7,                                    # number of antennas
+    "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
-    "field_type": "Near",                       # Near, Far
+    "field_type": "Far",                       # Near, Far
     "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
     "eta": 0,                                   # steering vector error
     "bias": 0,
@@ -52,7 +52,7 @@ model_config = {
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
+    model_config["model_params"]["diff_method"] = "music_1D"  # esprit, music_1D, music_2D
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Far"     # Near, Far
 
@@ -63,11 +63,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 1024 * 8,
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 150,
+    "epochs": 50,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -113,8 +113,8 @@ evaluation_params = {
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": False,
-    "LOAD_MODEL": True,
+    "CREATE_DATA": True,
+    "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
     "SAVE_MODEL": True,
     "EVALUATE_MODE": True,

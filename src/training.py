@@ -30,11 +30,7 @@ None
 import warnings
 
 # Imports
-import torch
-import numpy as np
 import matplotlib.pyplot as plt
-import torch.nn as nn
-import time
 import copy
 from pathlib import Path
 import torch.optim as optim
@@ -43,6 +39,7 @@ from torch.autograd import Variable
 from tqdm import tqdm
 from torch.optim import lr_scheduler
 from sklearn.model_selection import train_test_split
+# internal imports
 from src.utils import *
 from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams

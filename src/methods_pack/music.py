@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -31,6 +33,8 @@ class MUSIC(SubspaceMethod):
         self.__define_grid_params()
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.2)
+        elif self.estimation_params == "angle":
+            self.cell_size = int(self.angels.shape[0] * 0.05)
         elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.2)
             self.cell_size_distance = int(self.distances.shape[0] * 0.2)
@@ -112,6 +116,11 @@ class MUSIC(SubspaceMethod):
                 self.cell_size_distance = int(0.95 * self.cell_size_distance)
                 if self.cell_size_distance % 2 == 0:
                     self.cell_size_distance -= 1
+        elif self.estimation_params == "angle":
+            if self.cell_size > 1:
+                self.cell_size = int(0.95 * self.cell_size)
+                if self.cell_size % 2 == 0:
+                    self.cell_size -= 1
 
     def get_inverse_spectrum(self, noise_subspace: torch.Tensor):
         """
@@ -253,35 +262,41 @@ class MUSIC(SubspaceMethod):
                 return self._maskpeak_1D(self.distances, source_number)
 
     def _maskpeak_1D(self, search_space, source_number: int = None):
-        flag = True
-        if flag:
+        if source_number is None:
+            source_number = self.system_model.params.M
+        if self.estimation_params == "range":
+            source_number = 1 # for the range estimation, only one source is expected.
 
-            # top_indxs = torch.topk(self.music_spectrum, 1, dim=1)[1]
-            peaks = torch.zeros(self.music_spectrum.shape[0], 1).to(torch.int64)
-            for batch in range(peaks.shape[0]):
-                music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
-                # Find spectrum peaks
-                peaks_tmp = list(sc.signal.find_peaks(music_spectrum)[0])
-                # Sort the peak by their amplitude
-                peaks_tmp.sort(key=lambda x: music_spectrum[x], reverse=True)
-                if len(peaks_tmp) == 0:
-                    peaks_tmp = torch.randint(self.distances.shape[0], (1,))
+        batch_size = self.music_spectrum.shape[0]
+        soft_decision = torch.zeros(batch_size, source_number, dtype=torch.float64, device=device)
+        peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=device)
+        for batch in range(batch_size):
+            music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
+            # Find spectrum peaks
+            peaks_tmp = sc.signal.find_peaks(music_spectrum)[0]
+            if len(peaks_tmp) < source_number:
+                warnings.warn(f"MUSIC._maskpeak_1D: No peaks were found!")
+                if self.estimation_params == "range":
+                    random_peaks = np.random.randint(0, self.distances.shape[0], (source_number - peaks_tmp.shape[0],))
                 else:
-                    peaks_tmp = peaks_tmp[0]
-                peaks[batch] = peaks_tmp
-            top_indxs = peaks.to(device)
-            cell_idx = (top_indxs - self.cell_size + torch.arange(2 * self.cell_size + 1, dtype=torch.long,
-                                                                  device=device))
+                    random_peaks = np.random.randint(0, self.angels.shape[0], (source_number - peaks_tmp.shape[0],))
+                peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
+            # Sort the peak by their amplitude
+            sorted_peaks = peaks_tmp[np.argsort(music_spectrum[peaks_tmp])[::-1]]
+            peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(device)
+        top_indxs = peaks.to(device)
+        for source in range(source_number):
+            cell_idx = (top_indxs[:, source][:, None]
+                        - self.cell_size
+                        + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
             cell_idx %= self.music_spectrum.shape[1]
-            # if False:
-            #     for batch in range(self.music_spectrum.shape[0]):
-            #         cell_idx[batch][cell_idx[batch] < 0] = top_indxs[batch]
-            cell_idx = cell_idx.unsqueeze(-1)
+            cell_idx = cell_idx.reshape(batch_size, -1, 1)
             metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx).requires_grad_(True)
             soft_max = torch.softmax(metrix_thr, dim=1)
-            soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max).to(device)
-        else:
-            soft_decision = self.filter(self.music_spectrum, search_space)
+            soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx], soft_max).to(device)
+        # metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx).requires_grad_(True)
+        # soft_max = torch.softmax(metrix_thr, dim=1)
+        # soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max).to(device)
 
         return soft_decision
 
@@ -291,11 +306,11 @@ class MUSIC(SubspaceMethod):
         batch_size = self.music_spectrum.shape[0]
         soft_row = torch.zeros((batch_size, source_number), device=device)
         soft_col = torch.zeros((batch_size, source_number), device=device)
-        max_row = torch.zeros((self.music_spectrum.shape[0], source_number)
+        max_row = torch.zeros((batch_size, source_number)
                               , dtype=torch.int64, device=device)
-        max_col = torch.zeros((self.music_spectrum.shape[0], source_number)
+        max_col = torch.zeros((batch_size, source_number)
                               , dtype=torch.int64, device=device)
-        for batch in range(self.music_spectrum.shape[0]):
+        for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].detach().cpu().numpy().squeeze()
             # Flatten the spectrum
             spectrum_flatten = music_spectrum.flatten()
