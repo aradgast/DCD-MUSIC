@@ -440,10 +440,15 @@ def evaluate_model_based(
             crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
             return crb
     model_based = get_model_based_method(algorithm, system_model)
+    if isinstance(model_based, nn.Module):
+        model_based = model_based.to(device)
+        # Set model to eval mode
+        model_based.eval()
     for i, data in enumerate(dataset):
         x, sources_num, label, masks = data
         if x.dim() == 2:
             x = x.unsqueeze(0)
+        x = x.to(device)
         if max(sources_num) * 2 == label.shape[1]:
             angles, ranges = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(device)

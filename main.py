@@ -33,11 +33,11 @@ plt.close("all")
 
 scenario_dict = {
     "coherent": [10],
-    "non-coherent": [10],
+    "non-coherent": [],
 }
 
 system_model_params = {
-    "N": 7,                                    # number of antennas
+    "N": 15,                                    # number of antennas
     "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
@@ -63,7 +63,7 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024 * 8,
+    "samples_size": 1024,
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
@@ -85,9 +85,9 @@ evaluation_params = {
     "balance_factor": training_params["balance_factor"],
     "models": {
                 # "CascadedSubspaceNet": {"tau": 8},
-                "SubspaceNet": {"tau": 8,
-                                "diff_method": "esprit",
-                                "field_type": "Far"},
+                # "SubspaceNet": {"tau": 8,
+                #                 "diff_method": "esprit",
+                #                 "field_type": "Far"},
                 # "TransMUSIC": {},
             },
     "augmented_methods": [
@@ -113,10 +113,10 @@ evaluation_params = {
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": True,
+    "CREATE_DATA": False,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }
