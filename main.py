@@ -41,7 +41,7 @@ system_model_params = {
     "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
-    "field_type": "Far",                       # Near, Far
+    "field_type": "Near",                       # Near, Far
     "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
     "eta": 0,                                   # steering vector error
     "bias": 0,
@@ -86,8 +86,8 @@ evaluation_params = {
     "models": {
                 # "CascadedSubspaceNet": {"tau": 8},
                 # "SubspaceNet": {"tau": 8,
-                #                 "diff_method": "esprit",
-                #                 "field_type": "Far"},
+                #                 "diff_method": "music_2D",
+                #                 "field_type": "Near"},
                 # "TransMUSIC": {},
             },
     "augmented_methods": [

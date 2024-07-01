@@ -34,7 +34,7 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.2)
         elif self.estimation_params == "angle":
-            self.cell_size = int(self.angels.shape[0] * 0.05)
+            self.cell_size = int(self.angels.shape[0] * 0.07)
         elif self.estimation_params == "angle, range":
             self.cell_size_angle = int(self.angels.shape[0] * 0.2)
             self.cell_size_distance = int(self.distances.shape[0] * 0.2)
@@ -44,14 +44,15 @@ class MUSIC(SubspaceMethod):
         if self.system_model.params.field_type.startswith("Near"):
             if self.angels is not None and self.distances is not None:
                 self.set_search_grid()
-            elif self.angels is not None: # Near field case with Far field inference
+            elif self.angels is not None:  # Near field case with Far field inference
                 self.__set_search_grid_far_field()
         else:
             self.set_search_grid()
         self.noise_subspace = None
         # self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
 
-    def forward(self, cov: torch.Tensor, number_of_sources:int, known_angles=None, known_distances=None, is_soft: bool = True):
+    def forward(self, cov: torch.Tensor, number_of_sources: int, known_angles=None, known_distances=None,
+                is_soft: bool = True):
         """
 
         Parameters
@@ -79,9 +80,10 @@ class MUSIC(SubspaceMethod):
             else:
                 params = torch.zeros((cov.shape[0], M), dtype=torch.float64, device=device)
                 for source in range(M):
-                    params_source, _, _ = self.forward(cov, number_of_sources=M,known_angles=known_angles[:, source][:, None],
-                                                 is_soft=is_soft)
-                    params[:, source] = params_source.squeeze().requires_grad_(True)
+                    params_source, _, _ = self.forward(cov, number_of_sources=M,
+                                                       known_angles=known_angles[:, source][:, None],
+                                                       is_soft=is_soft)
+                    params[:, source] = params_source.squeeze()
                 return params
         _, Un, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), M)
         # self.noise_subspace = Un.cpu().detach().numpy()
@@ -91,7 +93,7 @@ class MUSIC(SubspaceMethod):
         # self.music_spectrum = torch.div(self.music_spectrum, torch.max(torch.max(self.music_spectrum, dim=2).values, dim=1).values.unsqueeze(1).unsqueeze(2))
         # self.music_spectrum = torch.pow(self.music_spectrum, 5)
         #####
-        params = self.peak_finder(is_soft, M)
+        params = self.peak_finder(M)
 
         return params, source_estimation, eigen_regularization
 
@@ -161,7 +163,7 @@ class MUSIC(SubspaceMethod):
                 raise ValueError("unknown estimation param")
         return inverse_spectrum
 
-    def peak_finder(self, is_soft: bool, source_number: int = None):
+    def peak_finder(self, source_number: int = None):
         """
 
         Parameters
@@ -173,10 +175,15 @@ class MUSIC(SubspaceMethod):
         -------
         the predicted param(torch.Tensor) or params(tuple)
         """
-        if is_soft:
-            return self._maskpeak(source_number)
+        if self.system_model.params.field_type.startswith("Far"):
+            return self._peak_finder_1d(self.angels, source_number)
         else:
-            return self._peak_finder(source_number)
+            if self.estimation_params.startswith("angle, range"):
+                return self._peak_finder_2d(source_number)
+            elif self.estimation_params.endswith("angle"):
+                return self._peak_finder_1d(self.angels, source_number)
+            elif self.estimation_params.startswith("range"):
+                return self._peak_finder_1d(self.distances, source_number)
 
     def set_search_grid(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         if self.system_model.params.field_type.startswith("Far"):
@@ -240,36 +247,14 @@ class MUSIC(SubspaceMethod):
         else:
             self._plot_1d_spectrum(highlight_corrdinates, batch)
 
-    def _peak_finder(self, source_number: int = None):
-        if self.system_model.params.field_type.startswith("Far"):
-            return self._peak_finder_1D(self.angels, source_number)
-        else:
-            if self.estimation_params.startswith("angle, range"):
-                return self._peak_finder_2D(source_number)
-            elif self.estimation_params.endswith("angle"):
-                return self._peak_finder_1D(self.angels)
-            elif self.estimation_params.startswith("range"):
-                return self._peak_finder_1D(self.distances)
-
-    def _maskpeak(self, source_number: int = None):
-        if self.system_model.params.field_type.startswith("Far"):
-            return self._maskpeak_1D(self.angels, source_number)
-        else:
-            if self.estimation_params.startswith("angle, range"):
-                return self._maskpeak_2D(source_number)
-            elif self.estimation_params.endswith("angle"):
-                return self._maskpeak_1D(self.angels, source_number)
-            elif self.estimation_params.startswith("range"):
-                return self._maskpeak_1D(self.distances, source_number)
-
-    def _maskpeak_1D(self, search_space, source_number: int = None):
+    def _peak_finder_1d(self, search_space, source_number: int = None):
         if source_number is None:
             source_number = self.system_model.params.M
         if self.estimation_params == "range":
-            source_number = 1 # for the range estimation, only one source is expected.
+            source_number = 1  # for the range estimation, only one source is expected.
 
         batch_size = self.music_spectrum.shape[0]
-        soft_decision = torch.zeros(batch_size, source_number, dtype=torch.float64, device=device)
+
         peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=device)
         for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
@@ -285,31 +270,16 @@ class MUSIC(SubspaceMethod):
             # Sort the peak by their amplitude
             sorted_peaks = peaks_tmp[np.argsort(music_spectrum[peaks_tmp])[::-1]]
             peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(device)
-        if self.training:
-            top_indxs = peaks.to(device)
-            for source in range(source_number):
-                cell_idx = (top_indxs[:, source][:, None]
-                            - self.cell_size
-                            + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
-                cell_idx %= self.music_spectrum.shape[1]
-                cell_idx = cell_idx.reshape(batch_size, -1, 1)
-                metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx).requires_grad_(True)
-                soft_max = torch.softmax(metrix_thr, dim=1)
-                soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx], soft_max).to(device)
-            # metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1, cell_idx).requires_grad_(True)
-            # soft_max = torch.softmax(metrix_thr, dim=1)
-            # soft_decision = torch.einsum("bkm, bkm -> bm", search_space[cell_idx], soft_max).to(device)
-
-            return soft_decision
-        else:
+        if not self.training:
             return search_space[peaks]
+        else:
+            return self.__maskpeak_1d(peaks, search_space, source_number)
 
-    def _maskpeak_2D(self, source_number: int = None):
+    def _peak_finder_2d(self, source_number: int = None):
         if source_number is None:
             source_number = self.system_model.params.M
         batch_size = self.music_spectrum.shape[0]
-        soft_row = torch.zeros((batch_size, source_number), device=device)
-        soft_col = torch.zeros((batch_size, source_number), device=device)
+
         max_row = torch.zeros((batch_size, source_number)
                               , dtype=torch.int64, device=device)
         max_col = torch.zeros((batch_size, source_number)
@@ -328,84 +298,63 @@ class MUSIC(SubspaceMethod):
                 original_idx = keep_far_enough_points(original_idx, source_number, 30)
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
-        if self.training:
-            for source in range(source_number):
-                max_row_cell_idx = (max_row[:, source][:, None]
-                                    - self.cell_size_angle
-                                    + torch.arange(2 * self.cell_size_angle + 1, dtype=torch.int32, device=device))
-                max_row_cell_idx %= self.music_spectrum.shape[1]
-                max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
-
-                max_col_cell_idx = (max_col[:, source][:, None]
-                                    - self.cell_size_distance
-                                    + torch.arange(2 * self.cell_size_distance + 1, dtype=torch.int32, device=device))
-                max_col_cell_idx %= self.music_spectrum.shape[2]
-                max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
-
-                metrix_thr = self.music_spectrum.gather(1, max_row_cell_idx.expand(-1, -1, self.music_spectrum.shape[2]))
-                metrix_thr = metrix_thr.gather(2, max_col_cell_idx.repeat(1, max_row_cell_idx.shape[-2], 1))
-                soft_max = torch.softmax(metrix_thr.view(batch_size, -1), dim=1).reshape(metrix_thr.shape)
-                soft_row[:, source][:, None] = torch.einsum("bla, bad -> bl",
-                                                            self.angels[max_row_cell_idx].transpose(1, 2),
-                                                            torch.sum(soft_max, dim=2).unsqueeze(-1))
-                soft_col[:, source][:, None] = torch.einsum("bmc, bcm -> bm",
-                                                            self.distances[max_col_cell_idx],
-                                                            torch.sum(soft_max, dim=1).unsqueeze(-1))
-
-            return soft_row, soft_col
-        else:
+        if not self.training:
             angles_pred = self.angels[max_row]
             distances_pred = self.distances[max_col]
             return angles_pred, distances_pred
+        else:
+            return self.__maskpeak_2d(max_row, max_col, source_number)
 
-    def _peak_finder_1D(self, search_space, source_num: int = None):
-        if source_num is None:
-            source_num = self.system_model.params.M
-        predict_param = torch.zeros(self.music_spectrum.shape[0], source_num, device=device)
-        for batch in range(self.music_spectrum.shape[0]):
-            music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
-            # Find spectrum peaks
-            peaks = list(sc.signal.find_peaks(music_spectrum)[0])
-            # Sort the peak by their amplitude
-            peaks.sort(key=lambda x: music_spectrum[x], reverse=True)
-            tmp = search_space[peaks[0:1]]
-            if tmp.nelement() == 0:
-                rand_idx = torch.randint(self.distances.shape[0], (1,))
-                tmp = self.distances[rand_idx]
-                # tmp = self._maskpeak_1D(search_space)
-                # print("_peak_finder_1D: No peaks were found!")
-            else:
-                pass
-            predict_param[batch] = tmp
+    def __maskpeak_1d(self, peaks, search_space, source_number: int = None):
 
-        return torch.Tensor(predict_param)
+        batch_size = self.music_spectrum.shape[0]
+        soft_decision = torch.zeros(batch_size, source_number, dtype=torch.float64, device=device)
+        top_indxs = peaks.to(device)
 
-    def _peak_finder_2D(self, source_num: int = None):
-        if source_num is None:
-            source_num = self.system_model.params.M
-        predict_theta = np.zeros((self.music_spectrum.shape[0], source_num)
-                                 , dtype=np.float64)
-        predict_dist = np.zeros((self.music_spectrum.shape[0], source_num)
-                                , dtype=np.float64)
-        angels = self.angels.cpu().detach().numpy()
-        distances = self.distances.cpu().detach().numpy()
-        for batch in range(self.music_spectrum.shape[0]):
-            music_spectrum = self.music_spectrum[batch].detach().cpu().numpy().squeeze()
-            # Flatten the spectrum
-            spectrum_flatten = music_spectrum.flatten()
-            # Find spectrum peaks
-            peaks = list(sc.signal.find_peaks(spectrum_flatten)[0])
-            # Sort the peak by their amplitude
-            peaks.sort(key=lambda x: spectrum_flatten[x], reverse=True)
-            # convert the peaks to 2d indices
-            original_idx = np.array(np.unravel_index(peaks, music_spectrum.shape))
-            if source_num > 1:
-                original_idx = keep_far_enough_points(original_idx, source_num, 30)
-            original_idx = original_idx[:, 0:source_num]
-            predict_theta[batch] = angels[original_idx[0]]
-            predict_dist[batch] = distances[original_idx[1]]
+        for source in range(source_number):
+            cell_idx = (top_indxs[:, source][:, None]
+                        - self.cell_size
+                        + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
+            cell_idx %= self.music_spectrum.shape[1]
+            cell_idx = cell_idx.reshape(batch_size, -1, 1)
+            metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1,
+                                      cell_idx).requires_grad_(True)
+            soft_max = torch.softmax(metrix_thr, dim=1)
+            soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx], soft_max).to(
+                device)
 
-        return torch.from_numpy(predict_theta).to(device), torch.from_numpy(predict_dist).to(device)
+        return soft_decision
+
+    def __maskpeak_2d(self, peaks_r, peaks_c, source_number):
+        batch_size = self.music_spectrum.shape[0]
+        soft_row = torch.zeros((batch_size, source_number), device=device)
+        soft_col = torch.zeros((batch_size, source_number), device=device)
+
+        for source in range(source_number):
+            max_row_cell_idx = (peaks_r[:, source][:, None]
+                                - self.cell_size_angle
+                                + torch.arange(2 * self.cell_size_angle + 1, dtype=torch.int32, device=device))
+            max_row_cell_idx %= self.music_spectrum.shape[1]
+            max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
+
+            max_col_cell_idx = (peaks_c[:, source][:, None]
+                                - self.cell_size_distance
+                                + torch.arange(2 * self.cell_size_distance + 1, dtype=torch.int32, device=device))
+            max_col_cell_idx %= self.music_spectrum.shape[2]
+            max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
+
+            metrix_thr = self.music_spectrum.gather(1,
+                                                    max_row_cell_idx.expand(-1, -1, self.music_spectrum.shape[2]))
+            metrix_thr = metrix_thr.gather(2, max_col_cell_idx.repeat(1, max_row_cell_idx.shape[-2], 1))
+            soft_max = torch.softmax(metrix_thr.view(batch_size, -1), dim=1).reshape(metrix_thr.shape)
+            soft_row[:, source][:, None] = torch.einsum("bla, bad -> bl",
+                                                        self.angels[max_row_cell_idx].transpose(1, 2),
+                                                        torch.sum(soft_max, dim=2).unsqueeze(-1))
+            soft_col[:, source][:, None] = torch.einsum("bmc, bcm -> bm",
+                                                        self.distances[max_col_cell_idx],
+                                                        torch.sum(soft_max, dim=1).unsqueeze(-1))
+
+        return soft_row, soft_col
 
     def _init_spectrum(self, batch_size):
         if self.system_model.params.field_type == "Far":
@@ -434,9 +383,6 @@ class MUSIC(SubspaceMethod):
             if self.estimation_params.endswith("range"):
                 self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .5, device=device,
                                               dtype=torch.float64).requires_grad_(True)
-            # else:
-            #     raise ValueError(f"estimation_parameter allowed values are [(angle), (range), (angle, range)],"
-            #                      f" got {self.estimation_params}")
         else:
             raise ValueError(f"Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
