@@ -32,6 +32,9 @@ import warnings
 R2D = 180 / np.pi
 D2R = 1 / R2D
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+MARKER_DICT = {0: "o", 1: "v", 2: "*", 3: "s", 4: "p", 5: ">", 6: "1", 7: "2",
+               8: "3", 9: "4", 10: "8", 11: "s", 12: "p", 13: "P", 14: "*", 15: "h",
+               16: "H", 17: "+", 18: "x", 19: "X", 20: "D", 21: "d", 22: "|", 23: "_"}
 # device = "cpu"
 print("Running on device: ", device)
 

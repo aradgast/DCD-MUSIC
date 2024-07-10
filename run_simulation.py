@@ -285,7 +285,7 @@ def __run_simulation(**kwargs):
                     # plt.figure()
                     if isinstance(criterion, RMSPELoss):
                         if "Distance" in snr_dict[list(snr_dict.keys())[0]].keys():
-                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 10))
                             snr_values = snr_dict.keys()
                             plt_res = {}
                             for snr, results in snr_dict.items():
@@ -310,13 +310,15 @@ def __run_simulation(**kwargs):
                                 suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
                             suptitle += f"{signal_nature} sources results"
                             fig.suptitle(suptitle)
+                            idx = 0
                             for method, loss_ in plt_res.items():
                                 if method == "CRB":
                                     line_style = "-."
                                 else:
                                     line_style = None
-                                ax1.plot(snr_values, loss_["Angle"], label=method, linestyle=line_style)
-                                ax2.plot(snr_values, loss_["Distance"], label=method, linestyle=line_style)
+                                ax1.plot(snr_values, loss_["Angle"], label=method, linestyle=line_style, marker=MARKER_DICT[idx])
+                                ax2.plot(snr_values, loss_["Distance"], label=method, linestyle=line_style, marker=MARKER_DICT[idx])
+                                idx += 1
                             ax1.legend()
                             ax2.legend()
                             ax1.grid()
@@ -335,10 +337,12 @@ def __run_simulation(**kwargs):
                                                      f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
                             fig.show()
                             if plt_acc:
-                                fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                                fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                                idx = 0
                                 for method, loss_ in plt_res.items():
                                     if loss_.get("Accuracy") is not None:
-                                        ax.plot(snr_values, loss_["Accuracy"], label=method, linestyle=line_style)
+                                        ax.plot(snr_values, loss_["Accuracy"], label=method, linestyle=line_style, marker=MARKER_DICT[idx])
+                                        idx += 1
                                 ax.legend()
                                 ax.grid()
                                 ax.set_xlabel("SNR [dB]")
@@ -351,7 +355,7 @@ def __run_simulation(**kwargs):
                                                          f"summary_acc_{signal_nature}_sources_results_{dt_string_for_save}.png"))
                                 fig.show()
                         else: #FAR
-                            fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                            fig, ax = plt.subplots(1, 1, figsize=(10, 10))
                             snr_values = snr_dict.keys()
                             plt_res = {}
                             for snr, results in snr_dict.items():
@@ -370,8 +374,10 @@ def __run_simulation(**kwargs):
                                 suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
                             suptitle += f"{signal_nature} sources results"
                             fig.suptitle(suptitle)
+                            idx = 0
                             for method, loss_ in plt_res.items():
-                                ax.plot(snr_values, loss_["Overall"], label=method)
+                                ax.plot(snr_values, loss_["Overall"], label=method, marker=MARKER_DICT[idx])
+                                idx += 1
                             ax.legend()
                             ax.grid()
                             ax.set_xlabel("SNR [dB]")
@@ -384,10 +390,11 @@ def __run_simulation(**kwargs):
                                                      f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
                             fig.show()
                             if plt_acc:
-                                fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                                fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                                idx = 0
                                 for method, loss_ in plt_res.items():
                                     if loss_.get("Accuracy") is not None:
-                                        ax.plot(snr_values, loss_["Accuracy"], label=method)
+                                        ax.plot(snr_values, loss_["Accuracy"], label=method, marker=MARKER_DICT[idx])
                                 ax.legend()
                                 ax.grid()
                                 ax.set_xlabel("SNR [dB]")
@@ -401,7 +408,7 @@ def __run_simulation(**kwargs):
                                 fig.show()
 
                     elif isinstance(criterion, CartesianLoss):
-                        fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
                         snr_values = snr_dict.keys()
                         plt_res = {}
                         for snr, results in snr_dict.items():
@@ -420,17 +427,20 @@ def __run_simulation(**kwargs):
                             suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
                         suptitle += f"{signal_nature} sources results"
                         fig.suptitle(suptitle)
+                        idx = 0
                         for method, loss_ in plt_res.items():
                             if method == "CRB":
-                                line_style = "-."
+                                line_style = "dashdot"
                             else:
-                                line_style = None
+                                line_style = "-"
                             if loss_.get("Accuracy") is not None:
                                 label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
                             else:
                                 label = method
                             if not np.isnan((loss_.get("Overall"))).any():
-                                ax.plot(snr_values, loss_["Overall"], label=label, linestyle=line_style)
+                                ax.plot(snr_values, loss_["Overall"], label=label, linestyle=line_style,
+                                        marker=MARKER_DICT[idx], markersize=10)
+                                idx += 1
                         ax.legend()
                         ax.grid()
                         ax.set_xlabel("SNR [dB]")
@@ -443,10 +453,12 @@ def __run_simulation(**kwargs):
                                                  f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
                         fig.show()
                         if plt_acc:
-                            fig, ax = plt.subplots(1, 1, figsize=(15, 5))
+                            fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                            idx = 0
                             for method, loss_ in plt_res.items():
                                 if loss_.get("Accuracy") is not None:
-                                    ax.plot(snr_values, np.array(loss_["Accuracy"]) * 100, label=method)
+                                    ax.plot(snr_values, np.array(loss_["Accuracy"]) * 100, label=method, marker=MARKER_DICT[idx])
+                                    idx += 1
                             ax.legend()
                             ax.grid()
                             ax.set_xlabel("SNR [dB]")

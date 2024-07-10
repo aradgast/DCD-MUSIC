@@ -31,13 +31,8 @@ class MUSIC(SubspaceMethod):
         self.search_grid = None
         self.music_spectrum = None
         self.__define_grid_params()
-        if self.estimation_params == "range":
-            self.cell_size = int(self.distances.shape[0] * 0.2)
-        elif self.estimation_params == "angle":
-            self.cell_size = int(self.angels.shape[0] * 0.07)
-        elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.2)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.2)
+        self.__init_cells()
+
 
         self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
@@ -370,14 +365,14 @@ class MUSIC(SubspaceMethod):
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720, device=device,
+            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 1440, device=device,
                                        dtype=torch.float64).requires_grad_(True).to(torch.float64)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720,
+                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360,
                                            device=device).to(torch.float64)
                 # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
             if self.estimation_params.endswith("range"):
@@ -386,6 +381,30 @@ class MUSIC(SubspaceMethod):
         else:
             raise ValueError(f"Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
+
+    def __init_cells(self):
+        self.cell_size = None
+        self.cell_size_angle = None
+        self.cell_size_distance = None
+        if self.estimation_params == "range":
+            self.cell_size = int(self.distances.shape[0] * 0.2)
+        elif self.estimation_params == "angle":
+            self.cell_size = int(self.angels.shape[0] * 0.3)
+        elif self.estimation_params == "angle, range":
+            self.cell_size_angle = int(self.angels.shape[0] * 0.2)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.2)
+
+        if self.cell_size is not None:
+            if self.cell_size % 2 == 0:
+                self.cell_size += 1
+        if self.cell_size_angle is not None:
+            if self.cell_size_angle % 2 == 0:
+                self.cell_size_angle += 1
+        if self.cell_size_distance is not None:
+            if self.cell_size_distance % 2 == 0:
+                self.cell_size_distance += 1
+
+
 
     def _plot_1d_spectrum(self, highlight_corrdinates, batch):
         if self.estimation_params == "angle":
