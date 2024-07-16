@@ -32,13 +32,13 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [-10, -5, 0, 5, 10],
-    "non-coherent": [],
+    "coherent": [],
+    "non-coherent": [10],
 }
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": None,                                     # number of sources
+    "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": None,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -52,7 +52,7 @@ model_config = {
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_1D"  # esprit, music_1D, music_2D
+    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Far"     # Near, Far
 
@@ -63,13 +63,13 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 100,
     "train_test_ratio": 1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 50,
+    "epochs": 100,
     "optimizer": "Adam",                        # Adam, SGD
-    "learning_rate": 0.0001,
+    "learning_rate": 0.001,
     "weight_decay": 1e-9,
     "step_size": 70,
     "gamma": 0.5,
@@ -81,14 +81,14 @@ training_params = {
     "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
-    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": training_params["balance_factor"],
     "models": {
                 "CascadedSubspaceNet": {"tau": 8},
                 # "SubspaceNet": {"tau": 8,
                 #                 "diff_method": "music_2D",
                 #                 "field_type": "Near"},
-                "TransMUSIC": {},
+                # "TransMUSIC": {},
             },
     "augmented_methods": [
         # "mvdr",
@@ -106,19 +106,19 @@ evaluation_params = {
         # "sps_esprit",
         # "sps_music_1d"
         # "bb-music",
-        "music_2D",
-        "sps_music_2D",
-        "CRB"
+        # "music_2D",
+        # "sps_music_2D",
+        # "CRB"
     ]
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": False,
+    "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
-    "PLOT_RESULTS": True
+    "PLOT_RESULTS": False
 }
 
 def parse_arguments():

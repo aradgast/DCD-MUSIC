@@ -104,6 +104,8 @@ class Samples(SystemModel):
         def choose_distances(M, distance_min_gap: float = 0.5, distance_max_gap: int = 10,
                              min_val: float = 2, max_val: int = 7) -> np.ndarray:
 
+            # distances = np.round(np.random.uniform(max_val, max_val, M), decimals=0)  # TODO
+
             distances = np.zeros(M)
             idx = 0
             while idx < M:
@@ -119,7 +121,7 @@ class Samples(SystemModel):
             return distances
 
         if distance is None:
-            self.distances = choose_distances(M, min_val=self.fresnel, max_val=self.fraunhofer*0.4,
+            self.distances = choose_distances(M, min_val=self.fresnel, max_val=self.fraunhofer*0.5,
                                               distance_min_gap=0.5, distance_max_gap=self.fraunhofer)
         else:
             self.distances = distance

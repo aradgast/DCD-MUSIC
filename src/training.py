@@ -446,7 +446,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model.train()
         train_length = 0
         # eigen regularization weight
-        eigen_regularization_weight = training_params.learning_rate * 1
+        eigen_regularization_weight = training_params.learning_rate * 1000
 
         for data in tqdm(training_params.train_dataset):
             x, sources_num, label, masks = data #TODO

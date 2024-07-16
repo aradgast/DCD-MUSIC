@@ -1,5 +1,5 @@
-import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 from src.utils import *
 from src.system_model import SystemModel
@@ -13,7 +13,8 @@ class SubspaceMethod(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(SubspaceMethod, self).__init__()
         self.system_model = system_model
-        self.eigen_threshold = nn.Parameter(torch.tensor(.5), requires_grad=False)
+        self.eigen_threshold = nn.Parameter(torch.tensor(.5, requires_grad=False))
+        self.normalized_eigenvals = None
 
     def subspace_separation(self,
                             covariance: torch.Tensor,
@@ -36,10 +37,10 @@ class SubspaceMethod(nn.Module):
                                          sorted_idx.unsqueeze(-1).expand(-1, -1, covariance.shape[-1]).transpose(1, 2))
         # number of sources estimation
         real_sorted_eigenvals = torch.gather(torch.real(eigenvalues), 1, sorted_idx)
-        normalized_eigen = real_sorted_eigenvals / real_sorted_eigenvals[:, 0][:, None]
+        self.normalized_eigen = real_sorted_eigenvals / real_sorted_eigenvals[:, 0][:, None]
         source_estimation = torch.linalg.norm(
             nn.functional.relu(
-                normalized_eigen - self.eigen_threshold * torch.ones_like(normalized_eigen)),
+                self.normalized_eigen - self.__get_eigen_threshold() * torch.ones_like(self.normalized_eigen)),
             dim=1, ord=0)
         if number_of_sources is None:
             warnings.warn("Number of sources is not defined, using the number of sources estimation.")
@@ -50,13 +51,13 @@ class SubspaceMethod(nn.Module):
             noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
         if eigen_regularization:
-            l_eig = self.eigen_regularization(normalized_eigen, number_of_sources)
+            l_eig = self.eigen_regularization(number_of_sources)
         else:
             l_eig = None
 
         return signal_subspace.to(device), noise_subspace.to(device), source_estimation, l_eig
 
-    def eigen_regularization(self, normalized_eigenvalues: torch.Tensor, number_of_sources: int):
+    def eigen_regularization(self, number_of_sources: int):
         """
 
         Args:
@@ -66,11 +67,24 @@ class SubspaceMethod(nn.Module):
         Returns:
 
         """
-        l_eig = (normalized_eigenvalues[:, number_of_sources - 1] - self.eigen_threshold) * \
-                (normalized_eigenvalues[:, number_of_sources] - self.eigen_threshold)
+        # l_eig = (self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) * \
+        #         (self.normalized_eigen[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
+        l_eig = -(self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) + \
+                (self.normalized_eigen[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
         l_eig = torch.sum(l_eig)
         # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
         return l_eig
+
+    def __get_eigen_threshold(self, level: str = None):
+        if self.training:
+            if level is None:
+                return self.eigen_threshold
+            elif level == "high":
+                return self.eigen_threshold + 0.4
+            elif level == "low":
+                return self.eigen_threshold - 0.4
+        else:
+            return self.eigen_threshold - 0.3
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":
@@ -132,3 +146,22 @@ class SubspaceMethod(nn.Module):
             Rx_smoothed += sub_covariance.to(device) / number_of_sub_arrays
         # Divide overall matrix by the number of sources
         return Rx_smoothed
+
+    def plot_eigen_spectrum(self, batch_idx: int=0):
+        """
+        Plot the eigenvalues spectrum.
+
+        Args:
+        -----
+            batch_idx (int): Index of the batch to plot.
+        """
+        plt.figure()
+        plt.stem(self.normalized_eigen[batch_idx].cpu().detach().numpy(), label="Normalized Eigenvalues")
+        # ADD threshold line
+        plt.axhline(y=self.__get_eigen_threshold(), color='r', linestyle='--', label="Threshold")
+        plt.title("Eigenvalues Spectrum")
+        plt.xlabel("Eigenvalue Index")
+        plt.ylabel("Eigenvalue")
+        plt.legend()
+        plt.grid()
+        plt.show()
