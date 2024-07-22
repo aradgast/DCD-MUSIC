@@ -18,6 +18,7 @@ import math
 from src.system_model import SystemModel
 from src.utils import *
 from src.methods_pack.music import MUSIC
+from src.models_pack.parent_model import ParentModel
 
 
 class ShiftedReLU(nn.ReLU):
@@ -47,14 +48,13 @@ class PositionalEncoding(nn.Module):
         return x
 
 
-class TransMUSIC(nn.Module):
+class TransMUSIC(ParentModel):
     """
 
     """
 
     def __init__(self, system_model: SystemModel = None, mode: str = "batch_norm"):
-        super(TransMUSIC, self).__init__()
-        self.system_model = system_model
+        super(TransMUSIC, self).__init__(system_model)
         self.params = self.system_model.params
         self.N = self.params.N
         self.estimation_params = None
@@ -91,13 +91,13 @@ class TransMUSIC(nn.Module):
 
         self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
         if self.estimation_params == "angle":
-            input_dim = self.music.angels.shape[0]
+            self.input_dim = self.music.angels.shape[0]
             if self.music.system_model.params.M is not None:
                 output_dim = self.music.system_model.params.M
             else:
                 output_dim = self.music.system_model.params.N - 1
         elif self.estimation_params == "angle, range":
-            input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
+            self.input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
             if self.music.system_model.params.M is not None:
                 output_dim = self.music.system_model.params.M * 2
             else:
@@ -109,7 +109,7 @@ class TransMUSIC(nn.Module):
             raise ValueError(f"TransMUSIC.__init__: unrecognized estimation parameter {self.estimation_params}")
         self.output = nn.Sequential(
 
-            nn.Linear(in_features=input_dim, out_features=self.N * 2),
+            nn.Linear(in_features=self.input_dim, out_features=self.N * 2),
             nn.ReLU(inplace=False),
             nn.Linear(in_features=self.N * 2, out_features=self.N * 2),
             nn.ReLU(inplace=False),
@@ -207,8 +207,6 @@ class TransMUSIC(nn.Module):
             f"{self.system_model.params.field_type}_field_" + \
             f"{self.system_model.params.signal_nature}"
 
-    def get_model_name(self):
-        return "TransMUSIC"
 
     def get_model_params(self):
-        return None
+        return f"in_dim={self.input_dim}"

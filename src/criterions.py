@@ -34,7 +34,7 @@ import torch
 from itertools import permutations
 from src.utils import *
 import time
-BALANCE_FACTOR = 0.6
+BALANCE_FACTOR = 1.0
 
 
 def add_line_to_file(file_name, line_to_add):
@@ -161,18 +161,20 @@ class RMSPELoss(nn.Module):
         err_angle -= torch.pi / 2
         rmspe_angle = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
         if distance is None:
-            rmspe = rmspe_angle
+            rmspe, min_idx = torch.min(rmspe_angle, dim=-1)
         else:
             err_distance = (distance_predictions[:, perm].to(device) - torch.tile(distance[:, None, :], (1, num_of_perm, 1)).to(device))
             rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
+            rmspe_angle, min_idx = torch.min(rmspe_angle, dim=-1)
+            # always consider the permutation which yields the minimal RMSPE over the angles.
+            rmspe_distance = torch.gather(rmspe_distance, 1, min_idx.unsqueeze(0)).squeeze()
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
-        rmspe, min_idx = torch.min(rmspe, dim=-1)
         result = torch.sum(rmspe)
         if distance is None:
             return result
         else:
-            result_angle = torch.sum(torch.gather(rmspe_angle, dim=1, index=min_idx[:, None]))
-            result_distance = torch.sum(torch.gather(rmspe_distance, dim=1, index=min_idx[:, None]))
+            result_angle = torch.sum(rmspe_angle)
+            result_distance = torch.sum(rmspe_distance)
             return result, result_angle, result_distance
 
             # rmspe = []

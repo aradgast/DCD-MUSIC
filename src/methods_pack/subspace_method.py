@@ -84,7 +84,7 @@ class SubspaceMethod(nn.Module):
             elif level == "low":
                 return self.eigen_threshold - 0.4
         else:
-            return self.eigen_threshold - 0.3
+            return self.eigen_threshold - 0.0
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

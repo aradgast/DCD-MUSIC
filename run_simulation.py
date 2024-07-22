@@ -278,6 +278,7 @@ def __run_simulation(**kwargs):
                     sys.stdout.close()
                     sys.stdout = orig_stdout
     if res is not None:
+        plt.rcParams.update({'font.size': 18})
         if SIMULATION_COMMANDS["PLOT_RESULTS"] == True:
             plt_acc = False
             for signal_nature, snr_dict in res.items():
@@ -413,6 +414,8 @@ def __run_simulation(**kwargs):
                         plt_res = {}
                         for snr, results in snr_dict.items():
                             for method, loss_ in results.items():
+                                if method == "CascadedSubspaceNet":
+                                    method = "DCD-MUSIC"
                                 if plt_res.get(method) is None:
                                     plt_res[method] = {"Overall": []}
                                 plt_res[method]["Overall"].append(loss_["Overall"])
@@ -426,7 +429,7 @@ def __run_simulation(**kwargs):
                         else:
                             suptitle = f"{SYSTEM_MODEL_PARAMS['M']} "
                         suptitle += f"{signal_nature} sources results"
-                        fig.suptitle(suptitle)
+                        # fig.suptitle(suptitle)
                         idx = 0
                         for method, loss_ in plt_res.items():
                             if method == "CRB":
@@ -438,26 +441,26 @@ def __run_simulation(**kwargs):
                             else:
                                 label = method
                             if not np.isnan((loss_.get("Overall"))).any():
-                                ax.plot(snr_values, loss_["Overall"], label=label, linestyle=line_style,
-                                        marker=MARKER_DICT[idx], markersize=10)
+                                ax.plot(snr_values, loss_["Overall"], **plot_styles[method], label=label)
                                 idx += 1
                         ax.legend()
                         ax.grid()
                         ax.set_xlabel("SNR [dB]")
                         ax.set_ylabel("RMSE [m]")
-                        ax.set_title("Overall RMSE - Cartesian Loss")
+                        # ax.set_title("Overall RMSE - Cartesian Loss")
                         ax.set_yscale("linear")
                         fig.savefig(os.path.join(simulations_path,
                                                  "results",
                                                  "plots",
-                                                 f"summary_{signal_nature}_sources_results_{dt_string_for_save}.png"))
+                                                 f"summary_{signal_nature}_sources_results_{dt_string_for_save}.pdf"),
+                                    transparent=True, bbox_inches='tight')
                         fig.show()
                         if plt_acc:
-                            fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                            fig, ax = plt.subplots(1, 1, figsize=(7, 7))
                             idx = 0
                             for method, loss_ in plt_res.items():
                                 if loss_.get("Accuracy") is not None:
-                                    ax.plot(snr_values, np.array(loss_["Accuracy"]) * 100, label=method, marker=MARKER_DICT[idx])
+                                    ax.plot(snr_values, np.array(loss_["Accuracy"]) * 100, **plot_styles[method], label=method)
                                     idx += 1
                             ax.legend()
                             ax.grid()
@@ -487,7 +490,7 @@ def __run_simulation(**kwargs):
                                 if key == "Accuracy":
                                     txt += f"{key}: {value * 100:.2f} %|"
                                 else:
-                                    txt += f"{key}: {value:.6f} |"
+                                    txt += f"{key}: {value:.6e} |"
 
                         print(txt)
         if save_to_file:

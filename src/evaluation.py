@@ -502,7 +502,7 @@ def evaluate_model_based(
             elif algorithm.startswith("music"):
                 # Conventional
                 Rx = model_based.pre_processing(x, mode="sample")
-            predictions = model_based(Rx, is_soft=False)
+            predictions = model_based(Rx, number_of_sources=sources_num, is_soft=False)
             # If the amount of predictions is less than the amount of sources
             # predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
@@ -514,18 +514,18 @@ def evaluate_model_based(
             # esprit = ESPRIT(system_model)
             if algorithm.startswith("sps"):
                 # Spatial smoothing
-                Rx = model_based.pre_processing(X, mode="sps")
+                Rx = model_based.pre_processing(x, mode="sps")
             else:
                 # Conventional
-                Rx = model_based.pre_processing(X, mode="sample")
-            predictions = model_based(Rx)
+                Rx = model_based.pre_processing(x, mode="sample")
+            predictions, sources_num_estimation, _ = model_based(Rx, sources_num=sources_num)
             # If the amount of predictions is less than the amount of sources
             # predictions = add_random_predictions(M, predictions, algorithm)
             # Calculate loss criterion
-            if doa.shape[1] != predictions.shape[1]:
-                y = doa[0]
-                doa, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
-            loss = criterion(predictions, doa)
+            # if angles.shape[1] != predictions.shape[1]:
+            #     y = angles[0]
+            #     angles, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
+            loss = criterion(predictions, angles)
             loss_list.append(loss)
 
         # MVDR algorithm

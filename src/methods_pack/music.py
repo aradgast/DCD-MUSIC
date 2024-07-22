@@ -1,5 +1,6 @@
 import warnings
 
+import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -254,13 +255,11 @@ class MUSIC(SubspaceMethod):
         for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
             # Find spectrum peaks
-            peaks_tmp = sc.signal.find_peaks(music_spectrum)[0]
+            peaks_tmp = sc.signal.find_peaks(music_spectrum, threshold=0.0)[0]
             if len(peaks_tmp) < source_number:
-                warnings.warn(f"MUSIC._maskpeak_1D: No peaks were found!")
-                if self.estimation_params == "range":
-                    random_peaks = np.random.randint(0, self.distances.shape[0], (source_number - peaks_tmp.shape[0],))
-                else:
-                    random_peaks = np.random.randint(0, self.angels.shape[0], (source_number - peaks_tmp.shape[0],))
+                warnings.warn(f"MUSIC._maskpeak_1D: No peaks were found! taking max values instead.")
+                # random_peaks = np.random.randint(0, search_space.shape[0], (source_number - peaks_tmp.shape[0],))
+                random_peaks = torch.topk(search_space, source_number - peaks_tmp.shape[0], largest=True).indices.cpu().detach().numpy()
                 peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
             # Sort the peak by their amplitude
             sorted_peaks = peaks_tmp[np.argsort(music_spectrum[peaks_tmp])[::-1]]

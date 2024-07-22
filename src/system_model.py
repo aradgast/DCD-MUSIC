@@ -166,6 +166,7 @@ class SystemModel(object):
         diemeter = (self.params.N - 1) * spacing
         fraunhofer = 2 * diemeter ** 2 / wavelength
         fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+        # fresnel = ((diemeter ** 4) / (8 * wavelength)) ** (1 / 3)
 
         return fraunhofer, fresnel
 
@@ -262,8 +263,6 @@ class SystemModel(object):
         """
         f_sv = {"NarrowBand": 1, "Broadband": f}
         # define uniform deviation in spacing (for each sensor)
-        if not nominal:
-            raise Exception("Currently support only nominal sensor array")
 
         theta = np.atleast_1d(theta)[:, np.newaxis]
         distance = np.atleast_1d(distance)[:, np.newaxis]
@@ -289,6 +288,11 @@ class SystemModel(object):
 
         # need to divide here by the wavelength, seems that for the narrowband scenario,
         # wavelength = 1.
+        if not nominal:
+            # Calculate additional steering vector noise
+            mis_geometry_noise = ((np.sqrt(2) / 2) * np.sqrt(self.params.sv_noise_var)
+                                  * (np.random.randn(*time_delay.shape) + 1j * np.random.randn(*time_delay.shape)))
+            return np.exp(2 * -1j * np.pi * time_delay) + mis_geometry_noise
         return np.exp(2 * -1j * np.pi * time_delay)
 
 

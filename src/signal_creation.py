@@ -104,24 +104,24 @@ class Samples(SystemModel):
         def choose_distances(M, distance_min_gap: float = 0.5, distance_max_gap: int = 10,
                              min_val: float = 2, max_val: int = 7) -> np.ndarray:
 
-            # distances = np.round(np.random.uniform(max_val, max_val, M), decimals=0)  # TODO
+            distances = np.round(np.random.uniform(min_val, max_val, M), decimals=0)  # TODO
 
-            distances = np.zeros(M)
-            idx = 0
-            while idx < M:
-                distance = np.round(np.random.uniform(min_val, max_val), decimals=0)
-                if len(distances) == 0:
-                    distances[idx] = distance
-                    idx += 1
-                else:
-                    if np.min(np.abs(np.array(distances) - distance)) >= distance_min_gap and \
-                            np.max(np.abs(np.array(distances) - distance)) <= distance_max_gap:
-                        distances[idx] = distance
-                        idx += 1
+            # distances = np.zeros(M)
+            # idx = 0
+            # while idx < M:
+            #     distance = np.round(np.random.uniform(min_val, max_val), decimals=0)
+            #     if len(distances) == 0:
+            #         distances[idx] = distance
+            #         idx += 1
+            #     else:
+            #         if np.min(np.abs(np.array(distances) - distance)) >= distance_min_gap and \
+            #                 np.max(np.abs(np.array(distances) - distance)) <= distance_max_gap:
+            #             distances[idx] = distance
+            #             idx += 1
             return distances
 
         if distance is None:
-            self.distances = choose_distances(M, min_val=self.fresnel, max_val=self.fraunhofer*0.5,
+            self.distances = choose_distances(M, min_val=self.fresnel, max_val=self.fraunhofer * 0.4,
                                               distance_min_gap=0.5, distance_max_gap=self.fraunhofer)
         else:
             self.distances = distance
@@ -162,7 +162,7 @@ class Samples(SystemModel):
                 A = np.array([self.steering_vec(theta) for theta in self.doa]).T
                 samples = (A @ signal) + noise
             elif self.params.field_type.startswith("Near"):
-                A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=True, generate_search_grid=False)
+                A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=False, generate_search_grid=False)
                 samples = (A @ signal) + noise
             else:
                 raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")

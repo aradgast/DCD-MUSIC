@@ -85,18 +85,5 @@ class CascadedSubspaceNet(SubspaceNet):
             # angles = torch.sort(angles, dim=1)[0]
         return angles, sources_estimation
 
-    def get_model_file_name(self):
-        if self.system_model.params.M is None:
-            M = "rand"
-        else:
-            M = self.system_model.params.M
-        return f"CascadedSubspaceNet_" + \
-               f"N={self.N}_" + \
-               f"tau={self.tau}_" + \
-               f"M={M}_" + \
-               f"{self.system_model.params.signal_type}_" + \
-               f"SNR={self.system_model.params.snr}_" + \
-               f"{self.system_model.params.signal_nature}"
-
-    def get_model_name(self):
-        return "CascadedSubspaceNet"
+    def get_model_params(self):
+        return f"tau={self.tau}"

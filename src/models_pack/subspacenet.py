@@ -5,6 +5,7 @@ SubspaceNet: model-based deep learning algorithm as described in:
 
 import torch
 import torch.nn as nn
+from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
 from src.utils import *
 
@@ -13,7 +14,7 @@ from src.methods_pack.esprit import ESPRIT, esprit
 from src.methods_pack.root_music import RootMusic, root_music
 
 
-class SubspaceNet(nn.Module):
+class SubspaceNet(ParentModel):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,
         over subspace methods.
 
@@ -51,9 +52,8 @@ class SubspaceNet(nn.Module):
             M (int): Number of sources.
 
         """
-        super(SubspaceNet, self).__init__()
+        super(SubspaceNet, self).__init__(system_model)
         self.tau = tau
-        self.system_model = system_model
         self.N = self.system_model.params.N
         self.diff_method = None
         self.field_type = field_type
@@ -233,28 +233,10 @@ class SubspaceNet(nn.Module):
                 return {"angle_cell_size": self.diff_method.cell_size_angle,
                         "distance_cell_size": self.diff_method.cell_size_distance}
 
-    def get_model_name(self):
-        return f"SubspaceNet"
-
     def get_model_params(self):
         tau = self.tau
         diff_method = self.diff_method
         return f"tau={tau}_diff_method={diff_method}"
-
-    def get_model_file_name(self):
-        if self.system_model.params.M is None:
-            M = "rand"
-        else:
-            M = self.system_model.params.M
-        return f"SubspaceNet_" + \
-            f"N={self.N}_" + \
-            f"tau={self.tau}_" + \
-            f"M={M}_" + \
-            f"{self.system_model.params.signal_type}_" + \
-            f"SNR={self.system_model.params.snr}_" + \
-            f"diff_method={self.diff_method}_" + \
-            f"{self.system_model.params.field_type}_field_" + \
-            f"{self.system_model.params.signal_nature}"
 
 class SubspaceNetEsprit(SubspaceNet):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,

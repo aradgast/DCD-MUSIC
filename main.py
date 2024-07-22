@@ -45,7 +45,7 @@ system_model_params = {
     "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
     "eta": 0,                                   # steering vector error
     "bias": 0,
-    "sv_noise_var": 0
+    "sv_noise_var": 0.4
 }
 model_config = {
     "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
@@ -63,13 +63,13 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
-    "train_test_ratio": 1,
+    "samples_size": 32 * 1024,
+    "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
     "epochs": 100,
     "optimizer": "Adam",                        # Adam, SGD
-    "learning_rate": 0.001,
+    "learning_rate": 0.0001,
     "weight_decay": 1e-9,
     "step_size": 70,
     "gamma": 0.5,
@@ -84,7 +84,7 @@ evaluation_params = {
     "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": training_params["balance_factor"],
     "models": {
-                "CascadedSubspaceNet": {"tau": 8},
+                # "CascadedSubspaceNet": {"tau": 8},
                 # "SubspaceNet": {"tau": 8,
                 #                 "diff_method": "music_2D",
                 #                 "field_type": "Near"},
@@ -106,7 +106,7 @@ evaluation_params = {
         # "sps_esprit",
         # "sps_music_1d"
         # "bb-music",
-        # "music_2D",
+        "music_2D",
         # "sps_music_2D",
         # "CRB"
     ]
@@ -115,7 +115,7 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
+    "TRAIN_MODEL": True,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
