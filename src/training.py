@@ -357,14 +357,14 @@ def train(
         if acc_train_list is not None and acc_valid_list is not None:
             fig_acc = plot_accuracy_curve(
                 list(range(1, training_parameters.epochs + 1)), acc_train_list, acc_valid_list,
-                model_name=model.get_model_name()
+                model_name=model._get_name()
             )
             if save_figures:
                 fig_acc.savefig(figures_saving_path / f"Accuracy_{model.get_model_name()}_{dt_string_for_save}.png")
             fig_acc.show()
         fig_loss = plot_learning_curve(
             list(range(1, training_parameters.epochs + 1)), loss_train_list, loss_valid_list,
-            model_name=model.get_model_name(),
+            model_name=model._get_name(),
             angle_train_loss=loss_train_list_angles,
             angle_valid_loss=loss_valid_list_angles,
             range_train_loss=loss_train_list_ranges,
@@ -798,7 +798,6 @@ def get_simulation_filename(
     """
     return (
         f"{model_config.model.get_model_name()}_"
-        f"{model_config.model.get_model_params()}_"
         f"N={system_model_params.N}_"
         f"M={system_model_params.M}_"
         f"T={system_model_params.T}_"

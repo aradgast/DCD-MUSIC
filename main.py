@@ -33,7 +33,8 @@ plt.close("all")
 
 scenario_dict = {
     "coherent": [],
-    "non-coherent": [10],
+    "non-coherent": [8],
+    # "sv_noise_var": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
 }
 
 system_model_params = {
@@ -63,11 +64,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 32 * 1024,
+    "samples_size": 1 * 1024,
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 100,
+    "epochs": 10,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -112,11 +113,11 @@ evaluation_params = {
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": False,
+    "SAVE_TO_FILE": True,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }

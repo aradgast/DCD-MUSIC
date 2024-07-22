@@ -267,4 +267,4 @@ class ModelGenerator(object):
         return path
 
     def __str__(self):
-        return f"{self.model.get_model_name()}_{self.model.get_model_params()}"
+        return f"{self.model.get_model_name()}"

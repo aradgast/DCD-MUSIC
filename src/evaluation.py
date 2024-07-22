@@ -224,7 +224,7 @@ def evaluate_dnn_model(
 
             else:
                 raise Exception(
-                    f"evaluate_dnn_model: Model {model.get_model_name()} is not defined"
+                    f"evaluate_dnn_model: Model {model._get_name()} is not defined"
                 )
             ############################################################################################################
             if source_estimation is not None:
@@ -259,7 +259,7 @@ def evaluate_dnn_model(
                             eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
                         else:
                             raise Exception(f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
-                                            f" {model.get_model_name()} model")
+                                            f" {model._get_name()} model")
             elif isinstance(model, SubspaceNet):
                 if model.field_type.endswith("Near"):
                     if isinstance(criterion, RMSPELoss):
@@ -278,7 +278,7 @@ def evaluate_dnn_model(
                     eval_loss += eigen_regularization * eigen_regula_weight
 
             else:
-                raise Exception(f"evaluate_dnn_model: Model type is not defined: {model.get_model_name()}")
+                raise Exception(f"evaluate_dnn_model: Model type is not defined: {model._get_name()}")
             # add the batch evaluation loss to epoch loss
             overall_loss += eval_loss.item()
             ############################################################################################################
@@ -715,7 +715,7 @@ def evaluate(
             plot_spec=plot_spec,
             figures=figures)
         try:
-            model_name = model_tmp.get_model_name()
+            model_name = model_tmp._get_name()
         except AttributeError:
             model_name = "DNN"
         res[model_name + "_tmp"] = model_test_loss
