@@ -34,7 +34,6 @@ plt.close("all")
 scenario_dict = {
     "coherent": [],
     "non-coherent": [8],
-    # "sv_noise_var": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
 }
 
 system_model_params = {
@@ -44,9 +43,9 @@ system_model_params = {
     "snr": None,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
     "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
-    "eta": 0,                                   # steering vector error
+    "eta": 0.04,                                   # steering vector error
     "bias": 0,
-    "sv_noise_var": 0.4
+    "sv_noise_var": 0.0
 }
 model_config = {
     "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
@@ -64,11 +63,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1 * 1024,
+    "samples_size": 8 * 1024,
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 10,
+    "epochs": 100,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -113,11 +112,11 @@ evaluation_params = {
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": True,
+    "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }

@@ -25,6 +25,7 @@ class ParentModel(nn.Module):
             f"SNR={self.system_model.params.snr}_" + \
             f"{self.system_model.params.field_type}_field_" + \
             f"{self.system_model.params.signal_nature}_" + \
+            f"eta={self.system_model.params.eta}_" + \
             f"sv_var={self.system_model.params.sv_noise_var}"
 
 if __name__ == "__main__":

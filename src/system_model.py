@@ -269,14 +269,16 @@ class SystemModel(object):
         array = self.array[:, np.newaxis]
         array_square = np.power(array, 2)
         dist_array_elems = self.dist_array_elems[self.params.signal_type]
+        if not nominal:
+            dist_array_elems += np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)
+            dist_array_elems = dist_array_elems[:, np.newaxis]
 
         first_order = np.einsum("nm, na -> na",
                                 array,
                                 np.tile(np.sin(theta), (1, self.params.N)).T * dist_array_elems)
         first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
 
-        second_order = -0.5 * np.divide(np.power(np.cos(theta) * dist_array_elems, 2), distance.T)
-        second_order = np.tile(second_order[:, :, np.newaxis], (1, 1, self.params.N))
+        second_order = -0.5 * np.divide(np.power(np.outer(np.cos(theta), dist_array_elems), 2)[:, None, :], distance.T[:, :, None])
         second_order = np.einsum("nm, nkl -> nkl",
                                  array_square,
                                  np.transpose(second_order, (2, 0, 1)))
