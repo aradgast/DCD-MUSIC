@@ -32,8 +32,8 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [],
-    "non-coherent": [8],
+    "coherent": [8],
+    "non-coherent": [],
 }
 
 system_model_params = {
@@ -48,7 +48,7 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
-    "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "DCD_MUSIC",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -56,18 +56,18 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Far"     # Near, Far
 
-elif model_config.get("model_type") == "CascadedSubspaceNet":
+elif model_config.get("model_type") == "DCD_MUSIC":
     model_config["model_params"]["tau"] = 8
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 8 * 1024,
+    "samples_size": 1 * 1024,
     "train_test_ratio": .1,
-    "training_objective": "angle",       # angle, range, source_estimation
+    "training_objective": "range",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 100,
+    "epochs": 10,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -78,13 +78,13 @@ training_params = {
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
     "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-    "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
+    "balance_factor": 0.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
     "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": training_params["balance_factor"],
     "models": {
-                # "CascadedSubspaceNet": {"tau": 8},
+                # "DCD_MUSIC": {"tau": 8},
                 # "SubspaceNet": {"tau": 8,
                 #                 "diff_method": "music_2D",
                 #                 "field_type": "Near"},
@@ -102,12 +102,8 @@ evaluation_params = {
         # "music_1d",
         # "root_music",
         # "mvdr",
-        # "sps_root_music",
-        # "sps_esprit",
-        # "sps_music_1d"
         # "bb-music",
-        "music_2D",
-        # "sps_music_2D",
+        "2D-MUSIC",
         # "CRB"
     ]
 }
@@ -116,7 +112,7 @@ simulation_commands = {
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False
 }

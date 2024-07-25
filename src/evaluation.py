@@ -43,7 +43,7 @@ from src.methods_pack.music import MUSIC
 from src.methods_pack.root_music import RootMusic
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
-from src.models import (ModelGenerator, SubspaceNet, CascadedSubspaceNet, DeepAugmentedMUSIC,
+from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
 from src.plotting import plot_spectrum
 from src.system_model import SystemModel, SystemModelParams
@@ -63,7 +63,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     """
     if method_name.lower().endswith("music_1d"):
         return MUSIC(system_model=system_model, estimation_parameter="angle")
-    if method_name.lower().endswith("music_2d"):
+    if method_name.lower().endswith("2d-music"):
         return MUSIC(system_model=system_model, estimation_parameter="angle, range")
     if method_name.lower() == "root_music":
         return RootMusic(system_model)
@@ -165,7 +165,7 @@ def evaluate_dnn_model(
             angles = angles.to(device)
             ############################################################################################################
             # Get model output
-            if isinstance(model, CascadedSubspaceNet):
+            if isinstance(model, DCDMUSIC):
                 model_output = model(x, sources_num,is_soft=False, train_angle_extractor=False)
                 angles_pred = model_output[0].to(device)
                 ranges_pred = model_output[1].to(device)
@@ -543,11 +543,11 @@ def evaluate_model_based(
                     algorithm=algorithm.upper(),
                     figures=figures,
                 )
-        elif algorithm.endswith("2D"):
-            if algorithm.startswith("sps"):
-                Rx = model_based.pre_processing(x, mode="sps")
-            else:
+        elif algorithm.endswith("2D-MUSIC"):
+            if system_model.params.signal_nature == "non-coherent":
                 Rx = model_based.pre_processing(x, mode="sample")
+            else:
+                Rx = model_based.pre_processing(x, mode="sps")
             predictions, sources_num_estimation, _ = model_based(Rx, number_of_sources=sources_num, is_soft=False)
             angles_prediction, ranges_prediction = predictions
             if isinstance(criterion, RMSPELoss):
@@ -756,6 +756,8 @@ def evaluate(
             plot_spec=plot_spec,
             algorithm=algorithm,
             figures=figures)
+        if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "r-music", "esprit"]:
+            algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")
         res[algorithm] = loss
     # MLE

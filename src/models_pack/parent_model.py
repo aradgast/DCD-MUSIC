@@ -21,6 +21,7 @@ class ParentModel(nn.Module):
         return f"{self.get_model_name()}_" + \
             f"N={self.N}_" + \
             f"M={M}_" + \
+            f"T={self.system_model.params.T}_" + \
             f"{self.system_model.params.signal_type}_" + \
             f"SNR={self.system_model.params.snr}_" + \
             f"{self.system_model.params.field_type}_field_" + \

@@ -13,7 +13,7 @@ import warnings
 from src.system_model import SystemModel, SystemModelParams
 from src.models_pack.trans_music import TransMUSIC
 from src.models_pack.subspacenet import SubspaceNet
-from src.models_pack.cascaded_subspacenet import CascadedSubspaceNet
+from src.models_pack.dcd_music import DCDMUSIC
 from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
 from src.models_pack.deep_cnn import DeepCNN
 from src.models_pack.deep_root_music import DeepRootMUSIC
@@ -125,8 +125,8 @@ class ModelGenerator(object):
             self.__set_deepcnn()
         elif self.model_type.startswith("SubspaceNet"):
             self.__set_subspacenet()
-        elif self.model_type.startswith("CascadedSubspaceNet"):
-            self.__set_cascadedssn()
+        elif self.model_type.startswith("DCD_MUSIC"):
+            self.__set_dcd_music()
         elif self.model_type.startswith("TransMUSIC"):
             self.__set_transmusic()
         else:
@@ -146,15 +146,13 @@ class ModelGenerator(object):
                                  system_model=self.system_model,
                                  field_type=field_type)
 
-    def __set_cascadedssn(self):
+    def __set_dcd_music(self):
         """
 
         """
         tau = self.model_params.get("tau")
-        cascaded_state_path = self.__get_state_path_cascadedssn()
-        self.model = CascadedSubspaceNet(tau=tau,
-                                         system_model=self.system_model,
-                                         state_path=cascaded_state_path)
+        self.model = DCDMUSIC(tau=tau,
+                              system_model=self.system_model)
 
     def __set_transmusic(self):
         """
@@ -195,8 +193,8 @@ class ModelGenerator(object):
 
         if self.model_type.lower() == "subspacenet":
             self.__verify_subspacenet_params(model_params)
-        elif self.model_type.lower() == "cascadedsubspacenet":
-            self.__verify_cascadedssn_params(model_params)
+        elif self.model_type.lower() == "dcd_music":
+            self.__verify_dcdmuisc_params(model_params)
         elif self.model_type.lower() == "transmusic":
             self.__verify_transmusic_params(model_params)
         else:
@@ -237,34 +235,14 @@ class ModelGenerator(object):
             raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                              f"field type was not given as a model param.")
 
-    def __verify_cascadedssn_params(self, model_params):
+    def __verify_dcdmuisc_params(self, model_params):
         """
         tau: int
         """
         tau = model_params.get("tau")
         if not isinstance(tau, int) or not (tau < self.system_model.params.T):
-            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" Tau has to be an int and smaller than T")
-
-    def __get_state_path_cascadedssn(self):
-        """
-
-        """
-        if self.system_model.params.M is None:
-            M = "rand"
-        else:
-            M = self.system_model.params.M
-        tau = self.model_params.get("tau")
-        path = f"SubspaceNet_" + \
-            f"N={self.system_model.params.N}_" + \
-            f"tau={tau}_" + \
-            f"M={M}_" + \
-            f"{self.system_model.params.signal_type}_" + \
-            f"SNR={self.system_model.params.snr}_" + \
-            f"diff_method=esprit_" + \
-            f"{self.system_model.params.field_type}_field_" +  \
-            f"{self.system_model.params.signal_nature}"
-        return path
 
     def __str__(self):
         return f"{self.model.get_model_name()}"

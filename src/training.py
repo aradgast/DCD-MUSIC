@@ -44,7 +44,7 @@ from src.utils import *
 from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams
 from src.models import (SubspaceNet, DeepCNN, DeepAugmentedMUSIC,
-                        ModelGenerator, CascadedSubspaceNet, TransMUSIC, DeepRootMUSIC)
+                        ModelGenerator, DCDMUSIC, TransMUSIC, DeepRootMUSIC)
 from src.evaluation import evaluate_dnn_model
 from src.data_handler import TimeSeriesDataset, collate_fn, SameLengthBatchSampler
 
@@ -417,7 +417,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         else:
             transmusic_mode = "subspace_train"
     training_angle_extractor = False
-    if isinstance(model, CascadedSubspaceNet):
+    if isinstance(model, DCDMUSIC):
         if training_params.training_objective == "angle, range":
             training_angle_extractor = True
         elif training_params.training_objective == "range":
@@ -473,7 +473,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
 
             ############################################################################################################
             # Get model output
-            if isinstance(model, CascadedSubspaceNet):
+            if isinstance(model, DCDMUSIC):
                 model_output = model(x, sources_num,train_angle_extractor=training_angle_extractor)
                 angles_pred = model_output[0]
                 ranges_pred = model_output[1]
@@ -824,7 +824,7 @@ def get_model_filename(system_model_params: SystemModelParams, model_name: str):
     file name to the wieghts of a network.
     different from get_simulation_filename by not considering parameters that are not relevant to the network itself.
     """
-    if model_name.lower() == "cascadedsubspacenet":
+    if model_name.lower() == "DCDMUSIC":
         return (
                 f"{model_name}_"
                 + f"N={system_model_params.N}_"
