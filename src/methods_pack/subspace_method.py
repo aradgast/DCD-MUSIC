@@ -18,15 +18,13 @@ class SubspaceMethod(nn.Module):
 
     def subspace_separation(self,
                             covariance: torch.Tensor,
-                            number_of_sources: torch.tensor = None,
-                            eigen_regularization: bool = True) \
+                            number_of_sources: torch.tensor = None) \
             -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.tensor):
         """
 
         Args:
             covariance:
             number_of_sources:
-            eigen_regularization:
 
         Returns:
             the signal ana noise subspaces, both as torch.Tensor().
@@ -50,7 +48,7 @@ class SubspaceMethod(nn.Module):
             signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
             noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
-        if eigen_regularization:
+        if self.train():
             l_eig = self.eigen_regularization(number_of_sources)
         else:
             l_eig = None
@@ -67,10 +65,10 @@ class SubspaceMethod(nn.Module):
         Returns:
 
         """
-        # l_eig = (self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) * \
-        #         (self.normalized_eigen[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
-        l_eig = -(self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) + \
+        l_eig = (self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) * \
                 (self.normalized_eigen[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
+        # l_eig = -(self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) + \
+                # (self.normalized_eigen[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
         l_eig = torch.sum(l_eig)
         # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
         return l_eig
@@ -80,11 +78,11 @@ class SubspaceMethod(nn.Module):
             if level is None:
                 return self.eigen_threshold
             elif level == "high":
-                return self.eigen_threshold + 0.4
+                return self.eigen_threshold + 0.0
             elif level == "low":
-                return self.eigen_threshold - 0.4
+                return self.eigen_threshold - 0.0
         else:
-            return self.eigen_threshold - 0.0
+            return self.eigen_threshold - 0.1
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

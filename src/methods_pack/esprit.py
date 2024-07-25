@@ -17,8 +17,7 @@ class ESPRIT(SubspaceMethod):
         # get the signal subspace
         signal_subspace, _, sources_estimation, regularization = self.subspace_separation(
             cov,
-            number_of_sources=M,
-            eigen_regularization=True
+            number_of_sources=M
         )
         # create 2 overlapping matrices
         upper = signal_subspace[:, :-1]

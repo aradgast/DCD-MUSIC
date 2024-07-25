@@ -48,7 +48,7 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
-    "model_type": "DCD_MUSIC",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -65,7 +65,7 @@ elif model_config.get("model_type") == "DeepCNN":
 training_params = {
     "samples_size": 1 * 1024,
     "train_test_ratio": .1,
-    "training_objective": "range",       # angle, range, source_estimation
+    "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
     "epochs": 10,
     "optimizer": "Adam",                        # Adam, SGD
@@ -95,7 +95,7 @@ evaluation_params = {
         # "r-music",
         # "esprit",
         # "music",
-        # "music_2D",
+        # "2D-MUSIC",
     ],
     "subspace_methods": [
         # "esprit",
