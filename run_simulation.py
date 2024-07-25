@@ -28,13 +28,6 @@ def __run_simulation(**kwargs):
     if train_model:
         print("Training model - ", MODEL_CONFIG.get('model_type'))
         print("Training objective - ", TRAINING_PARAMS.get('training_objective'))
-    print("Scenrios that will be tested: ")
-    M = SYSTEM_MODEL_PARAMS.get("M")
-    if M is None:
-        M = "Different number of"
-    for mode, snr_list in scenario_dict.items():
-        if snr_list:
-            print(f"{M} {mode} sources: {snr_list}")
 
     now = datetime.now()
     plot_path = Path(__file__).parent / "plots"
@@ -60,7 +53,6 @@ def __run_simulation(**kwargs):
     simulations_path.mkdir(parents=True, exist_ok=True)
     saving_path.mkdir(parents=True, exist_ok=True)
     (saving_path / "final_models").mkdir(parents=True, exist_ok=True)
-
 
     # Saving simulation scores to external file
     suffix = ""
@@ -290,11 +282,11 @@ def run_simulation(**kwargs):
                 kwargs["system_model_params"]["eta"] = eta
                 loss = __run_simulation(**kwargs)
                 loss_dict["eta"][eta] = loss
-    print_loss_results_from_simulation(loss_dict)
-    if kwargs["simulation_commands"]["PLOT_RESULTS"]:
-        plot_results(loss_dict,
-                     number_of_sources=kwargs["system_model_params"].get("M"),
-                     criterion=kwargs["evaluation_params"]["criterion"])
+    if None not in list(next(iter(loss_dict.values())).values()):
+        print_loss_results_from_simulation(loss_dict)
+        if kwargs["simulation_commands"]["PLOT_RESULTS"]:
+            plot_results(loss_dict,
+                         criterion=kwargs["evaluation_params"]["criterion"])
 
     return loss_dict
 

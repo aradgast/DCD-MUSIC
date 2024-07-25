@@ -33,13 +33,13 @@ plt.close("all")
 
 scenario_dict = {
     # "SNR": [0, 10, 20],
-    # "T": [10, 20],
-    # "eta": [0.01, 0.02],
+    "T": [10, 20, 50, 70, 100],
+    # "eta": [],
 }
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": 2,                                     # number of sources
+    "M": None,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": 10,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -64,11 +64,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1 * 1024,
-    "train_test_ratio": .1,
+    "samples_size": 100 * 1024,
+    "train_test_ratio": .05,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 5,
+    "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -79,7 +79,7 @@ training_params = {
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
     "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-    "balance_factor": 0.0                # if None, the balance factor will be set to the default value -> 0.6
+    "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
     "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
@@ -87,8 +87,8 @@ evaluation_params = {
     "models": {
                 # "DCD_MUSIC": {"tau": 8},
                 # "SubspaceNet": {"tau": 8,
-                #                 "diff_method": "music_2D",
-                #                 "field_type": "Near"},
+                #                 "diff_method": "esprit",
+                #                 "field_type": "Far"},
                 # "TransMUSIC": {},
             },
     "augmented_methods": [
@@ -104,18 +104,18 @@ evaluation_params = {
         # "root_music",
         # "mvdr",
         # "bb-music",
-        "2D-MUSIC",
+        # "2D-MUSIC",
         # "CRB"
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": False,
+    "SAVE_TO_FILE": True,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
-    "EVALUATE_MODE": True,
-    "PLOT_RESULTS": True
+    "SAVE_MODEL": True,
+    "EVALUATE_MODE": False,
+    "PLOT_RESULTS": False
 }
 
 def parse_arguments():

@@ -195,7 +195,7 @@ def initialize_figures():
     return figures
 
 
-def plot_results(loss_dict: dict, number_of_sources: int, criterion: str = "RMSPE"):
+def plot_results(loss_dict: dict, criterion: str = "RMSPE"):
     """
     Plot the results of the simulation.
     The dict could be with several scenarios, each with different SNR values, or with different number of snapshots,
@@ -203,6 +203,7 @@ def plot_results(loss_dict: dict, number_of_sources: int, criterion: str = "RMSP
 
     Parameters
     ----------
+    criterion
     loss_dict
 
     Returns
@@ -210,7 +211,7 @@ def plot_results(loss_dict: dict, number_of_sources: int, criterion: str = "RMSP
 
     """
     now = datetime.now()
-    base_plot_path = Path(__file__).parent / "results" / "plots"
+    base_plot_path = Path(__file__).parent.parent / "data" / "simulations" / "results" / "plots"
     snr_plot_path = base_plot_path / "SNR"
     snapshots_plot_path = base_plot_path / "Snapshots"
     steering_noise_plot_path = base_plot_path / "SteeringNoise"
@@ -224,13 +225,13 @@ def plot_results(loss_dict: dict, number_of_sources: int, criterion: str = "RMSP
     for scenrio, dict_values in loss_dict.items():
         if scenrio == "SNR":
             plot_path = os.path.join(snr_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=False)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=True)
         elif scenrio == "T":
             plot_path = os.path.join(snapshots_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=False)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=True)
         elif scenrio == "eta":
             plot_path = os.path.join(steering_noise_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=False)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=True)
         else:
             raise ValueError(f"Unknown scenario: {scenrio}")
 
