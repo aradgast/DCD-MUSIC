@@ -32,18 +32,19 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "coherent": [8],
-    "non-coherent": [],
+    # "SNR": [0, 10, 20],
+    # "T": [10, 20],
+    # "eta": [0.01, 0.02],
 }
 
 system_model_params = {
     "N": 15,                                    # number of antennas
     "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
-    "snr": None,                                # if defined, values in scenario_dict will be ignored
+    "snr": 10,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
-    "signal_nature": None,                      # if defined, values in scenario_dict will be ignored
-    "eta": 0.04,                                   # steering vector error
+    "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
+    "eta": 0.0,                                   # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0
 }
@@ -67,7 +68,7 @@ training_params = {
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 10,
+    "epochs": 5,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.0001,
     "weight_decay": 1e-9,
@@ -112,9 +113,9 @@ simulation_commands = {
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
-    "PLOT_RESULTS": False
+    "PLOT_RESULTS": True
 }
 
 def parse_arguments():

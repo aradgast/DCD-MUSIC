@@ -362,3 +362,41 @@ if __name__ == "__main__":
     k = 3
     prediction = torch.tensor([0.1, 0.3, 0.5, 0.2, 0.4, 0.6])
     get_k_peaks(grid_size, k, prediction)
+
+
+def parse_loss_results_for_plotting(loss_results: dict):
+    plt_res = {}
+    for test, results in loss_results.items():
+        for method, loss_ in results.items():
+            if plt_res.get(method) is None:
+                plt_res[method] = {"Overall": []}
+            plt_res[method]["Overall"].append(loss_["Overall"])
+            if loss_.get("Accuracy") is not None:
+                if "Accuracy" not in plt_res[method].keys():
+                    plt_res[method]["Accuracy"] = []
+                    plt_acc = True
+                plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+    return plt_res, plt_acc
+
+def print_loss_results_from_simulation(loss_results: dict):
+    """
+    Print the loss results from the simulation.
+    """
+    for test, value_dict in loss_results.items():
+        print("#" * 10 + f"{test} TEST RESULTS" + "#" * 10)
+        for test_value, results in value_dict.items():
+            if test == "SNR":
+                print(f"{test} = {test_value} [dB]: ")
+            else:
+                print(f"{test} = {test_value}: ")
+            for method, loss in results.items():
+                txt = f"\t{method.upper(): <30}: "
+                for key, value in loss.items():
+                    if value is not None:
+                        if key == "Accuracy":
+                            txt += f"{key}: {value * 100:.2f} %|"
+                        else:
+                            txt += f"{key}: {value:.6e} |"
+                print(txt)
+            print("\n")
+        print("\n")

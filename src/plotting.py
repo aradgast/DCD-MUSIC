@@ -30,11 +30,15 @@ initialize_figures(void): Generates template dictionary containing figure object
 
 """
 # Imports
+from datetime import datetime
+import os
+from pathlib import Path
 from matplotlib import pyplot as plt
 import numpy as np
 import torch
 from src.methods import MUSIC, RootMUSIC, MVDR
 from src.utils import R2D
+from src.utils import plot_styles, parse_loss_results_for_plotting
 
 
 def plot_spectrum(predictions: np.ndarray, true_DOA: np.ndarray, system_model=None,
@@ -190,3 +194,153 @@ def initialize_figures():
                "mvdr": {"fig": None, "ax": None, "norm factor": None}}
     return figures
 
+
+def plot_results(loss_dict: dict, number_of_sources: int, criterion: str = "RMSPE"):
+    """
+    Plot the results of the simulation.
+    The dict could be with several scenarios, each with different SNR values, or with different number of snapshots,
+    or with diffetent noise to the steering matrix.
+
+    Parameters
+    ----------
+    loss_dict
+
+    Returns
+    -------
+
+    """
+    now = datetime.now()
+    base_plot_path = Path(__file__).parent / "results" / "plots"
+    snr_plot_path = base_plot_path / "SNR"
+    snapshots_plot_path = base_plot_path / "Snapshots"
+    steering_noise_plot_path = base_plot_path / "SteeringNoise"
+    base_plot_path.mkdir(parents=True, exist_ok=True)
+    snr_plot_path.mkdir(parents=True, exist_ok=True)
+    snapshots_plot_path.mkdir(parents=True, exist_ok=True)
+    steering_noise_plot_path.mkdir(parents=True, exist_ok=True)
+
+    dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
+    plt.rcParams.update({'font.size': 18})
+    for scenrio, dict_values in loss_dict.items():
+        if scenrio == "SNR":
+            plot_path = os.path.join(snr_plot_path, dt_string_for_save)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=False)
+        elif scenrio == "T":
+            plot_path = os.path.join(snapshots_plot_path, dt_string_for_save)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=False)
+        elif scenrio == "eta":
+            plot_path = os.path.join(steering_noise_plot_path, dt_string_for_save)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=False)
+        else:
+            raise ValueError(f"Unknown scenario: {scenrio}")
+
+    return
+
+
+def plot_test_results(test: str, res: dict, simulations_path: str, criterion: str,
+                      save_to_file=False):
+    """
+    """
+    # The input dict is a nested dict - the first level is for the snr values, the second level is for the methods,
+    # and the third level is for the loss values or accuracy.
+    # For example: res = {10: {"MUSIC": {"Overall": 0.1, "Accuracy": 0.9}, "RootMUSIC": {"Overall": 0.2, "Accuracy": 0.8}}
+    # Or, for near filed scenrio: res = {10: {"MUSIC": {"Overall": 0.1, "Angle": 0.2, "Distance": 0.3, "Accuracy": 0.9},
+    # "RootMUSIC": {"Overall": 0.2, "Angle": 0.3, "Distance": 0.4, "Accuracy": 0.8}}
+    # The possible test are: "SNR", "T", "eta"
+
+    # create a plot based on the criterion and the test type
+    if criterion == "rmspe":
+        if not None in np.stack([list(d.values()) for d in list(next(iter(res.values())).values())]):
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 10))
+            test_values = res.keys()
+            plt_res, plt_acc = parse_loss_results_for_plotting(res)
+            for method, loss_ in plt_res.items():
+                if loss_.get("Accuracy") is not None:
+                    label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
+                else:
+                    label = method
+                if not np.isnan((loss_.get("Angle"))).any():
+                    ax1.plot(test_values, loss_["Angle"], label=label, **plot_styles[method.split("_")[0]])
+                    ax2.plot(test_values, loss_["Distance"], label=label, **plot_styles[method.split("_")[0]])
+            ax1.legend()
+            ax2.legend()
+            ax1.grid()
+            ax2.grid()
+            if test == "SNR":
+                ax1.set_xlabel("SNR [dB]")
+                ax2.set_xlabel("SNR [dB]")
+            elif test == "T":
+                ax1.set_xlabel("T")
+                ax2.set_xlabel("T")
+            elif test == "eta":
+                ax1.set_xlabel("eta")
+                ax2.set_xlabel("eta")
+            ax1.set_ylabel("RMSE [rad]")
+            ax2.set_ylabel("RMSE [m]")
+            ax1.set_title("Angle RMSE")
+            ax2.set_title("Distance RMSE")
+            ax1.set_yscale("log")
+            ax2.set_yscale("log")
+            if save_to_file:
+                fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
+            fig.show()
+            if plt_acc:
+                plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file)
+
+        else:  # FAR
+            plot_overall_rmse(test, res, simulations_path, save_to_file)
+
+    elif criterion == "cartesian":
+        plot_overall_rmse(test, res, simulations_path, save_to_file)
+    else:
+        raise ValueError(f"Unknown criterion: {criterion}")
+
+
+def plot_overall_rmse(test: str, res: dict, simulations_path: str, save_to_file=False):
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    test_values = res.keys()
+    plt_res, plt_acc = parse_loss_results_for_plotting(res)
+    for method, loss_ in plt_res.items():
+        if loss_.get("Accuracy") is not None:
+            label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
+        else:
+            label = method
+        if not np.isnan((loss_.get("Overall"))).any():
+            ax.plot(test_values, loss_["Overall"], **plot_styles[method.split("_")[0]], label=label)
+    ax.legend()
+    ax.grid()
+    if test == "SNR":
+        ax.set_xlabel("SNR [dB]")
+    elif test == "T":
+        ax.set_xlabel("T")
+    elif test == "eta":
+        ax.set_xlabel("eta")
+    ax.set_ylabel("RMSE [rad]")
+    ax.set_title("Overall RMSPE loss")
+    ax.set_yscale("log")
+    if save_to_file:
+        fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
+    fig.show()
+    if plt_acc:
+        plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file)
+
+
+def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=False):
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    for method, loss_ in plt_res.items():
+        if loss_.get("Accuracy") is not None:
+            ax.plot(test_values, loss_["Accuracy"], label=method, **plot_styles[method.split("_")[0]])
+    ax.legend()
+    ax.grid()
+    if test == "SNR":
+        ax.set_xlabel("SNR [dB]")
+    elif test == "T":
+        ax.set_xlabel("T")
+    elif test == "eta":
+        ax.set_xlabel("eta")
+    ax.set_ylabel("Accuracy [%]")
+    ax.set_title("Accuracy")
+    ax.set_yscale("linear")
+    if save_to_file:
+        fig.savefig(simulations_path + "_acc.pdf", transparent=True, bbox_inches='tight')
+    fig.show()
