@@ -49,7 +49,7 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
-    "model_type": "SubspaceNet",                # SubspaceNet, CascadedSubspaceNet, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "DCD_MUSIC",                # SubspaceNet, DCD_MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -65,8 +65,8 @@ elif model_config.get("model_type") == "DeepCNN":
 
 training_params = {
     "samples_size": 100 * 1024,
-    "train_test_ratio": .05,
-    "training_objective": "angle",       # angle, range, source_estimation
+    "train_test_ratio": .1,
+    "training_objective": "range",       # angle, range, source_estimation
     "batch_size": 256,
     "epochs": 150,
     "optimizer": "Adam",                        # Adam, SGD
@@ -79,7 +79,7 @@ training_params = {
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
     "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-    "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
+    "balance_factor": 0.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
     "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian

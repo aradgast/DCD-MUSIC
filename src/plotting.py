@@ -260,9 +260,8 @@ def plot_test_results(test: str, res: dict, simulations_path: str, criterion: st
                     label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
                 else:
                     label = method
-                if not np.isnan((loss_.get("Angle"))).any():
-                    ax1.plot(test_values, loss_["Angle"], label=label, **plot_styles[method.split("_")[0]])
-                    ax2.plot(test_values, loss_["Distance"], label=label, **plot_styles[method.split("_")[0]])
+                ax1.plot(test_values, loss_["Angle"], label=label, **plot_styles[method.split("_")[0]])
+                ax2.plot(test_values, loss_["Distance"], label=label, **plot_styles[method.split("_")[0]])
             ax1.legend()
             ax2.legend()
             ax1.grid()

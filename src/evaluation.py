@@ -552,8 +552,8 @@ def evaluate_model_based(
             angles_prediction, ranges_prediction = predictions
             if isinstance(criterion, RMSPELoss):
                 rmspe, rmspe_angle, rmspe_distance = criterion(angles_prediction, angles, ranges_prediction, ranges)
-                loss_list_angle.append(rmspe_angle.item())
-                loss_list_distance.append(rmspe_distance.item())
+                loss_list_angle.append(rmspe_angle.item() / x.shape[0])
+                loss_list_distance.append(rmspe_distance.item() / x.shape[0])
             else:
                 rmspe = criterion(angles_prediction, angles, ranges_prediction, ranges)
             loss_list.append(rmspe.item() / x.shape[0])

@@ -28,7 +28,7 @@ Attributes:
 None
 """
 import warnings
-
+EIGEN_REGULARIZATION_WEIGHT = 0
 # Imports
 import matplotlib.pyplot as plt
 import copy
@@ -446,7 +446,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
         model.train()
         train_length = 0
         # eigen regularization weight
-        eigen_regularization_weight = training_params.learning_rate * 1000
+        eigen_regularization_weight = training_params.learning_rate * EIGEN_REGULARIZATION_WEIGHT
 
         for data in tqdm(training_params.train_dataset):
             x, sources_num, label, masks = data #TODO
