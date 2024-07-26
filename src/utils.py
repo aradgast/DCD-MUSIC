@@ -34,7 +34,7 @@ D2R = 1 / R2D
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 plot_styles = {
     'CRB': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 10},
-    'DCD-MUSIC': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'DCDMUSIC': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
     'TransMUSIC': {'color': 'b', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
     '2D-MUSIC': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 10},
     '2D-MUSIC(SPS)': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 10},

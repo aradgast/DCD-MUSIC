@@ -125,7 +125,7 @@ class ModelGenerator(object):
             self.__set_deepcnn()
         elif self.model_type.startswith("SubspaceNet"):
             self.__set_subspacenet()
-        elif self.model_type.startswith("DCD_MUSIC"):
+        elif self.model_type.startswith("DCDMUSIC"):
             self.__set_dcd_music()
         elif self.model_type.startswith("TransMUSIC"):
             self.__set_transmusic()
@@ -193,7 +193,7 @@ class ModelGenerator(object):
 
         if self.model_type.lower() == "subspacenet":
             self.__verify_subspacenet_params(model_params)
-        elif self.model_type.lower() == "dcd_music":
+        elif self.model_type.lower() == "dcdmusic":
             self.__verify_dcdmuisc_params(model_params)
         elif self.model_type.lower() == "transmusic":
             self.__verify_transmusic_params(model_params)

@@ -33,13 +33,13 @@ plt.close("all")
 
 scenario_dict = {
     # "SNR": [0, 10, 20],
-    "T": [10, 20, 50, 70, 100],
-    # "eta": [],
+    # "T": [],
+    "eta": [0.01, 0.02, 0.03, 0.08, 0.09, 0.1],
 }
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": None,                                     # number of sources
+    "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": 10,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -49,7 +49,7 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
-    "model_type": "DCD_MUSIC",                # SubspaceNet, DCD_MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "DCDMUSIC",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -57,15 +57,15 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Far"     # Near, Far
 
-elif model_config.get("model_type") == "DCD_MUSIC":
+elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100 * 1024,
-    "train_test_ratio": .1,
+    "samples_size": 100,
+    "train_test_ratio": 1,
     "training_objective": "range",       # angle, range, source_estimation
     "batch_size": 256,
     "epochs": 150,
@@ -82,10 +82,10 @@ training_params = {
     "balance_factor": 0.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
-    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": training_params["balance_factor"],
     "models": {
-                # "DCD_MUSIC": {"tau": 8},
+                "DCDMUSIC": {"tau": 8},
                 # "SubspaceNet": {"tau": 8,
                 #                 "diff_method": "esprit",
                 #                 "field_type": "Far"},
@@ -104,18 +104,18 @@ evaluation_params = {
         # "root_music",
         # "mvdr",
         # "bb-music",
-        # "2D-MUSIC",
+        "2D-MUSIC",
         # "CRB"
     ]
 }
 simulation_commands = {
-    "SAVE_TO_FILE": True,
+    "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
-    "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
-    "EVALUATE_MODE": False,
-    "PLOT_RESULTS": False
+    "LOAD_MODEL": True,
+    "TRAIN_MODEL": False,
+    "SAVE_MODEL": False,
+    "EVALUATE_MODE": True,
+    "PLOT_RESULTS": True
 }
 
 def parse_arguments():
