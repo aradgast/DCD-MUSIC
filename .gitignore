@@ -8,5 +8,6 @@ src/__pycache__/
 *.py
 !main.py
 !run_simulation.py
+!setup.py
 !/src/*.py
 */
