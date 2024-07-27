@@ -9,5 +9,6 @@ src/__pycache__/
 !main.py
 !run_simulation.py
 !setup.py
+!requirments.txt
 !/src/*.py
 */
