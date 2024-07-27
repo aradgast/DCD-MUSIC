@@ -43,7 +43,7 @@ plot_styles = {
     'CascadedSubspaceNet': {'color': 'k', 'linestyle': '-.', 'marker': 'h', "markersize": 10},
     'general': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 10},
 }
-# device = "cpu"
+device = "cpu"
 print("Running on device: ", device)
 
 # Functions
