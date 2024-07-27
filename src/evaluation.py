@@ -435,7 +435,7 @@ def evaluate_model_based(
     loss_list_angle = []
     loss_list_distance = []
     acc_list = []
-    if algorithm.lower() == "crb":
+    if algorithm.lower() == "ccrb":
         if system_model.params.signal_nature.lower() == "non-coherent":
             crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
             return crb

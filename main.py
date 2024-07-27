@@ -32,9 +32,9 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    # "SNR": [0, 10, 20],
+    "SNR": [-10, -5, 0, 5, 10],
     # "T": [],
-    "eta": [0.01, 0.02, 0.03, 0.08, 0.09, 0.1],
+    # "eta": [],
 }
 
 system_model_params = {
@@ -86,10 +86,10 @@ evaluation_params = {
     "balance_factor": training_params["balance_factor"],
     "models": {
                 "DCDMUSIC": {"tau": 8},
-                # "SubspaceNet": {"tau": 8,
-                #                 "diff_method": "esprit",
-                #                 "field_type": "Far"},
-                # "TransMUSIC": {},
+                "SubspaceNet": {"tau": 8,
+                                "diff_method": "music_2D",
+                                "field_type": "Near"},
+                "TransMUSIC": {},
             },
     "augmented_methods": [
         # "mvdr",
@@ -105,7 +105,7 @@ evaluation_params = {
         # "mvdr",
         # "bb-music",
         "2D-MUSIC",
-        # "CRB"
+        "CCRB"
     ]
 }
 simulation_commands = {
@@ -115,7 +115,10 @@ simulation_commands = {
     "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
-    "PLOT_RESULTS": True
+    "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted
+    "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
+    "SAVE_PLOTS": False,                         # if True, the plots will be saved to the results folder
 }
 
 def parse_arguments():

@@ -195,7 +195,7 @@ def initialize_figures():
     return figures
 
 
-def plot_results(loss_dict: dict, criterion: str = "RMSPE"):
+def plot_results(loss_dict: dict, criterion: str = "RMSPE", plot_acc: bool = False, save_to_file: bool = False):
     """
     Plot the results of the simulation.
     The dict could be with several scenarios, each with different SNR values, or with different number of snapshots,
@@ -225,13 +225,13 @@ def plot_results(loss_dict: dict, criterion: str = "RMSPE"):
     for scenrio, dict_values in loss_dict.items():
         if scenrio == "SNR":
             plot_path = os.path.join(snr_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=True)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=save_to_file, plot_acc=plot_acc)
         elif scenrio == "T":
             plot_path = os.path.join(snapshots_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=True)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=save_to_file, plot_acc=plot_acc)
         elif scenrio == "eta":
             plot_path = os.path.join(steering_noise_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=True)
+            plot_test_results(scenrio, dict_values, plot_path, criterion, save_to_file=save_to_file, plot_acc=plot_acc)
         else:
             raise ValueError(f"Unknown scenario: {scenrio}")
 
@@ -239,7 +239,7 @@ def plot_results(loss_dict: dict, criterion: str = "RMSPE"):
 
 
 def plot_test_results(test: str, res: dict, simulations_path: str, criterion: str,
-                      save_to_file=False):
+                      save_to_file=False, plot_acc: bool=False):
     """
     """
     # The input dict is a nested dict - the first level is for the snr values, the second level is for the methods,
@@ -284,19 +284,20 @@ def plot_test_results(test: str, res: dict, simulations_path: str, criterion: st
             if save_to_file:
                 fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
             fig.show()
-            if plt_acc:
+            if plt_acc and plot_acc:
                 plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file)
 
         else:  # FAR
-            plot_overall_rmse(test, res, simulations_path, save_to_file)
+            plot_overall_rmse(test, res, simulations_path, save_to_file, plot_acc=plot_acc)
 
     elif criterion == "cartesian":
-        plot_overall_rmse(test, res, simulations_path, save_to_file)
+        plot_overall_rmse(test, res, simulations_path, save_to_file, units="m", plot_acc=plot_acc)
     else:
         raise ValueError(f"Unknown criterion: {criterion}")
 
 
-def plot_overall_rmse(test: str, res: dict, simulations_path: str, save_to_file=False):
+def plot_overall_rmse(test: str, res: dict, simulations_path: str,
+                      save_to_file=False, units="rad", plot_acc: bool=False):
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     test_values = res.keys()
     plt_res, plt_acc = parse_loss_results_for_plotting(res)
@@ -315,13 +316,13 @@ def plot_overall_rmse(test: str, res: dict, simulations_path: str, save_to_file=
         ax.set_xlabel("T")
     elif test == "eta":
         ax.set_xlabel("eta")
-    ax.set_ylabel("RMSE [rad]")
+    ax.set_ylabel(f"RMSE [{units}]")
     ax.set_title("Overall RMSPE loss")
-    ax.set_yscale("log")
+    ax.set_yscale("linear")
     if save_to_file:
         fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
     fig.show()
-    if plt_acc:
+    if plt_acc and plot_acc:
         plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file)
 
 

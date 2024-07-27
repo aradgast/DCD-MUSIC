@@ -23,6 +23,8 @@ def __run_simulation(**kwargs):
     train_model = SIMULATION_COMMANDS["TRAIN_MODEL"]  # Applying training operation
     save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Saving tuned model
     evaluate_mode = SIMULATION_COMMANDS["EVALUATE_MODE"]  # Evaluating desired algorithms
+    plot_mode = SIMULATION_COMMANDS["PLOT_RESULTS"]  # Plotting results
+    save_plots = SIMULATION_COMMANDS["SAVE_PLOTS"]  # Saving plots
     load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
     if train_model:
@@ -58,8 +60,8 @@ def __run_simulation(**kwargs):
     suffix = ""
     if train_model:
         suffix += f"_train_{MODEL_CONFIG.get('model_type')}_{TRAINING_PARAMS.get('training_objective')}"
-    suffix += (f"_{SYSTEM_MODEL_PARAMS["signal_nature"]}_SNR_{SYSTEM_MODEL_PARAMS["snr"]}_T_{SYSTEM_MODEL_PARAMS["T"]}"
-               f"_eta{SYSTEM_MODEL_PARAMS["eta"]}.txt")
+    suffix += (f"_{SYSTEM_MODEL_PARAMS['signal_nature']}_SNR_{SYSTEM_MODEL_PARAMS['snr']}_T_{SYSTEM_MODEL_PARAMS['T']}"
+               f"_eta{SYSTEM_MODEL_PARAMS['eta']}.txt")
 
     if save_to_file:
         orig_stdout = sys.stdout
@@ -194,7 +196,8 @@ def __run_simulation(**kwargs):
             training_parameters=simulation_parameters,
             model_name=simulation_filename,
             saving_path=saving_path,
-            save_figures=save_to_file,
+            save_figures=save_plots,
+            plot_curves=plot_mode
         )
         # Save model weights
         if save_model:
@@ -238,7 +241,7 @@ def __run_simulation(**kwargs):
             subspace_methods=EVALUATION_PARAMS["subspace_methods"],
             model_tmp=model
         )
-        plt.show()
+        # plt.show()
         print("END OF EVALUATION")
         if save_to_file:
             sys.stdout.close()
@@ -284,9 +287,11 @@ def run_simulation(**kwargs):
                 loss_dict["eta"][eta] = loss
     if None not in list(next(iter(loss_dict.values())).values()):
         print_loss_results_from_simulation(loss_dict)
-        if kwargs["simulation_commands"]["PLOT_RESULTS"]:
+        if kwargs["simulation_commands"]["PLOT_LOSS_RESULTS"]:
             plot_results(loss_dict,
-                         criterion=kwargs["evaluation_params"]["criterion"])
+                         criterion=kwargs["evaluation_params"]["criterion"],
+                         plot_acc=kwargs["simulation_commands"]["PLOT_ACC_RESULTS"],
+                         save_to_file=kwargs["simulation_commands"]["SAVE_PLOTS"])
 
     return loss_dict
 

@@ -194,19 +194,5 @@ class TransMUSIC(ParentModel):
         x = torch.cat([x.real, x.imag], dim=1)
         return x
 
-    def get_model_file_name(self):
-        if self.system_model.params.M is None:
-            M = "rand"
-        else:
-            M = self.system_model.params.M
-        return f"TransMUSIC_" + \
-            f"N={self.N}_" + \
-            f"M={M}_" + \
-            f"{self.system_model.params.signal_type}_" + \
-            f"SNR={self.system_model.params.snr}_" + \
-            f"{self.system_model.params.field_type}_field_" + \
-            f"{self.system_model.params.signal_nature}"
-
-
     def get_model_params(self):
         return f"in_dim={self.input_dim}"
