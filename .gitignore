@@ -9,4 +9,3 @@ src/__pycache__/
 !main.py
 !run_simulation.py
 !/src/*.py
-*/

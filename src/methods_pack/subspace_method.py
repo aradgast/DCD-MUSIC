@@ -48,7 +48,7 @@ class SubspaceMethod(nn.Module):
             signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
             noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
-        if self.train():
+        if self.training:
             l_eig = self.eigen_regularization(number_of_sources)
         else:
             l_eig = None
