@@ -30,15 +30,13 @@ Attributes:
 
 # Imports
 import itertools
-import warnings
-
-import torch
 from tqdm import tqdm
-from src.signal_creation import Samples
+from torch.utils.data import Dataset, Sampler
 from pathlib import Path
+
+from src.signal_creation import Samples
 from src.system_model import SystemModelParams
 from src.utils import *
-from torch.utils.data import Dataset, Sampler
 
 
 def create_dataset(
@@ -85,7 +83,6 @@ def create_dataset(
         for i, doa in tqdm(enumerate(doa_permutations)):
             # Samples model creation
             samples_model.set_doa(doa)
-
             # Observations matrix creation
             X = torch.tensor(
                 samples_model.samples_creation(

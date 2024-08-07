@@ -472,7 +472,7 @@ class CartesianLoss(nn.Module):
         #     loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
         # if (loss_[0] != torch.stack(loss, dim=0)).all():
         #     raise ValueError("Error in Cartesian Loss")
-def set_criterions(criterion_name: str, balance_factor: float = 0.6):
+def set_criterions(criterion_name: str, balance_factor: float = 0.0):
     """
     Set the loss criteria based on the criterion name.
 
@@ -496,8 +496,6 @@ def set_criterions(criterion_name: str, balance_factor: float = 0.6):
         criterion = nn.MSELoss()
         subspace_criterion = MSPE
     elif criterion_name.startswith("rmse"):
-        global BALANCE_FACTOR
-        BALANCE_FACTOR = 0
         criterion = RMSPELoss(balance_factor)
         subspace_criterion = RMSPELoss(balance_factor)
     elif criterion_name.startswith("cartesian"):

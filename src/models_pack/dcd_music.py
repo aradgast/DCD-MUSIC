@@ -1,18 +1,16 @@
-import torch
-import torch.nn as nn
 import os
+from pathlib import Path
 
 from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
 from src.utils import *
-from pathlib import Path
 
 
 class DCDMUSIC(SubspaceNet):
     """
-    The CascadedSubspaceNet is a suggested solution for localization in near-field.
+    The Deep-Cascadede-defferntiable MUSIC is a suggested solution for localization in near-field.
     It uses 2 SubspaceNet:
-    The first, is SubspaceNet+Esprit/RootMusic, to get the angle from the input tensor.
+    The first, is SubspaceNet+Esprit/RootMusic/MUSIC(with Maskpeak), to get the angle from the input tensor.
     The second, uses the first to extract the angles, and then uses the angles to get the distance.
     """
 
@@ -22,24 +20,22 @@ class DCDMUSIC(SubspaceNet):
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
 
-    def forward(self, x: torch.Tensor, number_of_sources:int, is_soft: bool = True, train_angle_extractor: bool = False):
+    def forward(self, x: torch.Tensor, number_of_sources: int, train_angle_extractor: bool = False):
         """
-        Performs the forward pass of the CascadedSubspaceNet. Using the subspaceNet forward but,
+        Performs the forward pass of the DCD-MUSIC. Using the subspaceNet forward but,
         calling the angle extractor method first.
 
         Args
-            Rx_tau: The input tensor.
-            is_soft: Determines if the model is in using the sofmask solution to find peaks,
-             or the regular non deferentiable solution.
-            train_angle_extractor: Determines if the angle extractor model is in inference mode(=True),
-                                    or training mode(=False).
+            x: The input signal.
+            number_of_sources: The number of sources in the signal.
+            train_angle_extractor: Determines if the model is training the angle branch.
 
         Returns
             The distance prediction.
          """
         angles, sources_estimation = self.extract_angles(
             x, number_of_sources, train_angle_extractor=train_angle_extractor)
-        _, distances, Rx = super().forward(x, sources_num=number_of_sources,is_soft=is_soft, known_angles=angles)
+        _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
         return angles, distances, sources_estimation
 
     def __init_angle_extractor(self, path: str = None):
@@ -58,19 +54,16 @@ class DCDMUSIC(SubspaceNet):
         ref_path = os.path.join(cwd, "data", "weights", "final_models", path)
         try:
             self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
-        except FileNotFoundError:
-            print("######################################################################################")
-            print(f"Model state not found in {ref_path}")
-            print("######################################################################################")
+        except FileNotFoundError as e:
+            print(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
 
-
-    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources:int,train_angle_extractor: bool = False):
+    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources: int, train_angle_extractor: bool = False):
         """
 
         Args:
             Rx_tau: The input tensor.
-            is_inference: Determines if the model is in inference mode(=True), or training mode(=False).
-            Default is True.
+            number_of_sources: The number of sources in the signal.
+            train_angle_extractor: Determines if the model is training the angle branch.
 
         Returns:
                 The angles from the first SubspaceNet model.

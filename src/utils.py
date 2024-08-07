@@ -23,6 +23,7 @@ This script defines some helpful functions:
 # Imports
 import numpy as np
 import torch
+
 torch.cuda.empty_cache()
 import random
 import scipy
@@ -38,13 +39,15 @@ plot_styles = {
     'TransMUSIC': {'color': 'b', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
     '2D-MUSIC': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 10},
     '2D-MUSIC(SPS)': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 10},
-    'sps_music_2D': {'color': 'm', 'linestyle': '-', 'marker': 'v', "markersize": 10},
     'SubspaceNet': {'color': 'y', 'linestyle': '--', 'marker': 'p', "markersize": 10},
-    'CascadedSubspaceNet': {'color': 'k', 'linestyle': '-.', 'marker': 'h', "markersize": 10},
-    'general': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 10},
+    'esprit': {'color': 'm', 'linestyle': '-', 'marker': 'v', "markersize": 10},
+    'esprit(SPS)': {'color': 'm', 'linestyle': '-', 'marker': 'v', "markersize": 10},
+    'music': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'music(SPS)': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
 }
 device = "cpu"
 print("Running on device: ", device)
+
 
 # Functions
 # def sum_of_diag(matrix: np.ndarray) -> list:
@@ -319,6 +322,7 @@ def _spatial_smoothing_covariance(sampels: torch.Tensor):
     --------
         covariance_mat (np.ndarray): Covariance matrix.
     """
+
     X = sampels.squeeze()
     N = X.shape[0]
     # Define the sub-arrays size
@@ -337,6 +341,46 @@ def _spatial_smoothing_covariance(sampels: torch.Tensor):
         covariance_mat += sub_covariance / number_of_sub_arrays
     # Divide overall matrix by the number of sources
     return covariance_mat
+
+
+def parse_loss_results_for_plotting(loss_results: dict):
+    plt_res = {}
+    plt_acc = False
+    for test, results in loss_results.items():
+        for method, loss_ in results.items():
+            if plt_res.get(method) is None:
+                plt_res[method] = {"Overall": []}
+            plt_res[method]["Overall"].append(loss_["Overall"])
+            if loss_.get("Accuracy") is not None:
+                if "Accuracy" not in plt_res[method].keys():
+                    plt_res[method]["Accuracy"] = []
+                    plt_acc = True
+                plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+    return plt_res, plt_acc
+
+
+def print_loss_results_from_simulation(loss_results: dict):
+    """
+    Print the loss results from the simulation.
+    """
+    for test, value_dict in loss_results.items():
+        print("#" * 10 + f"{test} TEST RESULTS" + "#" * 10)
+        for test_value, results in value_dict.items():
+            if test == "SNR":
+                print(f"{test} = {test_value} [dB]: ")
+            else:
+                print(f"{test} = {test_value}: ")
+            for method, loss in results.items():
+                txt = f"\t{method.upper(): <30}: "
+                for key, value in loss.items():
+                    if value is not None:
+                        if key == "Accuracy":
+                            txt += f"{key}: {value * 100:.2f} %|"
+                        else:
+                            txt += f"{key}: {value:.6e} |"
+                print(txt)
+            print("\n")
+        print("\n")
 
 
 if __name__ == "__main__":
@@ -362,41 +406,3 @@ if __name__ == "__main__":
     k = 3
     prediction = torch.tensor([0.1, 0.3, 0.5, 0.2, 0.4, 0.6])
     get_k_peaks(grid_size, k, prediction)
-
-
-def parse_loss_results_for_plotting(loss_results: dict):
-    plt_res = {}
-    for test, results in loss_results.items():
-        for method, loss_ in results.items():
-            if plt_res.get(method) is None:
-                plt_res[method] = {"Overall": []}
-            plt_res[method]["Overall"].append(loss_["Overall"])
-            if loss_.get("Accuracy") is not None:
-                if "Accuracy" not in plt_res[method].keys():
-                    plt_res[method]["Accuracy"] = []
-                    plt_acc = True
-                plt_res[method]["Accuracy"].append(loss_["Accuracy"])
-    return plt_res, plt_acc
-
-def print_loss_results_from_simulation(loss_results: dict):
-    """
-    Print the loss results from the simulation.
-    """
-    for test, value_dict in loss_results.items():
-        print("#" * 10 + f"{test} TEST RESULTS" + "#" * 10)
-        for test_value, results in value_dict.items():
-            if test == "SNR":
-                print(f"{test} = {test_value} [dB]: ")
-            else:
-                print(f"{test} = {test_value}: ")
-            for method, loss in results.items():
-                txt = f"\t{method.upper(): <30}: "
-                for key, value in loss.items():
-                    if value is not None:
-                        if key == "Accuracy":
-                            txt += f"{key}: {value * 100:.2f} %|"
-                        else:
-                            txt += f"{key}: {value:.6e} |"
-                print(txt)
-            print("\n")
-        print("\n")

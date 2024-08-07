@@ -3,14 +3,13 @@ SubspaceNet: model-based deep learning algorithm as described in:
         [2] "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
 """
 
-import torch
 import torch.nn as nn
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
 from src.utils import *
 
 from src.methods_pack.music import MUSIC
-from src.methods_pack.esprit import ESPRIT, esprit
+from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.root_music import RootMusic, root_music
 
 
@@ -70,15 +69,14 @@ class SubspaceNet(ParentModel):
         # Set the subspace method for training
         self.set_diff_method(diff_method, system_model)
 
-    def forward(self, x: torch.Tensor, sources_num: torch.tensor=None, is_soft=True, known_angles=None):
+    def forward(self, x: torch.Tensor, sources_num: torch.tensor = None, known_angles: torch.tensor = None):
         """
         Performs the forward pass of the SubspaceNet.
 
         Args:
         -----
-            Rx_tau (torch.Tensor): Input tensor of shape [Batch size, tau, 2N, N].
-            is_soft (bool): Determines if the model is using the softmask solution to find peaks,
-                            or the regular non deferentiable solution.
+            x (torch.Tensor): Input tensor of shape [Batch size, N, T].
+            sources_num (torch.Tensor): The number of sources in the signal.
             known_angles (torch.Tensor): The known angles for the near-field scenario.
 
         Returns:
@@ -143,12 +141,12 @@ class SubspaceNet(ParentModel):
         elif self.field_type == "Near":
             if known_angles is None:
                 predictions, sources_estimation, eigen_regularization = self.diff_method(
-                    Rz, number_of_sources=sources_num, is_soft=is_soft)
+                    Rz, number_of_sources=sources_num)
                 doa_prediction, distance_prediction = predictions
                 return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
             else:  # the angles are known
                 distance_prediction = self.diff_method(
-                    cov=Rz, number_of_sources=sources_num, known_angles=known_angles, is_soft=is_soft)
+                    cov=Rz, number_of_sources=sources_num, known_angles=known_angles)
                 return known_angles, distance_prediction, Rz
 
     def pre_processing(self, x):
@@ -237,73 +235,3 @@ class SubspaceNet(ParentModel):
         tau = self.tau
         diff_method = self.diff_method
         return f"tau={tau}_diff_method={diff_method}"
-
-class SubspaceNetEsprit(SubspaceNet):
-    """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,
-        over subspace methods.
-        SubspaceNetEsprit is based on the ability to perform back-propagation using ESPRIT algorithm,
-        instead of RootMUSIC.
-
-    Attributes:
-    -----------
-        M (int): Number of sources.
-        tau (int): Number of auto-correlation lags.
-
-    Methods:
-    --------
-        forward(Rx_tau): Performs the forward pass of the SubspaceNet.
-
-    """
-
-    def __init__(self, tau: int, M: int):
-        super().__init__(tau, M)
-
-    def forward(self, Rx_tau: torch.Tensor):
-        """
-        Performs the forward pass of the SubspaceNet.
-
-        Args:
-        -----
-            Rx_tau (torch.Tensor): Input tensor of shape [Batch size, tau, 2N, N].
-
-        Returns:
-        --------
-            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
-            Rz (torch.Tensor): Surrogate covariance matrix.
-
-        """
-        # Rx_tau shape: [Batch size, tau, 2N, N]
-        self.N = Rx_tau.shape[-1]
-        self.batch_size = Rx_tau.shape[0]
-        ## Architecture flow ##
-        # CNN block #1
-        x = self.conv1(Rx_tau)
-        x = self.anti_rectifier(x)
-        # CNN block #2
-        x = self.conv2(x)
-        x = self.anti_rectifier(x)
-        # CNN block #3
-        x = self.conv3(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #1
-        x = self.deconv2(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #2
-        x = self.deconv3(x)
-        x = self.anti_rectifier(x)
-        # DCNN block #3
-        x = self.DropOut(x)
-        Rx = self.deconv4(x)
-        # Reshape Output shape: [Batch size, 2N, N]
-        Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
-        # Real and Imaginary Reconstruction
-        Rx_real = Rx_View[:, : self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
-        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
-        # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(
-            Kx=Kx_tag, eps=1, batch_size=self.batch_size
-        )  # Shape: [Batch size, N, N]
-        # Feed surrogate covariance to Esprit algorithm
-        doa_prediction = esprit(Rz, self.M, self.batch_size)
-        return doa_prediction, Rz

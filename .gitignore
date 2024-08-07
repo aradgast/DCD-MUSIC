@@ -11,4 +11,3 @@ src/__pycache__/
 !setup.py
 !requirments.txt
 !/src/*.py
-*/
