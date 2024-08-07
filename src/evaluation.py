@@ -166,7 +166,7 @@ def evaluate_dnn_model(
             ############################################################################################################
             # Get model output
             if isinstance(model, DCDMUSIC):
-                model_output = model(x, sources_num,is_soft=False, train_angle_extractor=False)
+                model_output = model(x, sources_num, train_angle_extractor=False)
                 angles_pred = model_output[0].to(device)
                 ranges_pred = model_output[1].to(device)
                 source_estimation = model_output[2].to(device)
@@ -176,11 +176,13 @@ def evaluate_dnn_model(
                     angles_pred = model_output[0].to(device)
                     ranges_pred = model_output[1].to(device)
                     source_estimation = model_output[2].to(device)
-                    eigen_regularization = model_output[3].to(device)
+                    if eigen_regularization is not None:
+                        eigen_regularization = model_output[3].to(device)
                 elif model.field_type.endswith("Far"):
                     angles_pred = model_output[0].to(device)
                     source_estimation = model_output[1].to(device)
-                    eigen_regularization = model_output[2].to(device)
+                    if eigen_regularization is not None:
+                        eigen_regularization = model_output[2].to(device)
             elif isinstance(model, TransMUSIC):
                 model_output = model(x)
                 if model.estimation_params == "angle":
@@ -444,130 +446,133 @@ def evaluate_model_based(
         model_based = model_based.to(device)
         # Set model to eval mode
         model_based.eval()
-    for i, data in enumerate(dataset):
-        x, sources_num, label, masks = data
-        if x.dim() == 2:
-            x = x.unsqueeze(0)
-        x = x.to(device)
-        if max(sources_num) * 2 == label.shape[1]:
-            angles, ranges = torch.split(label, max(sources_num), dim=1)
-            angles = angles.to(device)
-            ranges = ranges.to(device)
-            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
-        else:
-            angles = label  # only angles
-            angles = angles.to(device)
-        # Check if the sources number is the same for all samples in the batch
-        if (sources_num != sources_num[0]).any():
-            # in this case, the sources number is not the same for all samples in the batch
-            raise Exception(f"train_model:"
-                            f" The sources number is not the same for all samples in the batch.")
-        else:
-            sources_num = sources_num[0]
-        # Root-MUSIC algorithms
-        if algorithm.endswith("r-music"):
-            root_music = RootMusic(system_model)
-            if algorithm.startswith("sps"):
-                # Spatial smoothing
-                predictions, roots, predictions_all, _, M = root_music.narrowband(
-                    X=x, mode="spatial_smoothing"
-                )
+    # Gradients calculation isn't required for evaluation
+    with torch.no_grad():
+        for i, data in enumerate(dataset):
+            x, sources_num, label, masks = data
+            if x.dim() == 2:
+                x = x.unsqueeze(0)
+            x = x.to(device)
+            if max(sources_num) * 2 == label.shape[1]:
+                angles, ranges = torch.split(label, max(sources_num), dim=1)
+                angles = angles.to(device)
+                ranges = ranges.to(device)
+                masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
             else:
-                # Conventional
-                predictions, roots, predictions_all, _, M = root_music.narrowband(
-                    X=x, mode="sample"
-                )
-            # If the amount of predictions is less than the amount of sources
-            predictions = add_random_predictions(M, predictions, algorithm)
-            # Calculate loss criterion
-            loss = criterion(predictions, doa * R2D)
-            loss_list.append(loss)
-            # Plot spectrum
-            if plot_spec and i == len(dataset.dataset) - 1:
-                plot_spectrum(
-                    predictions=predictions_all,
-                    true_DOA=doa[0] * R2D,
-                    roots=roots,
-                    algorithm=algorithm.upper(),
-                    figures=figures,
-                )
-        # MUSIC algorithms
-        elif algorithm.endswith("music_1d"):
-            if algorithm.startswith("bb"):
-                # Broadband MUSIC
-                predictions, spectrum, M = model_based(X=x)
-            elif algorithm.startswith("sps"):
-                # Spatial smoothing
-                Rx = model_based.pre_processing(x, mode="sps")
-            elif algorithm.startswith("music"):
-                # Conventional
-                Rx = model_based.pre_processing(x, mode="sample")
-            predictions = model_based(Rx, number_of_sources=sources_num, is_soft=False)
-            # If the amount of predictions is less than the amount of sources
-            # predictions = add_random_predictions(M, predictions, algorithm)
-            # Calculate loss criterion
-            loss = criterion(predictions, doa)
-            loss_list.append(loss)
+                angles = label  # only angles
+                angles = angles.to(device)
+            # Check if the sources number is the same for all samples in the batch
+            if (sources_num != sources_num[0]).any():
+                # in this case, the sources number is not the same for all samples in the batch
+                raise Exception(f"train_model:"
+                                f" The sources number is not the same for all samples in the batch.")
+            else:
+                sources_num = sources_num[0]
+            # Root-MUSIC algorithms
+            if algorithm.endswith("r-music"):
+                root_music = RootMusic(system_model)
+                if algorithm.startswith("sps"):
+                    # Spatial smoothing
+                    predictions, roots, predictions_all, _, M = root_music.narrowband(
+                        X=x, mode="spatial_smoothing"
+                    )
+                else:
+                    # Conventional
+                    predictions, roots, predictions_all, _, M = root_music.narrowband(
+                        X=x, mode="sample"
+                    )
+                # If the amount of predictions is less than the amount of sources
+                predictions = add_random_predictions(M, predictions, algorithm)
+                # Calculate loss criterion
+                loss = criterion(predictions, doa * R2D)
+                loss_list.append(loss)
+                # Plot spectrum
+                if plot_spec and i == len(dataset.dataset) - 1:
+                    plot_spectrum(
+                        predictions=predictions_all,
+                        true_DOA=doa[0] * R2D,
+                        roots=roots,
+                        algorithm=algorithm.upper(),
+                        figures=figures,
+                    )
+            # MUSIC algorithms
+            elif algorithm.endswith("music_1d"):
+                if algorithm.startswith("bb"):
+                    # Broadband MUSIC
+                    predictions, spectrum, M = model_based(X=x)
+                elif system_model.params.signal_nature == "coherent":
+                    # Spatial smoothing
+                    Rx = model_based.pre_processing(x, mode="sps")
+                elif algorithm.startswith("music"):
+                    # Conventional
+                    Rx = model_based.pre_processing(x, mode="sample")
+                angles_prediction, _, _ = model_based(Rx, number_of_sources=sources_num)
+                # If the amount of predictions is less than the amount of sources
+                # predictions = add_random_predictions(M, predictions, algorithm)
+                # Calculate loss criterion
+                loss = criterion(angles_prediction, angles)
+                loss_list.append(loss / x.shape[0])
 
-        # ESPRIT algorithms
-        elif "esprit" in algorithm:
-            # esprit = ESPRIT(system_model)
-            if algorithm.startswith("sps"):
-                # Spatial smoothing
-                Rx = model_based.pre_processing(x, mode="sps")
-            else:
+            # ESPRIT algorithms
+            elif "esprit" in algorithm:
+                # esprit = ESPRIT(system_model)
+                if system_model.params.signal_nature == "coherent":
+                    # Spatial smoothing
+                    Rx = model_based.pre_processing(x, mode="sps")
+                else:
+                    # Conventional
+                    Rx = model_based.pre_processing(x, mode="sample")
+                angles_prediction, sources_num_estimation, _ = model_based(Rx, sources_num=sources_num)
+                # If the amount of predictions is less than the amount of sources
+                # predictions = add_random_predictions(M, predictions, algorithm)
+                # Calculate loss criterion
+                # if angles.shape[1] != predictions.shape[1]:
+                #     y = angles[0]
+                #     angles, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
+                loss = criterion(angles_prediction, angles)
+                loss_list.append(loss.item() / x.shape[0])
+
+            # MVDR algorithm
+            elif algorithm.startswith("mvdr"):
+                mvdr = MVDR(system_model)
                 # Conventional
-                Rx = model_based.pre_processing(x, mode="sample")
-            predictions, sources_num_estimation, _ = model_based(Rx, sources_num=sources_num)
-            # If the amount of predictions is less than the amount of sources
-            # predictions = add_random_predictions(M, predictions, algorithm)
-            # Calculate loss criterion
-            # if angles.shape[1] != predictions.shape[1]:
-            #     y = angles[0]
-            #     angles, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
-            loss = criterion(predictions, angles)
-            loss_list.append(loss)
+                _, spectrum = mvdr.narrowband(X=X, mode="sample")
+                # Plot spectrum
+                if plot_spec and i == len(dataset.dataset) - 1:
+                    plot_spectrum(
+                        predictions=None,
+                        true_DOA=doa * R2D,
+                        system_model=system_model,
+                        spectrum=spectrum,
+                        algorithm=algorithm.upper(),
+                        figures=figures,
+                    )
+            elif algorithm.endswith("2D-MUSIC"):
+                # if system_model.params.signal_nature == "non-coherent":
+                if system_model.params.signal_nature == "non-coherent":
+                    Rx = model_based.pre_processing(x, mode="sample")
+                else:
+                    Rx = model_based.pre_processing(x, mode="sps")
+                predictions, sources_num_estimation, _ = model_based(Rx, number_of_sources=sources_num)
+                angles_prediction, ranges_prediction = predictions
+                if isinstance(criterion, RMSPELoss):
+                    rmspe, rmspe_angle, rmspe_distance = criterion(angles_prediction, angles, ranges_prediction, ranges)
+                    loss_list_angle.append(rmspe_angle.item() / x.shape[0])
+                    loss_list_distance.append(rmspe_distance.item() / x.shape[0])
+                else:
+                    rmspe = criterion(angles_prediction, angles, ranges_prediction, ranges)
+                loss_list.append(rmspe.item() / x.shape[0])
+                acc_tmp = torch.mean((sources_num_estimation == sources_num).float()).item()
+                acc_list.append(acc_tmp)
 
-        # MVDR algorithm
-        elif algorithm.startswith("mvdr"):
-            mvdr = MVDR(system_model)
-            # Conventional
-            _, spectrum = mvdr.narrowband(X=X, mode="sample")
-            # Plot spectrum
-            if plot_spec and i == len(dataset.dataset) - 1:
-                plot_spectrum(
-                    predictions=None,
-                    true_DOA=doa * R2D,
-                    system_model=system_model,
-                    spectrum=spectrum,
-                    algorithm=algorithm.upper(),
-                    figures=figures,
-                )
-        elif algorithm.endswith("2D-MUSIC"):
-            if system_model.params.signal_nature == "non-coherent":
-                Rx = model_based.pre_processing(x, mode="sample")
             else:
-                Rx = model_based.pre_processing(x, mode="sps")
-            predictions, sources_num_estimation, _ = model_based(Rx, number_of_sources=sources_num, is_soft=False)
-            angles_prediction, ranges_prediction = predictions
-            if isinstance(criterion, RMSPELoss):
-                rmspe, rmspe_angle, rmspe_distance = criterion(angles_prediction, angles, ranges_prediction, ranges)
-                loss_list_angle.append(rmspe_angle.item() / x.shape[0])
-                loss_list_distance.append(rmspe_distance.item() / x.shape[0])
-            else:
-                rmspe = criterion(angles_prediction, angles, ranges_prediction, ranges)
-            loss_list.append(rmspe.item() / x.shape[0])
-            acc_tmp = torch.mean((sources_num_estimation == sources_num).float()).item()
-            acc_list.append(acc_tmp)
-
-        else:
-            warnings.warn(f"evaluate_augmented_model: Algorithm {algorithm} is not supported.")
-    result = {"Overall": torch.mean(torch.Tensor(loss_list)).item()}
-    if loss_list_angle and loss_list_distance:
-        result["Angle"] = torch.mean(torch.Tensor(loss_list_angle)).item()
-        result["Distance"] = torch.mean(torch.Tensor(loss_list_distance)).item()
-    if acc_list:
-        result["Accuracy"] = torch.mean(torch.Tensor(acc_list)).item()
+                warnings.warn(f"evaluate_augmented_model: Algorithm {algorithm} is not supported.")
+        result = {"Overall": torch.mean(torch.Tensor(loss_list)).item()}
+        if loss_list_angle and loss_list_distance:
+            result["Angle"] = torch.mean(torch.Tensor(loss_list_angle)).item()
+            result["Distance"] = torch.mean(torch.Tensor(loss_list_distance)).item()
+        if acc_list:
+            result["Accuracy"] = torch.mean(torch.Tensor(acc_list)).item()
     return result
 
 

@@ -32,16 +32,16 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "SNR": [-10, -5, 0, 5, 10],
-    # "T": [],
-    # "eta": [],
+    # "SNR": [-10, -5, 0, 5, 10],
+    # "T": [10, 20, 50, 70, 100],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
-    "N": 15,                                    # number of antennas
+    "N": 11,                                    # number of antennas
     "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
-    "snr": 10,                                # if defined, values in scenario_dict will be ignored
+    "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
     "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
     "eta": 0.0,                                   # steering vector error
@@ -64,13 +64,13 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
+    "samples_size": 1024*4,
     "train_test_ratio": 1,
-    "training_objective": "range",       # angle, range, source_estimation
-    "batch_size": 256,
-    "epochs": 150,
+    "training_objective": "angle, range",       # angle, range, source_estimation
+    "batch_size": 128,
+    "epochs": 50,
     "optimizer": "Adam",                        # Adam, SGD
-    "learning_rate": 0.0001,
+    "learning_rate": 0.001,
     "weight_decay": 1e-9,
     "step_size": 70,
     "gamma": 0.5,
@@ -78,8 +78,8 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-    "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-    "balance_factor": 0.0                # if None, the balance factor will be set to the default value -> 0.6
+    "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
+    "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
     "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
@@ -110,15 +110,15 @@ evaluation_params = {
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": True,
+    "CREATE_DATA": False,
     "LOAD_MODEL": True,
     "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
-    "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted
+    "PLOT_RESULTS": False,                       # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
-    "SAVE_PLOTS": False,                         # if True, the plots will be saved to the results folder
+    "SAVE_PLOTS": True,                         # if True, the plots will be saved to the results folder
 }
 
 def parse_arguments():

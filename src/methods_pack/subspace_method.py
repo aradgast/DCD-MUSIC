@@ -82,7 +82,7 @@ class SubspaceMethod(nn.Module):
             elif level == "low":
                 return self.eigen_threshold - 0.0
         else:
-            return self.eigen_threshold - 0.1
+            return self.eigen_threshold - 0.0
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":
@@ -125,6 +125,7 @@ class SubspaceMethod(nn.Module):
         --------
             covariance_mat (np.ndarray): Covariance matrix.
         """
+
         if x.dim() == 2:
             x = x[None, :, :]
         batch_size, sensor_number, samples_number = x.shape
@@ -139,7 +140,7 @@ class SubspaceMethod(nn.Module):
             # Run over all sub-arrays
             x_sub = x[:, j:j + sub_array_size, :]
             # Calculate sample covariance matrix for each sub-array
-            sub_covariance = torch.einsum("bmt, btl -> bml", x_sub, torch.conj(x_sub).transpose(1, 2)) / samples_number
+            sub_covariance = torch.einsum("bmt, btl -> bml", x_sub, torch.conj(x_sub).transpose(1, 2)) / (samples_number-1)
             # Aggregate sub-arrays covariances
             Rx_smoothed += sub_covariance.to(device) / number_of_sub_arrays
         # Divide overall matrix by the number of sources

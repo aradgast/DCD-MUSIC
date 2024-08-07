@@ -251,12 +251,15 @@ def plot_test_results(test: str, res: dict, simulations_path: str, criterion: st
 
     # create a plot based on the criterion and the test type
     if criterion == "rmspe":
-        if not None in np.stack([list(d.values()) for d in list(next(iter(res.values())).values())]):
+        if False:
+        # if not None in np.stack([list(d.values()) for d in list(next(iter(res.values())).values())]):
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 10))
             test_values = res.keys()
+            if test == "eta":
+                test_values = np.array(list(res.keys())) * 2
             plt_res, plt_acc = parse_loss_results_for_plotting(res)
             for method, loss_ in plt_res.items():
-                if loss_.get("Accuracy") is not None:
+                if loss_.get("Accuracy") is not None and method != "TransMUSIC" and test == "SNR":
                     label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
                 else:
                     label = method
@@ -273,12 +276,12 @@ def plot_test_results(test: str, res: dict, simulations_path: str, criterion: st
                 ax1.set_xlabel("T")
                 ax2.set_xlabel("T")
             elif test == "eta":
-                ax1.set_xlabel("eta")
-                ax2.set_xlabel("eta")
-            ax1.set_ylabel("RMSE [rad]")
-            ax2.set_ylabel("RMSE [m]")
-            ax1.set_title("Angle RMSE")
-            ax2.set_title("Distance RMSE")
+                ax1.set_xlabel("$\eta[{\lambda}/{2}]$")
+                ax2.set_xlabel("$\eta[{\lambda}/{2}]$")
+            ax1.set_ylabel("RMSPE [rad]")
+            ax2.set_ylabel("RMSPE [m]")
+            # ax1.set_title("Angle RMSE")
+            # ax2.set_title("Distance RMSE")
             ax1.set_yscale("log")
             ax2.set_yscale("log")
             if save_to_file:
@@ -298,11 +301,13 @@ def plot_test_results(test: str, res: dict, simulations_path: str, criterion: st
 
 def plot_overall_rmse(test: str, res: dict, simulations_path: str,
                       save_to_file=False, units="rad", plot_acc: bool=False):
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
     test_values = res.keys()
+    if test == "eta":
+        test_values = np.array(list(res.keys())) * 2
     plt_res, plt_acc = parse_loss_results_for_plotting(res)
     for method, loss_ in plt_res.items():
-        if loss_.get("Accuracy") is not None:
+        if loss_.get("Accuracy") is not None and method != "TransMUSIC" and test == "SNR":
             label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
         else:
             label = method
@@ -315,10 +320,11 @@ def plot_overall_rmse(test: str, res: dict, simulations_path: str,
     elif test == "T":
         ax.set_xlabel("T")
     elif test == "eta":
-        ax.set_xlabel("eta")
-    ax.set_ylabel(f"RMSE [{units}]")
-    ax.set_title("Overall RMSPE loss")
+        ax.set_xlabel("$\eta[{\lambda}/{2}]$")
+    ax.set_ylabel(f"RMSPE [{units}]")
+    # ax.set_title("Overall RMSPE loss")
     ax.set_yscale("linear")
+    ax.set_xticks(list(test_values))
     if save_to_file:
         fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
     fig.show()
@@ -340,7 +346,7 @@ def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=
     elif test == "eta":
         ax.set_xlabel("eta")
     ax.set_ylabel("Accuracy [%]")
-    ax.set_title("Accuracy")
+    # ax.set_title("Accuracy")
     ax.set_yscale("linear")
     if save_to_file:
         fig.savefig(simulations_path + "_acc.pdf", transparent=True, bbox_inches='tight')

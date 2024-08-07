@@ -106,7 +106,7 @@ def __run_simulation(**kwargs):
         try:
             (
                 train_dataset,
-                test_dataset,
+                generic_test_dataset,
                 samples_model,
             ) = load_datasets(
                 system_model_params=system_model_params,
@@ -125,12 +125,9 @@ def __run_simulation(**kwargs):
             load_data = False
     if create_data and not load_data:
         # Define which datasets to generate
-        create_training_data = True  # Flag for creating training data
-        create_testing_data = True  # Flag for creating test data
         print("Creating Data...")
-        if create_training_data:
+        if train_model:
             # Generate training dataset
-            # train_dataset, _, _ = create_dataset(
             train_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=samples_size,
@@ -141,10 +138,9 @@ def __run_simulation(**kwargs):
                 true_range=TRAINING_PARAMS["true_range_train"],
                 phase="train",
             )
-        if create_testing_data:
+        if evaluate_mode:
             # Generate test dataset
-            # test_dataset, generic_test_dataset, samples_model = create_dataset(
-            generic_test_dataset, samples_model = create_dataset(
+            generic_test_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=int(train_test_ratio * samples_size),
                 model_type=model_config.model_type,
@@ -176,8 +172,6 @@ def __run_simulation(**kwargs):
             try:
                 simulation_parameters.load_model(
                     loading_path=saving_path / "final_models" / model_config.model.get_model_file_name())
-                # if isinstance(simulation_parameters.model, CascadedSubspaceNet):
-                #     simulation_parameters.model._load_state_for_angle_extractor()
             except Exception as e:
                 print("#############################################")
                 print(e)
@@ -214,16 +208,16 @@ def __run_simulation(**kwargs):
         criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"],
                                                        EVALUATION_PARAMS["balance_factor"])
         # Load datasets for evaluation
-        if not create_data or load_data:
-            generic_test_dataset, samples_model = load_datasets(
-                system_model_params=system_model_params,
-                model_type=model_config.model_type,
-                samples_size=samples_size,
-                datasets_path=datasets_path,
-                train_test_ratio=train_test_ratio,
-            )
+        # if not create_data or load_data:
+        #     generic_test_dataset, samples_model = load_datasets(
+        #         system_model_params=system_model_params,
+        #         model_type=model_config.model_type,
+        #         samples_size=samples_size,
+        #         datasets_path=datasets_path,
+        #         train_test_ratio=train_test_ratio,
+        #     )
 
-        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=8)
+        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=128)
         generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                            collate_fn=collate_fn,
                                                            batch_sampler=batch_sampler_test,

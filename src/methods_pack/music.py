@@ -31,11 +31,12 @@ class MUSIC(SubspaceMethod):
         self.distances = None
         self.search_grid = None
         self.music_spectrum = None
+        self.cell_size = None
+        self.cell_size_angle = None
+        self.cell_size_distance = None
         self.__define_grid_params()
         self.__init_cells()
 
-
-        self.search_grid = None
         # if this is the music 2D case, the search grid is constant and can be calculated once.
         if self.system_model.params.field_type.startswith("Near"):
             if self.angels is not None and self.distances is not None:
@@ -45,7 +46,6 @@ class MUSIC(SubspaceMethod):
         else:
             self.set_search_grid()
         self.noise_subspace = None
-        # self.filter = Filter(int(self.distances.shape[0] * 0.05), int(self.distances.shape[0] * 0.2), number_of_filter=5)
 
     def forward(self, cov: torch.Tensor, number_of_sources: int, known_angles=None, known_distances=None,
                 is_soft: bool = True):
@@ -81,28 +81,20 @@ class MUSIC(SubspaceMethod):
                                                        is_soft=is_soft)
                     params[:, source] = params_source.squeeze()
                 return params
-        _, Un, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), M)
-        # self.noise_subspace = Un.cpu().detach().numpy()
-        inverse_spectrum = self.get_inverse_spectrum(Un.to(device)).to(device)
+        _, noise_subspace, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), M)
+        inverse_spectrum = self.get_inverse_spectrum(noise_subspace.to(device)).to(device)
         self.music_spectrum = 1 / inverse_spectrum
-        #####
-        # self.music_spectrum = torch.div(self.music_spectrum, torch.max(torch.max(self.music_spectrum, dim=2).values, dim=1).values.unsqueeze(1).unsqueeze(2))
-        # self.music_spectrum = torch.pow(self.music_spectrum, 5)
-        #####
         params = self.peak_finder(M)
-
         return params, source_estimation, eigen_regularization
 
-    def get_music_spectrum_from_noise_subspace(self, Un):
-        inverse_spectrum = self.get_inverse_spectrum(Un.to(torch.complex128))
+    def get_music_spectrum_from_noise_subspace(self, noise_subspace):
+        inverse_spectrum = self.get_inverse_spectrum(noise_subspace.to(torch.complex128))
         self.music_spectrum = 1 / inverse_spectrum
         return self.music_spectrum
 
     def adjust_cell_size(self):
         if self.estimation_params == "range":
-            # if self.cell_size > int(self.distances.shape[0] * 0.02):
             if self.cell_size > 1 or self.cell_size > int(self.distances.shape[0] * 0.02):
-                # self.cell_size -= int(np.ceil(self.distances.shape[0] * 0.01))
                 self.cell_size = int(0.95 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
@@ -156,7 +148,7 @@ class MUSIC(SubspaceMethod):
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=2)
             else:
-                raise ValueError("unknown estimation param")
+                raise ValueError(f"MUSIC.get_inverse_spectrum: unknown estimation param {self.estimation_params}")
         return inverse_spectrum
 
     def peak_finder(self, source_number: int = None):
@@ -187,7 +179,7 @@ class MUSIC(SubspaceMethod):
         elif self.system_model.params.field_type.startswith("Near"):
             self.__set_search_grid_near_field(known_angles=known_angles, known_distances=known_distances)
         else:
-            raise ValueError(f"set_search_grid: Unrecognized field type: {self.system_model.params.field_type}")
+            raise ValueError(f"MUSIC.set_search_grid: Unrecognized field type: {self.system_model.params.field_type}")
 
     def __set_search_grid_far_field(self):
         array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
@@ -257,14 +249,16 @@ class MUSIC(SubspaceMethod):
             # Find spectrum peaks
             peaks_tmp = sc.signal.find_peaks(music_spectrum, threshold=0.0)[0]
             if len(peaks_tmp) < source_number:
-                warnings.warn(f"MUSIC._maskpeak_1D: No peaks were found! taking max values instead.")
+                warnings.warn(f"MUSIC._peak_finder_1d: No peaks were found! taking max values instead.")
                 # random_peaks = np.random.randint(0, search_space.shape[0], (source_number - peaks_tmp.shape[0],))
-                random_peaks = torch.topk(search_space, source_number - peaks_tmp.shape[0], largest=True).indices.cpu().detach().numpy()
+                random_peaks = torch.topk(search_space, source_number - peaks_tmp.shape[0],
+                                          largest=True).indices.cpu().detach().numpy()
                 peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
             # Sort the peak by their amplitude
             sorted_peaks = peaks_tmp[np.argsort(music_spectrum[peaks_tmp])[::-1]]
             peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(device)
         if not self.training:
+            # if the model is not in training mode, return the peaks
             return search_space[peaks]
         else:
             return self.__maskpeak_1d(peaks, search_space, source_number)
@@ -293,6 +287,7 @@ class MUSIC(SubspaceMethod):
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:
+            # if the model is not in training mode, return the peaks.
             angles_pred = self.angels[max_row]
             distances_pred = self.distances[max_col]
             return angles_pred, distances_pred
@@ -378,20 +373,18 @@ class MUSIC(SubspaceMethod):
                 self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .5, device=device,
                                               dtype=torch.float64).requires_grad_(True)
         else:
-            raise ValueError(f"Unrecognized field type for MUSIC class init stage,"
+            raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
 
     def __init_cells(self):
-        self.cell_size = None
-        self.cell_size_angle = None
-        self.cell_size_distance = None
+
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.2)
         elif self.estimation_params == "angle":
             self.cell_size = int(self.angels.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.2)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.2)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.01)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.01)
 
         if self.cell_size is not None:
             if self.cell_size % 2 == 0:
@@ -403,8 +396,6 @@ class MUSIC(SubspaceMethod):
             if self.cell_size_distance % 2 == 0:
                 self.cell_size_distance += 1
 
-
-
     def _plot_1d_spectrum(self, highlight_corrdinates, batch):
         if self.estimation_params == "angle":
             x = np.rad2deg(self.angels.detach().cpu().numpy())
@@ -413,13 +404,13 @@ class MUSIC(SubspaceMethod):
             x = self.distances.detach().cpu().numpy()
             x_label = "distance [m]"
         else:
-            raise ValueError(f"_plot_1d_spectrum: No such option for param estimation.")
+            raise ValueError(f"MUSIC._plot_1d_spectrum: No such option for param estimation.")
         y = self.music_spectrum[batch].detach().cpu().numpy()
         plt.figure()
         plt.plot(x, y.T, label="Music Spectrum")
         if highlight_corrdinates is not None:
             for idx, dot in enumerate(highlight_corrdinates):
-                plt.scatter(dot, label=f"dot {idx}")
+                plt.vlines(dot, np.min(y), np.max(y), colors='r', linestyles='dashed', label=f"Ground Truth")
         plt.title("MUSIC SPECTRUM")
         plt.grid()
         plt.ylabel("Spectrum power")
@@ -451,7 +442,8 @@ class MUSIC(SubspaceMethod):
                     np.log1p(highlight_coordinates[:, 2]),
                     color='red',
                     s=50,
-                    label='Highlight Points'
+                    label='Ground Truth',
+                    marker="x"
                 )
             ax.set_title('MUSIC spectrum')
             ax.set_xlim(distances[0], distances[-1])
@@ -477,7 +469,9 @@ class MUSIC(SubspaceMethod):
                 for idx, dot in enumerate(highlight_coordinates):
                     x = self.distances.cpu().detach().numpy()[dot[1]]
                     y = np.rad2deg(self.angels.cpu().detach().numpy()[dot[0]])
-                    plt.scatter(x, y, label=f"dot {idx}: ({np.round(x, decimals=3), np.round(y, decimals=3)})")
+                    plt.plot(x, y, label="Ground Truth", marker='o', markerfacecolor='none',
+                             markeredgecolor='white', linestyle='-', color='white', markersize=10)
+                    # plt.plot(x, y, marker='x', linestyle='', color='green', markersize=8)
                 plt.legend()
             plt.colorbar()
             plt.title("MUSIC Spectrum heatmap")
