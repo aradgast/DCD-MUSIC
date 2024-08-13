@@ -33,10 +33,11 @@ class DCDMUSIC(SubspaceNet):
         Returns
             The distance prediction.
          """
-        angles, sources_estimation = self.extract_angles(
+        eigen_regularization = None
+        angles, sources_estimation, eigen_regularization = self.extract_angles(
             x, number_of_sources, train_angle_extractor=train_angle_extractor)
         _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
-        return angles, distances, sources_estimation
+        return angles, distances, sources_estimation, eigen_regularization
 
     def __init_angle_extractor(self, path: str = None):
         self.angle_extractor = SubspaceNet(tau=self.tau,
@@ -68,6 +69,7 @@ class DCDMUSIC(SubspaceNet):
         Returns:
                 The angles from the first SubspaceNet model.
         """
+        eigen_regularization = None
         if not train_angle_extractor:
             with torch.no_grad():
                 self.angle_extractor.eval()
@@ -75,9 +77,9 @@ class DCDMUSIC(SubspaceNet):
                 self.angle_extractor.train()
             # angles = torch.sort(angles, dim=1)[0]
         else:
-            angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
+            angles, sources_estimation, eigen_regularization = self.angle_extractor(Rx_tau, number_of_sources)
             # angles = torch.sort(angles, dim=1)[0]
-        return angles, sources_estimation
+        return angles, sources_estimation, eigen_regularization
 
     def get_model_params(self):
         return f"tau={self.tau}"

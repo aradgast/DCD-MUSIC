@@ -28,7 +28,7 @@ Attributes:
 None
 """
 import warnings
-EIGEN_REGULARIZATION_WEIGHT = 10
+EIGEN_REGULARIZATION_WEIGHT = 1000
 # Imports
 import matplotlib.pyplot as plt
 import copy
@@ -305,7 +305,6 @@ class TrainingParams(object):
 
 def train(
         training_parameters: TrainingParams,
-        model_name: str,
         plot_curves: bool = True,
         saving_path: Path = None,
         save_figures: bool = False,
@@ -341,7 +340,6 @@ def train(
     print("date and time =", dt_string)
     # Train the model
     train_res = train_model(training_parameters,
-                            model_name=model_name,
                             checkpoint_path=saving_path)
     model = train_res.get("model")
     loss_train_list = train_res.get("loss_train_list")
@@ -380,7 +378,7 @@ def train(
     return model, loss_train_list, loss_valid_list
 
 
-def train_model(training_params: TrainingParams, model_name: str, checkpoint_path=None) -> dict:
+def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
     """
     Function for training the model.
 
@@ -478,6 +476,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 angles_pred = model_output[0]
                 ranges_pred = model_output[1]
                 source_estimation = model_output[2]
+                eigen_regularization = model_output[3]
             elif isinstance(model, SubspaceNet):
                 model_output = model(x, sources_num=sources_num)
                 # in this case there are 2 labels - angles and distances.

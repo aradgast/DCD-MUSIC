@@ -21,13 +21,11 @@
 """
 # Imports
 import os
-import warnings
 from src.training import *
 from run_simulation import run_simulation
 import argparse
 
 # Initialization
-# warnings.simplefilter("ignore")
 os.system("cls||clear")
 plt.close("all")
 
@@ -38,9 +36,9 @@ scenario_dict = {
 }
 
 system_model_params = {
-    "N": 11,                                    # number of antennas
-    "M": 2,                                     # number of sources
-    "T": 100,                                   # number of snapshots
+    "N": 15,                                    # number of antennas
+    "M": None,                                     # number of sources
+    "T": 10,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
     "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
@@ -64,7 +62,7 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024*4,
+    "samples_size": 1024 * 1,
     "train_test_ratio": 1,
     "training_objective": "angle, range",       # angle, range, source_estimation
     "batch_size": 128,
@@ -86,10 +84,10 @@ evaluation_params = {
     "balance_factor": training_params["balance_factor"],
     "models": {
                 "DCDMUSIC": {"tau": 8},
-                "SubspaceNet": {"tau": 8,
-                                "diff_method": "music_2D",
-                                "field_type": "Near"},
-                "TransMUSIC": {},
+                # "SubspaceNet": {"tau": 8,
+                #                 "diff_method": "music_2D",
+                #                 "field_type": "Near"},
+                # "TransMUSIC": {},
             },
     "augmented_methods": [
         # "mvdr",
@@ -105,20 +103,20 @@ evaluation_params = {
         # "mvdr",
         # "bb-music",
         "2D-MUSIC",
-        "CCRB"
+        # "CCRB"
     ]
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": False,
-    "LOAD_MODEL": True,
+    "LOAD_MODEL": False,
     "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False,                       # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_LOSS_RESULTS": False,                  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
-    "SAVE_PLOTS": True,                         # if True, the plots will be saved to the results folder
+    "SAVE_PLOTS": False,                         # if True, the plots will be saved to the results folder
 }
 
 def parse_arguments():

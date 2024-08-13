@@ -42,7 +42,7 @@ from src.utils import *
 def create_dataset(
         system_model_params: SystemModelParams,
         samples_size: float,
-        model_type: str,
+        model_type: str = None,
         save_datasets: bool = False,
         datasets_path: Path = None,
         true_doa: list = None,
@@ -72,31 +72,8 @@ def create_dataset(
     labels = []
     sources_num = []
     samples_model = Samples(system_model_params)
-    # Generate permutations for CNN model training dataset
-    if model_type.startswith("DeepCNN") and phase.startswith("train"):
-        doa_permutations = []
-        angles_grid = np.linspace(start=-90, stop=90, num=361)
-        for comb in itertools.combinations(angles_grid, system_model_params.M):
-            doa_permutations.append(list(comb))
 
-    if model_type.startswith("DeepCNN") and phase.startswith("train"):
-        for i, doa in tqdm(enumerate(doa_permutations)):
-            # Samples model creation
-            samples_model.set_doa(doa)
-            # Observations matrix creation
-            X = torch.tensor(
-                samples_model.samples_creation(
-                    noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1
-                )[0],
-                dtype=torch.complex64,
-            )
-            # Ground-truth creation
-            Y = torch.zeros_like(torch.tensor(angles_grid))
-            for angle in doa:
-                Y[list(angles_grid).index(angle)] = 1
-            time_series.append(X)
-            labels.append(Y)
-    else:
+    if model_type is None or not model_type.startswith("DeepCNN"):
         for i in tqdm(range(samples_size)):
             if system_model_params.M is None:
                 M = np.random.randint(2, np.min((6, system_model_params.N-1)))
@@ -121,6 +98,30 @@ def create_dataset(
             time_series.append(X)
             labels.append(Y)
             sources_num.append(M)
+    # Generate permutations for CNN model training dataset
+    elif model_type.startswith("DeepCNN") and phase.startswith("train"):
+        doa_permutations = []
+        angles_grid = np.linspace(start=-90, stop=90, num=361)
+        for comb in itertools.combinations(angles_grid, system_model_params.M):
+            doa_permutations.append(list(comb))
+
+    elif model_type.startswith("DeepCNN") and phase.startswith("train"):
+        for i, doa in tqdm(enumerate(doa_permutations)):
+            # Samples model creation
+            samples_model.set_doa(doa)
+            # Observations matrix creation
+            X = torch.tensor(
+                samples_model.samples_creation(
+                    noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1
+                )[0],
+                dtype=torch.complex64,
+            )
+            # Ground-truth creation
+            Y = torch.zeros_like(torch.tensor(angles_grid))
+            for angle in doa:
+                Y[list(angles_grid).index(angle)] = 1
+            time_series.append(X)
+            labels.append(Y)
 
     generic_dataset = TimeSeriesDataset(time_series, labels, sources_num)
     if save_datasets:
@@ -242,7 +243,6 @@ def create_cov_tensor(X: torch.Tensor):
 
 def load_datasets(
         system_model_params: SystemModelParams,
-        model_type: str,
         samples_size: float,
         datasets_path: Path,
         train_test_ratio: float,
@@ -299,22 +299,23 @@ def load_datasets(
     #     datasets.append(test_dataset)
     # except:
     #     raise Exception("load_datasets: Test dataset doesn't exist")
-    # Load generic test dataset
-    try:
-        generic_test_dataset = read_data(
-            datasets_path / "test" / generic_dataset_filename
-        )
-        datasets.append(generic_test_dataset)
-    except Exception as e:
-        print(e)
-        Exception(f"load_datasets: Generic test dataset doesn't exist")
-    # Load samples models
-    try:
-        samples_model = read_data(datasets_path / "test" / samples_model_filename)
-        datasets.append(samples_model)
-    except Exception as e:
-        print(e)
-        Exception(f"load_datasets: Samples model dataset doesn't exist")
+    else:
+        # Load generic test dataset
+        try:
+            generic_test_dataset = read_data(
+                datasets_path / "test" / generic_dataset_filename
+            )
+            datasets.append(generic_test_dataset)
+        except Exception as e:
+            print(e)
+            Exception(f"load_datasets: Generic test dataset doesn't exist")
+        # Load samples models
+        try:
+            samples_model = read_data(datasets_path / "test" / samples_model_filename)
+            datasets.append(samples_model)
+        except Exception as e:
+            print(e)
+            Exception(f"load_datasets: Samples model dataset doesn't exist")
     return datasets
 
 
@@ -340,7 +341,7 @@ def set_dataset_filename(system_model_params: SystemModelParams, samples_size: f
             + f"{system_model_params.signal_nature}_{samples_size}_M={M}_"
             + f"N={system_model_params.N}_T={system_model_params.T}_SNR={system_model_params.snr}_"
             + f"eta={system_model_params.eta}_sv_noise_var{system_model_params.sv_noise_var}_"
-            + f"bias={system_model_params.bias}_"
+            + f"bias={system_model_params.bias}"
             + ".h5"
     )
     return suffix_filename

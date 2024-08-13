@@ -110,7 +110,6 @@ def __run_simulation(**kwargs):
                 samples_model,
             ) = load_datasets(
                 system_model_params=system_model_params,
-                model_type=model_config.model_type,
                 samples_size=samples_size,
                 datasets_path=datasets_path,
                 train_test_ratio=train_test_ratio,
@@ -131,7 +130,6 @@ def __run_simulation(**kwargs):
             train_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=samples_size,
-                model_type=model_config.model_type,
                 save_datasets=True,
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_train"],
