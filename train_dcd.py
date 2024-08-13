@@ -4,6 +4,7 @@
 import sys
 from src.training import *
 from src.data_handler import *
+import argparse
 
 
 def train_dcd_music(*args, **kwargs):
@@ -218,31 +219,57 @@ def train_dcd_music(*args, **kwargs):
     print("END OF TRAINING - Step 3: adaption by position.")
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Run simulation with optional parameters.")
+    parser.add_argument('-n', '--number_sensors', type=int, help='Number of sensors', default=15)
+    parser.add_argument('-m', '--number_sources', type=int, help='Number of sources', default=None)
+    parser.add_argument('-t', '--number_snapshots', type=int, help='Number of snapshots', default=100)
+    parser.add_argument('-s', '--snr', type=str, help='SNR value', default=10)
+    parser.add_argument('-ft', '--field_type', type=str, help='Field type', default="Near")
+    parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature', default="non-coherent")
+    parser.add_argument('-eta', '--err_loc_sv',type=float, help="Error in sensors' locations", default="0.0")
+
+    parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default="8")
+
+    parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=1024 * 100)
+    parser.add_argument('-ratio', type=int, help='Train test ratio', default=0.05)
+    parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=128)
+    parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=150)
+    parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default="Adam")
+    parser.add_argument('-lr', "--learning_rate", type=float, help='Learning rate', default=0.001)
+    parser.add_argument('-wd', "--weight_decay", type=float, help='Weight decay for optimizer', default=1e-9)
+    parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=70)
+    parser.add_argument('-gm', "--gamma", type=float, help='Gamma value for schedular', default=0.5)
+
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_arguments()
     system_model_params = {
-        "N": 15,  # number of antennas
-        "M": None,  # number of sources
-        "T": 10,  # number of snapshots
-        "snr": 0,  # if defined, values in scenario_dict will be ignored
-        "field_type": "Near",  # Near, Far
-        "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
-        "eta": 0.0,  # steering vector error
+        "N": args.number_sensors,  # number of antennas
+        "M": args.number_sources,  # number of sources
+        "T": args.number_snapshots,  # number of snapshots
+        "snr": args.snr,  # if defined, values in scenario_dict will be ignored
+        "field_type": args.field_type,  # Near, Far
+        "signal_nature": args.signal_nature,  # if defined, values in scenario_dict will be ignored
+        "eta": args.err_loc_sv,  # steering vector error
         "bias": 0,
         "sv_noise_var": 0.0
     }
     model_params = {
-        "tau": 8
+        "tau": args.tau
     }
     training_params = {
-        "samples_size": 1024 * 4,
-        "train_test_ratio": .1,
-        "batch_size": 128,
-        "epochs": 50,
-        "optimizer": "Adam",  # Adam, SGD
-        "learning_rate": 0.001,
-        "weight_decay": 1e-9,
-        "step_size": 70,
-        "gamma": 0.5,
+        "samples_size": args.sample_size,
+        "train_test_ratio": args.ratio,
+        "batch_size": args.batch_size,
+        "epochs": args.epochs,
+        "optimizer": args.optimizer,  # Adam, SGD
+        "learning_rate": args.learning_rate,
+        "weight_decay": args.weight_decay,
+        "step_size": args.step_size,
+        "gamma": args.gamma,
         "true_doa_train": None,  # if set, this doa will be set to all samples in the train dataset
         "true_range_train": None,  # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,  # if set, this doa will be set to all samples in the test dataset
