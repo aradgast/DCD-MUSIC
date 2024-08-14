@@ -186,7 +186,6 @@ def __run_simulation(**kwargs):
         # Perform simulation training and evaluation stages
         model, loss_train_list, loss_valid_list = train(
             training_parameters=simulation_parameters,
-            model_name=simulation_filename,
             saving_path=saving_path,
             save_figures=save_plots,
             plot_curves=plot_mode
