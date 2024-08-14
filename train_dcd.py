@@ -224,7 +224,7 @@ def parse_arguments():
     parser.add_argument('-n', '--number_sensors', type=int, help='Number of sensors', default=15)
     parser.add_argument('-m', '--number_sources', type=int, help='Number of sources', default=None)
     parser.add_argument('-t', '--number_snapshots', type=int, help='Number of snapshots', default=100)
-    parser.add_argument('-s', '--snr', type=str, help='SNR value', default=10)
+    parser.add_argument('-s', '--snr', type=int, help='SNR value', default=10)
     parser.add_argument('-ft', '--field_type', type=str, help='Field type', default="Near")
     parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature', default="non-coherent")
     parser.add_argument('-eta', '--err_loc_sv',type=float, help="Error in sensors' locations", default="0.0")
@@ -232,7 +232,7 @@ def parse_arguments():
     parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default="8")
 
     parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=1024 * 100)
-    parser.add_argument('-ratio', type=int, help='Train test ratio', default=0.05)
+    parser.add_argument('-ratio', type=float, help='Train test ratio', default=0.05)
     parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=128)
     parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=150)
     parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default="Adam")

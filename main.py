@@ -31,7 +31,7 @@ plt.close("all")
 
 scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 50, 70, 100],
+    "T": [10, 20, 50, 70, 100],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
@@ -41,7 +41,7 @@ system_model_params = {
     "T": 10,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
-    "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",                      # if defined, values in scenario_dict will be ignored
     "eta": 0.0,                                   # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0
@@ -102,7 +102,7 @@ evaluation_params = {
         # "root_music",
         # "mvdr",
         # "bb-music",
-        "2D-MUSIC",
+        # "2D-MUSIC",
         # "CCRB"
     ]
 }
@@ -114,7 +114,7 @@ simulation_commands = {
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False,                       # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": False,                  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": False,                         # if True, the plots will be saved to the results folder
 }

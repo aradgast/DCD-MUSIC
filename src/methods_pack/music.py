@@ -379,12 +379,12 @@ class MUSIC(SubspaceMethod):
     def __init_cells(self):
 
         if self.estimation_params == "range":
-            self.cell_size = int(self.distances.shape[0] * 0.2)
+            self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle":
             self.cell_size = int(self.angels.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.01)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.01)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.1)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.1)
 
         if self.cell_size is not None:
             if self.cell_size % 2 == 0:
