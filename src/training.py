@@ -331,7 +331,7 @@ def train(
     Exception: If the optimizer type is not defined.
     """
     # Set the seed for all available random operations
-    set_unified_seed()
+    # set_unified_seed()
     # Current date and time
     print("\n----------------------\n")
     now = datetime.now()

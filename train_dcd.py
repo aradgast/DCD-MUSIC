@@ -6,6 +6,25 @@ from src.training import *
 from src.data_handler import *
 import argparse
 
+# default values for the argparse
+number_sensors = 15
+number_sources = None
+number_snapshots = 100
+snr = 10
+field_type = "Near"
+signal_nature = "non-coherent"
+err_loc_sv = 0.0
+tau = 8
+sample_size = 1024 * 100
+train_test_ratio = 0.05
+batch_size = 128
+epochs = 150
+optimizer = "Adam"
+learning_rate = 0.001
+weight_decay = 1e-9
+step_size = 70
+gamma = 0.5
+
 
 def train_dcd_music(*args, **kwargs):
     SIMULATION_COMMANDS = kwargs["simulation_commands"]
@@ -217,29 +236,31 @@ def train_dcd_music(*args, **kwargs):
     torch.save(model.state_dict(),
                saving_path / "final_models" / Path(model.get_model_file_name()))
     print("END OF TRAINING - Step 3: adaption by position.")
+    if save_to_file:
+        sys.stdout = orig_stdout
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run simulation with optional parameters.")
-    parser.add_argument('-n', '--number_sensors', type=int, help='Number of sensors', default=15)
-    parser.add_argument('-m', '--number_sources', type=int, help='Number of sources', default=None)
-    parser.add_argument('-t', '--number_snapshots', type=int, help='Number of snapshots', default=100)
-    parser.add_argument('-s', '--snr', type=int, help='SNR value', default=10)
-    parser.add_argument('-ft', '--field_type', type=str, help='Field type', default="Near")
-    parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature', default="non-coherent")
-    parser.add_argument('-eta', '--err_loc_sv',type=float, help="Error in sensors' locations", default="0.0")
+    parser.add_argument('-n', '--number_sensors', type=int, help='Number of sensors', default=number_sensors)
+    parser.add_argument('-m', '--number_sources', type=int, help='Number of sources', default=number_sources)
+    parser.add_argument('-t', '--number_snapshots', type=int, help='Number of snapshots', default=number_snapshots)
+    parser.add_argument('-s', '--snr', type=int, help='SNR value', default=snr)
+    parser.add_argument('-ft', '--field_type', type=str, help='Field type', default=field_type)
+    parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature', default=signal_nature)
+    parser.add_argument('-eta', '--err_loc_sv', type=float, help="Error in sensors' locations", default=err_loc_sv)
 
-    parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default="8")
+    parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default=tau)
 
-    parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=1024 * 100)
-    parser.add_argument('-ratio', type=float, help='Train test ratio', default=0.05)
-    parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=128)
-    parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=150)
-    parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default="Adam")
-    parser.add_argument('-lr', "--learning_rate", type=float, help='Learning rate', default=0.001)
-    parser.add_argument('-wd', "--weight_decay", type=float, help='Weight decay for optimizer', default=1e-9)
-    parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=70)
-    parser.add_argument('-gm', "--gamma", type=float, help='Gamma value for schedular', default=0.5)
+    parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=sample_size)
+    parser.add_argument('-ratio', type=float, help='Train test ratio', default=train_test_ratio)
+    parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=batch_size)
+    parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=epochs)
+    parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default=optimizer)
+    parser.add_argument('-lr', "--learning_rate", type=float, help='Learning rate', default=learning_rate)
+    parser.add_argument('-wd', "--weight_decay", type=float, help='Weight decay for optimizer', default=weight_decay)
+    parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=step_size)
+    parser.add_argument('-gm', "--gamma", type=float, help='Gamma value for schedular', default=gamma)
 
     return parser.parse_args()
 

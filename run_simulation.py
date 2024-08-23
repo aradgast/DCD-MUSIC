@@ -103,25 +103,38 @@ def __run_simulation(**kwargs):
     print("------------------------------------")
 
     if load_data:
-        try:
-            (
-                train_dataset,
-                generic_test_dataset,
-                samples_model,
-            ) = load_datasets(
-                system_model_params=system_model_params,
-                samples_size=samples_size,
-                datasets_path=datasets_path,
-                train_test_ratio=train_test_ratio,
-                is_training=True,
-            )
-        except Exception as e:
-            print(e)
-            print("#############################################")
-            print("Error loading datasets")
-            print("#############################################")
-            create_data = True
-            load_data = False
+        if train_model:
+            try:
+                train_dataset = load_datasets(
+                    system_model_params=system_model_params,
+                    samples_size=samples_size,
+                    datasets_path=datasets_path,
+                    train_test_ratio=train_test_ratio,
+                    is_training=True,
+                )
+            except Exception as e:
+                print(e)
+                print("#############################################")
+                print("load_datasets: Error loading train dataset")
+                print("#############################################")
+                create_data = True
+                load_data = False
+        if evaluate_mode:
+            try:
+                generic_test_dataset, _ = load_datasets(
+                    system_model_params=system_model_params,
+                    samples_size=int(train_test_ratio * samples_size),
+                    datasets_path=datasets_path,
+                    train_test_ratio=train_test_ratio,
+                    is_training=False,
+                )
+            except Exception as e:
+                print(e)
+                print("#############################################")
+                print("load_datasets: Error loading test dataset")
+                print("#############################################")
+                create_data = True
+                load_data = False
     if create_data and not load_data:
         # Define which datasets to generate
         print("Creating Data...")
