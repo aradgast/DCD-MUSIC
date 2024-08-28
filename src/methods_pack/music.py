@@ -283,7 +283,8 @@ class MUSIC(SubspaceMethod):
             # convert the peaks to 2d indices
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
             if source_number > 1:
-                original_idx = keep_far_enough_points(original_idx, source_number, 30)
+                # pass
+                original_idx = keep_far_enough_points(original_idx, source_number, 20)
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:
@@ -379,12 +380,12 @@ class MUSIC(SubspaceMethod):
     def __init_cells(self):
 
         if self.estimation_params == "range":
-            self.cell_size = int(self.distances.shape[0] * 0.2)
+            self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle":
             self.cell_size = int(self.angels.shape[0] * 0.3)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.01)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.01)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.1)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.1)
 
         if self.cell_size is not None:
             if self.cell_size % 2 == 0:
@@ -479,6 +480,21 @@ class MUSIC(SubspaceMethod):
             plt.ylabel("Angles [deg]")
 
             plt.figaspect(2)
+            plt.show()
+        elif method == "slice":
+            x = self.distances.detach().cpu().numpy()
+            x_label = "distance [m]"
+            y = self.music_spectrum[batch].detach().cpu().numpy()[highlight_coordinates[0]]
+            plt.figure()
+            plt.plot(x, y.T, label="Music Spectrum")
+            if highlight_coordinates is not None:
+                for idx, dot in enumerate(highlight_coordinates[1:]):
+                    plt.vlines(dot, np.min(y), np.max(y), colors='r', linestyles='dashed', label=f"Ground Truth")
+            plt.title(f"MUSIC SPECTRUM Slice at {torch.round(torch.rad2deg(self.angels[highlight_coordinates[0]]))}")
+            plt.grid()
+            plt.ylabel("Spectrum power")
+            plt.xlabel(x_label)
+            plt.legend()
             plt.show()
 
     def __str__(self):

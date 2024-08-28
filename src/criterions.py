@@ -446,7 +446,20 @@ class CartesianLoss(nn.Module):
         """
         the input given is expected to contain angels and distances.
         """
-        M = predictions_angle.shape[1]
+        M = targets_angle.shape[1]
+        if predictions_angle.shape[1] > targets_angle.shape[1]:
+            # in this case, randomly drop some of the predictions
+            indices = torch.randperm(predictions_angle.shape[1])[:M].to(device)
+            predictions_angle = torch.gather(predictions_angle, 1, indices[None, :])
+            predictions_distance = torch.gather(predictions_distance, 1, indices[None, :])
+
+        elif predictions_angle.shape[1] < targets_angle.shape[1]:
+            # add a random angle to the predictions
+            random_angles = torch.distributions.uniform.Uniform(-torch.pi / 3, torch.pi / 3).sample([predictions_angle.shape[0], M - predictions_angle.shape[1]])
+            random_ranges = torch.distributions.uniform.Uniform(torch.min(targets_distance).item(), torch.max(targets_distance).item()).sample([predictions_angle.shape[0], M - predictions_angle.shape[1]])
+            predictions_angle = torch.cat((predictions_angle, random_angles.to(device)), dim=1)
+            predictions_distance = torch.cat((predictions_distance, random_ranges.to(device)), dim=1)
+
         number_of_samples = predictions_angle.shape[0]
         true_x = torch.cos(targets_angle) * targets_distance
         true_y = torch.sin(targets_angle) * targets_distance

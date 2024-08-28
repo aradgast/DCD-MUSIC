@@ -298,12 +298,12 @@ class SystemModel(object):
         return np.exp(2 * -1j * np.pi * time_delay)
 
 
-    def __str__(self):
-        """Returns a string representation of the SystemModel object.
-        ...
-
-        """
-        print("System Model Summery:")
-        for key, value in self.__dict__.items():
-            print(key, " = ", value)
-        return "End of Model"
+    # def __str__(self):
+    #     """Returns a string representation of the SystemModel object.
+    #     ...
+    #
+    #     """
+    #     print("System Model Summery:")
+    #     for key, value in self.__dict__.items():
+    #         print(key, " = ", value)
+    #     return "End of Model"

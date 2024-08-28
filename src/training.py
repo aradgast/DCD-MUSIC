@@ -28,7 +28,7 @@ Attributes:
 None
 """
 import warnings
-EIGEN_REGULARIZATION_WEIGHT = 10
+EIGEN_REGULARIZATION_WEIGHT = 100
 # Imports
 import matplotlib.pyplot as plt
 import copy
@@ -305,7 +305,6 @@ class TrainingParams(object):
 
 def train(
         training_parameters: TrainingParams,
-        model_name: str,
         plot_curves: bool = True,
         saving_path: Path = None,
         save_figures: bool = False,
@@ -332,7 +331,7 @@ def train(
     Exception: If the optimizer type is not defined.
     """
     # Set the seed for all available random operations
-    set_unified_seed()
+    # set_unified_seed()
     # Current date and time
     print("\n----------------------\n")
     now = datetime.now()
@@ -341,7 +340,6 @@ def train(
     print("date and time =", dt_string)
     # Train the model
     train_res = train_model(training_parameters,
-                            model_name=model_name,
                             checkpoint_path=saving_path)
     model = train_res.get("model")
     loss_train_list = train_res.get("loss_train_list")
@@ -380,7 +378,7 @@ def train(
     return model, loss_train_list, loss_valid_list
 
 
-def train_model(training_params: TrainingParams, model_name: str, checkpoint_path=None) -> dict:
+def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
     """
     Function for training the model.
 
@@ -478,6 +476,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
                 angles_pred = model_output[0]
                 ranges_pred = model_output[1]
                 source_estimation = model_output[2]
+                eigen_regularization = model_output[3]
             elif isinstance(model, SubspaceNet):
                 model_output = model(x, sources_num=sources_num)
                 # in this case there are 2 labels - angles and distances.
@@ -625,7 +624,7 @@ def train_model(training_params: TrainingParams, model_name: str, checkpoint_pat
             acc_valid_list.append(valid_loss.get('Accuracy') * 100)
             result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                            f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
-        result_txt += f"\nlr {training_params.optimizer.param_groups[0]['lr']}"
+        result_txt += f"\nlr {training_params.schedular.get_last_lr()[0]}"
 
         print(result_txt)
         # Save best model weights

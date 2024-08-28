@@ -21,13 +21,11 @@
 """
 # Imports
 import os
-import warnings
 from src.training import *
 from run_simulation import run_simulation
 import argparse
 
 # Initialization
-# warnings.simplefilter("ignore")
 os.system("cls||clear")
 plt.close("all")
 
@@ -39,12 +37,16 @@ scenario_dict = {
 =======
     # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
+<<<<<<< HEAD
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 >>>>>>> 30b03263f8be4ebc15f64fa4a45e297994589834
+=======
+    "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+>>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
 }
 
 system_model_params = {
-    "N": 11,                                    # number of antennas
+    "N": 15,                                    # number of antennas
     "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
@@ -55,7 +57,11 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
+<<<<<<< HEAD
     "model_type": "SubspaceNet",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+=======
+    "model_type": "TransMUSIC",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+>>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -71,6 +77,7 @@ elif model_config.get("model_type") == "DeepCNN":
 
 training_params = {
 <<<<<<< HEAD
+<<<<<<< HEAD
     "samples_size": 1024,
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
@@ -83,10 +90,17 @@ training_params = {
     "batch_size": 128,
     "epochs": 50,
 >>>>>>> 30b03263f8be4ebc15f64fa4a45e297994589834
+=======
+    "samples_size": 500,
+    "train_test_ratio": 1,
+    "training_objective": "angle, range",       # angle, range, source_estimation
+    "batch_size": 256,
+    "epochs": 150,
+>>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
-    "step_size": 70,
+    "step_size": 50,
     "gamma": 0.5,
     "true_doa_train": None,                 # if set, this doa will be set to all samples in the train dataset
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
@@ -123,11 +137,12 @@ evaluation_params = {
         # "mvdr",
         # "bb-music",
         "2D-MUSIC",
-        "CCRB"
+        # "CCRB"
     ]
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
+<<<<<<< HEAD
 <<<<<<< HEAD
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
@@ -139,6 +154,10 @@ simulation_commands = {
 =======
     "CREATE_DATA": False,
     "LOAD_MODEL": True,
+=======
+    "CREATE_DATA": True,
+    "LOAD_MODEL": False,
+>>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
     "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,

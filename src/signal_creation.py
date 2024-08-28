@@ -105,7 +105,8 @@ class Samples(SystemModel):
                              min_val: float = 2, max_val: int = 7) -> np.ndarray:
 
             distances = np.round(np.random.uniform(min_val, max_val, M), decimals=0)  # TODO
-
+            if np.unique(distances).shape[0] != M:
+                distances = np.round(np.random.uniform(min_val, max_val, M), decimals=0)
             # distances = np.zeros(M)
             # idx = 0
             # while idx < M:

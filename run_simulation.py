@@ -103,26 +103,38 @@ def __run_simulation(**kwargs):
     print("------------------------------------")
 
     if load_data:
-        try:
-            (
-                train_dataset,
-                generic_test_dataset,
-                samples_model,
-            ) = load_datasets(
-                system_model_params=system_model_params,
-                model_type=model_config.model_type,
-                samples_size=samples_size,
-                datasets_path=datasets_path,
-                train_test_ratio=train_test_ratio,
-                is_training=True,
-            )
-        except Exception as e:
-            print(e)
-            print("#############################################")
-            print("Error loading datasets")
-            print("#############################################")
-            create_data = True
-            load_data = False
+        if train_model:
+            try:
+                train_dataset = load_datasets(
+                    system_model_params=system_model_params,
+                    samples_size=samples_size,
+                    datasets_path=datasets_path,
+                    train_test_ratio=train_test_ratio,
+                    is_training=True,
+                )
+            except Exception as e:
+                print(e)
+                print("#############################################")
+                print("load_datasets: Error loading train dataset")
+                print("#############################################")
+                create_data = True
+                load_data = False
+        if evaluate_mode:
+            try:
+                generic_test_dataset, _ = load_datasets(
+                    system_model_params=system_model_params,
+                    samples_size=int(train_test_ratio * samples_size),
+                    datasets_path=datasets_path,
+                    train_test_ratio=train_test_ratio,
+                    is_training=False,
+                )
+            except Exception as e:
+                print(e)
+                print("#############################################")
+                print("load_datasets: Error loading test dataset")
+                print("#############################################")
+                create_data = True
+                load_data = False
     if create_data and not load_data:
         # Define which datasets to generate
         print("Creating Data...")
@@ -131,7 +143,6 @@ def __run_simulation(**kwargs):
             train_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=samples_size,
-                model_type=model_config.model_type,
                 save_datasets=True,
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_train"],
@@ -188,7 +199,6 @@ def __run_simulation(**kwargs):
         # Perform simulation training and evaluation stages
         model, loss_train_list, loss_valid_list = train(
             training_parameters=simulation_parameters,
-            model_name=simulation_filename,
             saving_path=saving_path,
             save_figures=save_plots,
             plot_curves=plot_mode
@@ -217,7 +227,7 @@ def __run_simulation(**kwargs):
         #         train_test_ratio=train_test_ratio,
         #     )
 
-        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=128)
+        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=1)
         generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                            collate_fn=collate_fn,
                                                            batch_sampler=batch_sampler_test,
