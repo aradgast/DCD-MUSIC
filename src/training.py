@@ -28,7 +28,7 @@ Attributes:
 None
 """
 import warnings
-EIGEN_REGULARIZATION_WEIGHT = 1000
+EIGEN_REGULARIZATION_WEIGHT = 100
 # Imports
 import matplotlib.pyplot as plt
 import copy
@@ -624,7 +624,7 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
             acc_valid_list.append(valid_loss.get('Accuracy') * 100)
             result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                            f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
-        result_txt += f"\nlr {training_params.optimizer.param_groups[0]['lr']}"
+        result_txt += f"\nlr {training_params.schedular.get_last_lr()[0]}"
 
         print(result_txt)
         # Save best model weights

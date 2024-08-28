@@ -140,7 +140,7 @@ def evaluate_dnn_model(
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
-    with torch.no_grad():
+    with (torch.no_grad()):
         for data in dataset:
             x, sources_num, label, masks = data #TODO
             if x.dim() == 2:
@@ -243,11 +243,13 @@ def evaluate_dnn_model(
                 if isinstance(criterion, nn.CrossEntropyLoss):
                     eval_loss = source_est_regularization
                 else:
+                    # angles_pred = angles_pred[:, :source_estimation]
                     angles_pred = angles_pred[:, :angles.shape[1]]
                     if model.estimation_params == "angle":
                         eval_loss = criterion(angles_pred, angles)
                     elif model.estimation_params == "angle, range":
                         ranges_pred = ranges_pred[:, :ranges.shape[1]]
+                        # ranges_pred = ranges_pred[:, :source_estimation]
                         if isinstance(criterion, RMSPELoss):
                             eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges)
                             if overall_loss_angle is not None:

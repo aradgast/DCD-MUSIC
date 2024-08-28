@@ -284,7 +284,7 @@ class MUSIC(SubspaceMethod):
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
             if source_number > 1:
                 # pass
-                original_idx = keep_far_enough_points(original_idx, source_number, 30)
+                original_idx = keep_far_enough_points(original_idx, source_number, 20)
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:

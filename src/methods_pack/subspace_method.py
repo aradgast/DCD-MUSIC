@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
@@ -39,9 +40,11 @@ class SubspaceMethod(nn.Module):
         source_estimation = torch.linalg.norm(
             nn.functional.relu(
                 self.normalized_eigen - self.__get_eigen_threshold() * torch.ones_like(self.normalized_eigen)),
-            dim=1, ord=0)
+            dim=1, ord=0).to(torch.int)
         if number_of_sources is None:
             warnings.warn("Number of sources is not defined, using the number of sources estimation.")
+        # if source_estimation == sorted_eigvectors.shape[2]:
+        #     source_estimation -= 1
             signal_subspace = sorted_eigvectors[:, :, :source_estimation]
             noise_subspace = sorted_eigvectors[:, :, source_estimation:]
         else:
@@ -82,7 +85,7 @@ class SubspaceMethod(nn.Module):
             elif level == "low":
                 return self.eigen_threshold - 0.0
         else:
-            return self.eigen_threshold - 0.0
+            return self.eigen_threshold + 0.1
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

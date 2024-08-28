@@ -147,6 +147,8 @@ class SubspaceNet(ParentModel):
             else:  # the angles are known
                 distance_prediction = self.diff_method(
                     cov=Rz, number_of_sources=sources_num, known_angles=known_angles)
+                if isinstance(distance_prediction, tuple):
+                    distance_prediction, _, _ = distance_prediction
                 return known_angles, distance_prediction, Rz
 
     def pre_processing(self, x):

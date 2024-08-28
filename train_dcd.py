@@ -9,20 +9,20 @@ import argparse
 # default values for the argparse
 number_sensors = 15
 number_sources = None
-number_snapshots = 100
-snr = 10
+number_snapshots = 20
+snr = 0
 field_type = "Near"
-signal_nature = "non-coherent"
+signal_nature = "coherent"
 err_loc_sv = 0.0
 tau = 8
-sample_size = 1024 * 100
-train_test_ratio = 0.05
-batch_size = 128
+sample_size = 4096
+train_test_ratio = 0.0
+batch_size = 256
 epochs = 150
 optimizer = "Adam"
 learning_rate = 0.001
 weight_decay = 1e-9
-step_size = 70
+step_size = 50
 gamma = 0.5
 
 
@@ -190,6 +190,8 @@ def train_dcd_music(*args, **kwargs):
     simulation_parameters.set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
                                         learning_rate=TRAINING_PARAMS["learning_rate"],
                                         weight_decay=TRAINING_PARAMS["weight_decay"])
+    simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
+                       gamma=TRAINING_PARAMS["gamma"])
     simulation_parameters.set_criterion("rmspe", 0.0)
 
     if load_model:
@@ -215,6 +217,11 @@ def train_dcd_music(*args, **kwargs):
 
     # Assign the training parameters object
     simulation_parameters.set_training_objective("angle, range")
+    simulation_parameters.set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
+                                        learning_rate=TRAINING_PARAMS["learning_rate"],
+                                        weight_decay=TRAINING_PARAMS["weight_decay"])
+    simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
+                                        gamma=TRAINING_PARAMS["gamma"])
     simulation_parameters.set_criterion("cartesian")
 
     if load_model:
@@ -299,7 +306,7 @@ if __name__ == "__main__":
     simulation_commands = {
         "SAVE_TO_FILE": False,
         "CREATE_DATA": False,
-        "LOAD_MODEL": True,
+        "LOAD_MODEL": False,
     }
     train_dcd_music(simulation_commands=simulation_commands,
                     system_model_params=system_model_params,
