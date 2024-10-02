@@ -11,9 +11,8 @@ class SubspaceMethod(nn.Module):
 
     """
 
-    def __init__(self, system_model: SystemModel):
+    def __init__(self, system_model: SystemModel=None):
         super(SubspaceMethod, self).__init__()
-        self.system_model = system_model
         self.eigen_threshold = nn.Parameter(torch.tensor(.5, requires_grad=False))
         self.normalized_eigenvals = None
 
@@ -92,6 +91,17 @@ class SubspaceMethod(nn.Module):
             Rx = self.__sample_covariance(x)
         elif mode == "sps":
             Rx = self.__spatial_smoothing_covariance(x)
+        elif mode == "subcarrier":
+            # calculate the covariance matrix for each subcarrier
+            sensor_number, subcarriers_number, samples_number = x.shape
+            Rx = torch.zeros(subcarriers_number, sensor_number, sensor_number, dtype=torch.complex128, device=device)
+            for k in range(subcarriers_number):
+                Rx[k] = self.pre_processing(x[:, k, :], mode="sample")
+            # # focusing method - just sum the covariance matrices in the subcarriers dimension
+            # Rx = torch.sum(Rx, dim=0)
+            # # make sure the first dimension is the batch size
+            # if Rx.dim() == 2:
+            #     Rx = Rx[None, :, :]
         else:
             raise ValueError(
                 f"SubspaceMethod.pre_processing: method {mode} is not recognized for covariance calculation.")
