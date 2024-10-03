@@ -35,7 +35,10 @@ class Observations:
             # Assume random phase beamforming
             F = torch.exp(1j * torch.from_numpy(np.random.rand(1, 1, self.ns)) * 2 * torch.pi)
             # Phase delay for the K subcarriers
-            time_base = band.compute_time_steering(channel.toas[l])
+            try:
+                time_base = band.compute_time_steering(channel.toas[l])
+            except IndexError:
+                pass
             # Different phase in each antenna element
             angle_base = band.compute_angle_steering(channel.doas[l])
             angle_base = torch.from_numpy(angle_base).to(DEVICE).to(torch.complex128)
@@ -47,7 +50,7 @@ class Observations:
         normal_gaussian_noise = (1 / np.sqrt(2) *
                                  (torch.from_numpy(np.random.randn(band.n, band.k, self.ns))
                                   + 1j * torch.from_numpy(np.random.randn(band.n, band.k, self.ns))))
-        return channel_response + normal_gaussian_noise
+        self.data = channel_response + normal_gaussian_noise
 
     def set_observations(self, data):
         self.data = data

@@ -94,6 +94,9 @@ class Bands:
     def get_all_fcs(self):
         return [band.fc for band in self.bands]
 
+    def get_bands_filenames(self):
+        return [band.get_fc_file_name() for band in self.bands]
+
     def get_band_index_by_fc(self, fc):
         for i in range(len(self.bands)):
             if self.bands[i].fc == fc:

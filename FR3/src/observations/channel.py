@@ -91,7 +91,7 @@ class Channel:
         self.toas = toas
         self.powers = powers
         self.medium_speed = medium_speed
-        self.num_paths = n_paths
+        self.num_paths = len(toas)
         self.bs_loc = bs_loc
 
 

@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error
 
 def main():
     set_unified_seed()
-    ue_pos = [110, 105]
+    ue_pos = [90, 75]
 
     # Initialize the channel and band
     fcs = [6, 12, 18, 24]
@@ -42,3 +42,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # TODO: add the proposed solution of Tomer
+    # TODO: think of the way to integrate the data to be suitable for the SSN, mainly, how to create the dataset?
