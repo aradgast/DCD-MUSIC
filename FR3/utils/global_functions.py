@@ -49,6 +49,8 @@ def optimize_to_estimate_position(bs_locs: np.ndarray, toa_values, aoa_values, m
 
     # LOS computation of location in case of angle and time estimations
     # set the ue location as the bs location at first
+    if isinstance(bs_locs, torch.Tensor):
+        bs_locs = bs_locs.cpu().numpy()
     bs_locs = np.atleast_2d(bs_locs)
     bs_locs = list(bs_locs)
     aoa_values = list(np.atleast_1d(aoa_values))

@@ -18,6 +18,7 @@ class Observations:
         self.n0 = N_0
         self.ns = NS
 
+    # TODO: need to think of a way to make it faster
     def init_observations(self, channel: Channel, band: Band):
         """
         Initialize the observations for the given channel and band.
@@ -34,15 +35,17 @@ class Observations:
         for l in range(channel.num_paths):
             # Assume random phase beamforming
             F = torch.exp(1j * torch.from_numpy(np.random.rand(1, 1, self.ns)) * 2 * torch.pi)
-            # Phase delay for the K subcarriers
+            # Phase delay for the K sub-carriers
             try:
                 time_base = band.compute_time_steering(channel.toas[l])
             except IndexError:
                 pass
             # Different phase in each antenna element
             angle_base = band.compute_angle_steering(channel.doas[l])
+
             angle_base = torch.from_numpy(angle_base).to(DEVICE).to(torch.complex128)
             time_base = torch.from_numpy(time_base).to(DEVICE).to(torch.complex128)
+
             steering_mat = torch.matmul(angle_base, time_base)
             steering_mat = F * steering_mat.unsqueeze(-1)
             channel_response += power_from_dbm(channel.powers[l]) / noise_amp * steering_mat

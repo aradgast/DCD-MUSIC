@@ -4,20 +4,23 @@ The data contains observations from the NY scenario.
 """
 import os
 import pandas as pd
-from torch.utils.data import Dataset
+from pandas.errors import DataError
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import numpy as np
 
 from FR3.src.observations.band import Bands
 from FR3.src.observations.observations import Observations
 from FR3.src.observations.channel import Channel
+from FR3.utils.constants import C
 
 class NYDataset(Dataset):
-    def __init__(self, data_dir, fcs: list, bws: list, ns: list, ks: list):
+    def __init__(self, data_dir, bands: Bands):
         self.data_dir = data_dir
-        self.bands = Bands(fcs, ns, ks, bws)
-        self.data = self.__load_data()
+        self.bands = bands
+        self.data = None
 
-    def __load_data(self, bs_ind: int=1):
+    def create_data(self, bs_ind: int=1):
         """
         Load the data from the given directory and create the observations.
         Each sample from the dataset is a dictionary a key suitable for each band, then the data dimension is as follows:
@@ -45,27 +48,44 @@ class NYDataset(Dataset):
         for ue_pos in tqdm(ue_locations):
             link_flag = False
             observations = []
-            gt = {'angle': [], 'time_delay': [], 'power': [], 'ue_pos': ue_pos}
+            gt = {'angle': [], 'time_delay': [], 'power': [], 'ue_pos': ue_pos, "bs_loc": None, "medium_speed": C}
             for band in self.bands:
                 if link_flag:
                     break
                 try:
                     channel.init_channel(bs_ind, ue_pos, band)
+                    gt['bs_loc'] = channel.get_bs_loc()
+                # Except value error in case the link state is not 1. in that case, skip this ue position.
                 except ValueError:
                     link_flag = True
                     continue
-                gt['angle'].append(channel.get_doas())
-                gt['time_delay'].append(channel.get_toas())
+                # the angle and time_delay should be the same for all paths, for the LOS signal.
+                gt['angle'].append(channel.get_LOS_doa())
+                gt['time_delay'].append(channel.get_LOS_toa())
                 gt['power'].append(channel.get_powers())
+                gt["medium_speed"] = channel.get_medium_speed()
                 obser = Observations([])
                 obser.init_observations(channel, band)
                 observations.append(obser.get_observations())
             # create the sample
             if len(observations) == 0:
                 continue
+            # Check if the angle and time delay are the same for all bands.
+            if len(set(gt['angle'])) == 1 and len(set(gt['time_delay'])) == 1:
+                gt['angle'] = gt['angle'][0]
+                gt['time_delay'] = gt['time_delay'][0]
+            else:
+                # check if the variance is close enough to zero.
+                var_time_delay = np.round(np.var(gt["time_delay"]), 9)
+                var_angle = np.round(np.var(gt["angle"]), 3)
+                if var_time_delay > 0 or var_angle > 0:
+                    raise DataError("NYDataset.__load_data: The angle or time delay is not the same for all bands.")
+                else:
+                    gt['angle'] = gt['angle'][0]
+                    gt['time_delay'] = gt['time_delay'][0]
             sample = {'data': observations, 'gt': gt}
             data.append(sample)
-        return data
+        self.data = data
 
     def __len__(self):
         return len(self.data)
@@ -76,8 +96,30 @@ class NYDataset(Dataset):
         sample = self.data[idx]
         data = sample['data']
         gt = sample['gt']
-
+        gt['power'] = 0 # remove the power from the ground truth
         return data, gt
+
+    def save(self, path):
+        """
+        Save the dataset to a given path.
+        Args:
+            path(str): The path to save the dataset.
+
+        Returns:
+            None
+        """
+        np.save(path, self.data)
+
+    def load(self, path):
+        """
+        Load the dataset from a given path.
+        Args:
+            path(str): The path to load the dataset.
+
+        Returns:
+            None
+        """
+        self.data = np.load(path, allow_pickle=True)
 
 if __name__ == "__main__":
     # test the NYDataset
@@ -86,6 +128,12 @@ if __name__ == "__main__":
     bws = [6, 12, 24, 48]
     ns = [4, 8, 16, 24]
     ks = [50, 100, 75, 100]
-
-    dataset = NYDataset(data_dir, fcs, bws, ns, ks)
+    bands = Bands(fcs, ns, ks, bws)
+    dataset = NYDataset(data_dir, bands)
+    dataset.create_data()
+    dataset.save("test.npy")
+    # dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+    # for data, gt in dataloader:
+    #     print(data, gt)
+    #     break
 

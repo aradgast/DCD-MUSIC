@@ -1,5 +1,8 @@
 """
-TODO: Add description
+This file contains the implementation of the Channel and Channels classes.
+The Channel class represents a single channel in the system and contains the parameters of the channel such as the
+time of arrival, direction of arrival, and base station location.
+The Channels class is a collection of Channel objects.
 """
 import torch
 import numpy as np
@@ -42,6 +45,12 @@ class Channel:
 
     def get_doas(self):
         return self.doas
+
+    def get_LOS_doa(self):
+        return self.doas[0]
+
+    def get_LOS_toa(self):
+        return self.toas[0]
 
     def get_powers(self):
         return self.powers

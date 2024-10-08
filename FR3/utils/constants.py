@@ -7,7 +7,7 @@ C = 300 * 1e6 # speed of light meter / micro-second
 MU_SEC = 10 ** (-6)  # mu seconds factor
 
 ALG_THRESHOLD = 1.2  # ratio of signal to noise ratio for the algorithms
-DOA_RES = 0.05 # resolution of the DOA
+DOA_RES = 0.5 # resolution of the DOA
 TIME_RES = 0.1 * MU_SEC # time resolution
 BS_ORIENTATION = -np.pi / 2  # orientation of the BS
 

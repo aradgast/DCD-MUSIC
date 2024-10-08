@@ -93,10 +93,10 @@ class SubspaceMethod(nn.Module):
             Rx = self.__spatial_smoothing_covariance(x)
         elif mode == "subcarrier":
             # calculate the covariance matrix for each subcarrier
-            sensor_number, subcarriers_number, samples_number = x.shape
-            Rx = torch.zeros(subcarriers_number, sensor_number, sensor_number, dtype=torch.complex128, device=device)
+            batch_size, sensor_number, subcarriers_number, samples_number = x.shape
+            Rx = torch.zeros(batch_size, subcarriers_number, sensor_number, sensor_number, dtype=torch.complex128, device=device)
             for k in range(subcarriers_number):
-                Rx[k] = self.pre_processing(x[:, k, :], mode="sample")
+                Rx[:, k] = self.pre_processing(x[:, :, k, :], mode="sample")
             # # focusing method - just sum the covariance matrices in the subcarriers dimension
             # Rx = torch.sum(Rx, dim=0)
             # # make sure the first dimension is the batch size
