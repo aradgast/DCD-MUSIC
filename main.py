@@ -30,19 +30,9 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-<<<<<<< HEAD
     # "SNR": [],
     # "T": [],
     # "eta": [],
-=======
-    # "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 50, 70, 100],
-<<<<<<< HEAD
-    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
->>>>>>> 30b03263f8be4ebc15f64fa4a45e297994589834
-=======
-    "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
->>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
 }
 
 system_model_params = {
@@ -57,11 +47,7 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
-<<<<<<< HEAD
     "model_type": "SubspaceNet",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
-=======
-    "model_type": "TransMUSIC",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
->>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -76,27 +62,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-<<<<<<< HEAD
-<<<<<<< HEAD
     "samples_size": 1024,
     "train_test_ratio": .1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 256,
     "epochs": 10,
-=======
-    "samples_size": 1024*4,
-    "train_test_ratio": 1,
-    "training_objective": "angle, range",       # angle, range, source_estimation
-    "batch_size": 128,
-    "epochs": 50,
->>>>>>> 30b03263f8be4ebc15f64fa4a45e297994589834
-=======
-    "samples_size": 500,
-    "train_test_ratio": 1,
-    "training_objective": "angle, range",       # angle, range, source_estimation
-    "batch_size": 256,
-    "epochs": 150,
->>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -106,11 +76,7 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-<<<<<<< HEAD
     "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-=======
-    "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
->>>>>>> 30b03263f8be4ebc15f64fa4a45e297994589834
     "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
@@ -142,8 +108,6 @@ evaluation_params = {
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
-<<<<<<< HEAD
-<<<<<<< HEAD
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
@@ -151,19 +115,6 @@ simulation_commands = {
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": False,                       # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": False,                  # if True, the RMSE results of evaluation will be plotted
-=======
-    "CREATE_DATA": False,
-    "LOAD_MODEL": True,
-=======
-    "CREATE_DATA": True,
-    "LOAD_MODEL": False,
->>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
-    "TRAIN_MODEL": False,
-    "SAVE_MODEL": False,
-    "EVALUATE_MODE": True,
-    "PLOT_RESULTS": False,                       # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
->>>>>>> 30b03263f8be4ebc15f64fa4a45e297994589834
     "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,                         # if True, the plots will be saved to the results folder
 }
