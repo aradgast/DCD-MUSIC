@@ -45,8 +45,8 @@ plot_styles = {
     'music': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
     'music(SPS)': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
 }
-device = "cpu"
-print("Running on device: ", device)
+# device = "cpu"
+# print("Running on device: ", device)
 
 
 # Functions

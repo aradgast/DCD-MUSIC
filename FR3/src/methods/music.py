@@ -69,7 +69,7 @@ class FR3_MUSIC(SubspaceMethod):
                     max_peak_k = k_peak_tmp[np.argsort(normalized_music_spectrum[batch].flatten()[k_peak_tmp])[::-1]][0]
                 maximum_ind_k = torch.from_numpy(np.array(np.unravel_index(max_peak_k, normalized_music_spectrum[batch].shape)))
                 if normalized_music_spectrum[batch][*maximum_ind_k] > k_vals[batch]:
-                    peaks[batch][None, :] = maximum_ind_k
+                    peaks[batch][None, :] = maximum_ind_k.squeeze()
                     k_vals[batch] = normalized_music_spectrum[batch][*maximum_ind_k]
                     chosen_fs[batch] = band.get_fc()
                     # self.normalized_music_spectrum[band.get_fc()] = normalized_music_spectrum
@@ -104,10 +104,10 @@ class FR3_MUSIC(SubspaceMethod):
 
 
         # need to return the DOAs and TOAs, and the related power
-        angles = self.angels_dict[peaks[:, 0]]
+        angles = self.angels_dict[peaks.cpu().numpy()[:, 0]]
         time_delays = np.zeros(batch_size, dtype=np.float32)
         for i in range(batch_size):
-            time_delays[i] = self.time_dict[chosen_fs[i].item()][peaks[i, 1]]
+            time_delays[i] = self.time_dict[chosen_fs[i].item()][peaks.cpu().numpy()[i, 1]]
         # power = self.normalized_music_spectrum[chosen_f][peak[0], peak[1]]
         return angles, time_delays, None
 
@@ -127,8 +127,7 @@ class FR3_MUSIC(SubspaceMethod):
 
         for band in self.bands:
             band_idx = self.bands.get_band_index_by_fc(band.get_fc())
-            multiplication = np.kron(angle_options[band_idx].T, time_options[band_idx])
-            self.search_grid[band.get_fc()] = torch.from_numpy(multiplication).to(DEVICE)
+            self.search_grid[band.get_fc()] = torch.kron(angle_options[band_idx].transpose(0, 1).contiguous(), time_options[band_idx].contiguous())
             # angle_option = torch.from_numpy(angle_options[band_idx]).to(DEVICE)
             # time_option = torch.from_numpy(time_options[band_idx]).to(DEVICE)
             # self.search_grid[band.get_fc()] = torch.einsum("na, tk -> natk", angle_option, time_option) # TODO

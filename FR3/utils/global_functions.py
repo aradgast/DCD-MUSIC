@@ -62,7 +62,11 @@ def optimize_to_estimate_position(bs_locs: np.ndarray, toa_values, aoa_values, m
     return est_ue_pos
 
 def power_from_dbm(dbm):
-    return 10 ** ((dbm-30) / 20)
+    if isinstance(dbm, list):
+        dbm = np.array(dbm)
+    if isinstance(dbm, np.ndarray):
+        dbm = torch.from_numpy(dbm)
+    return 10 ** ((dbm - 30) / 20)
 
 def dbm_from_power(power):
     return 10 * np.log10(power) + 30

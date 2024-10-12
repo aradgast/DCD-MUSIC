@@ -17,26 +17,28 @@ def main():
     ks = [50, 100, 75, 100]
 
     bands = Bands(fcs, ns, ks, bws)
-    data_dir = r"C:\git_repos\DCD-MUSIC\FR3\data\FR3"
+    data_dir = r"C:\git_clones\DCD-MUSIC\FR3\data\FR3"
     dataset = NYDataset(data_dir, bands)
-    # dataset.load(r"C:\git_repos\DCD-MUSIC\FR3\src\observations\test.npy")
-    dataset.create_data()
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
-    for data, gt in dataloader:
-        break
-    # estimate the physical parameters
-    # create instance of the algorithm
-    music = FR3_MUSIC(bands)
-    # estimate the physical parameters
-    angle, time_delay, power = music(data)
-    print(f"Estimated - Angle: {angle}, Time delay: {time_delay}, Power: {power}")
-    print(f"Ground truth - Angle: {gt['angle'].numpy()}, Time delay: {gt['time_delay'].numpy()}")
-    locs = []
-    for i in range(len(angle)):
-        locs.append(optimize_to_estimate_position(gt['bs_loc'][i], time_delay[i], angle[i], medium_speed=gt['medium_speed'][i].item()))
-    print(f"Estimated location: {locs}")
-    print(f"Ground truth location: {gt['ue_pos']}")
-    print(f"RMSE: {mean_squared_error(gt['ue_pos'], locs, squared=False)}")
+    # dataset.create_data()
+    # dataset.save("test.pt")
+    dataset.load("test.pt")
+    if True:
+        dataloader = DataLoader(dataset, batch_size=5, shuffle=True)
+        for data, gt in dataloader:
+            break
+        # estimate the physical parameters
+        # create instance of the algorithm
+        music = FR3_MUSIC(bands)
+        # estimate the physical parameters
+        angle, time_delay, power = music(data)
+        print(f"Estimated - Angle: {angle}, Time delay: {time_delay}, Power: {power}")
+        print(f"Ground truth - Angle: {gt['angle'].numpy()}, Time delay: {gt['time_delay'].numpy()}")
+        locs = []
+        for i in range(len(angle)):
+            locs.append(optimize_to_estimate_position(gt['bs_loc'][i], time_delay[i], angle[i], medium_speed=gt['medium_speed'][i].item()))
+        print(f"Estimated location: {locs}")
+        print(f"Ground truth location: {gt['ue_pos']}")
+        print(f"RMSE: {mean_squared_error(gt['ue_pos'], locs, squared=False)}")
 
 
 

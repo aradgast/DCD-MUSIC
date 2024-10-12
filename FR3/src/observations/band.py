@@ -7,8 +7,10 @@ The Bands object is a collection of Band objects.
 import numpy as np
 import torch
 
+from FR3.utils.constants import DEVICE
+
 def get_steering_vector(params):
-    return np.exp(-2j * np.pi * params)
+    return torch.exp(-2j * np.pi * params)
 
 class Band:
     def __init__(self, fc, n, k, bw):
@@ -37,27 +39,38 @@ class Band:
         return self.bw
 
     def compute_time_steering(self, toas):
-        # create the steering based on the toas
+        if isinstance(toas, list):
+            toas = torch.from_numpy(np.array(toas)).to(DEVICE)
+        if isinstance(toas, np.ndarray):
+            toas = torch.from_numpy(toas).to(DEVICE)
+        toas = torch.atleast_2d(toas).reshape(-1, 1)
         # create the K frequency bins
-        time_basis_vector = np.linspace(self.fc - self.bw / 2, self.fc + self.bw / 2, self.k)
+        time_basis_vector = torch.linspace(self.fc - self.bw / 2, self.fc + self.bw / 2, self.k)
+        time_basis_vector = time_basis_vector.reshape(1, -1).to(DEVICE).to(torch.float64)
         # simulate the phase at each frequency bins
-        toas = np.atleast_2d(toas)
-        combination = np.dot(toas.reshape(-1, 1), time_basis_vector.reshape(1, -1))
+        combination = torch.matmul(toas, time_basis_vector)
         array_response_combination = get_steering_vector(combination)
         # might have duplicates depending on the frequency, BW and number of subcarriers
         # so remove the recurring time basis vectors - assume only the first one is valid
         # and the ones after can only cause recovery errors
-        if array_response_combination.shape[0] > 1:
-            first_row_duplicates = np.all(np.isclose(array_response_combination, array_response_combination[0]), axis=1)
-            if sum(first_row_duplicates) > 1:
-                dup_row = np.where(first_row_duplicates)[0][1]
-                array_response_combination = array_response_combination[:dup_row]
+        # TODO: check if this is the correct way to handle the duplicates
+        # if array_response_combination.shape[0] > 1:
+        #     first_row_duplicates = torch.all(torch.isclose(array_response_combination, array_response_combination[0]),
+        #                                      dim=1)
+        #     if torch.sum(first_row_duplicates).item() > 1:
+        #         dup_row = torch.nonzero(first_row_duplicates)[1].item()
+        #         array_response_combination = array_response_combination[:dup_row]
         return array_response_combination
 
     def compute_angle_steering(self, angles):
+        if isinstance(angles, list):
+            angles = torch.from_numpy(np.array(angles)).to(DEVICE)
+        if isinstance(angles, np.ndarray):
+            angles = torch.from_numpy(angles).to(DEVICE)
         # create the steering based on the doas
-        angles = np.atleast_2d(angles)
-        return get_steering_vector(np.dot(np.arange(self.n).reshape(-1, 1), np.sin(angles).reshape(1, -1)) / 2)
+        angles = torch.atleast_2d(angles)
+        loc_shifts = torch.arange(self.n, device=DEVICE, dtype=torch.float64).reshape(-1, 1)
+        return get_steering_vector(torch.matmul(loc_shifts, torch.sin(angles).reshape(1, -1)) / 2)
 
 
 class Bands:

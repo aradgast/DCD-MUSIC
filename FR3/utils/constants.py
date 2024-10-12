@@ -3,12 +3,13 @@ import numpy as np
 import os
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(f"Running on device: {DEVICE}")
 C = 300 * 1e6 # speed of light meter / micro-second
 MU_SEC = 10 ** (-6)  # mu seconds factor
 
 ALG_THRESHOLD = 1.2  # ratio of signal to noise ratio for the algorithms
-DOA_RES = 0.5 # resolution of the DOA
-TIME_RES = 0.1 * MU_SEC # time resolution
+DOA_RES = 1 # resolution of the DOA in degrees
+TIME_RES = 0.01 * MU_SEC # time resolution
 BS_ORIENTATION = -np.pi / 2  # orientation of the BS
 
 WALLS = np.array([[8, 11], [8, 15], [11, 15], [11, 11], [8, 11]]) # walls in the room

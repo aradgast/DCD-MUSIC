@@ -31,28 +31,22 @@ class Observations:
         """
         bw_loss = 10 * np.log10(band.get_bw())
         noise_amp = power_from_dbm(self.nf + bw_loss + self.n0)
-        channel_response = torch.zeros((band.n, band.k, self.ns), dtype=torch.complex128)
-        for l in range(channel.num_paths):
-            # Assume random phase beamforming
-            F = torch.exp(1j * torch.from_numpy(np.random.rand(1, 1, self.ns)) * 2 * torch.pi)
-            # Phase delay for the K sub-carriers
-            try:
-                time_base = band.compute_time_steering(channel.toas[l])
-            except IndexError:
-                pass
-            # Different phase in each antenna element
-            angle_base = band.compute_angle_steering(channel.doas[l])
-
-            angle_base = torch.from_numpy(angle_base).to(DEVICE).to(torch.complex128)
-            time_base = torch.from_numpy(time_base).to(DEVICE).to(torch.complex128)
-
-            steering_mat = torch.matmul(angle_base, time_base)
-            steering_mat = F * steering_mat.unsqueeze(-1)
-            channel_response += power_from_dbm(channel.powers[l]) / noise_amp * steering_mat
+        # Phase delay for the K sub-carriers for all paths
+        time_base = band.compute_time_steering(channel.toas).to(DEVICE).to(torch.complex128)
+        # Different phase in each antenna element
+        angle_base = band.compute_angle_steering(channel.doas).to(DEVICE).to(torch.complex128).transpose(0, 1)
+        steering_mat = torch.einsum("ln, lt -> lnt", angle_base, time_base)
+        # Assume random phase beamforming
+        F = torch.exp(1j * torch.from_numpy(np.random.rand(channel.num_paths, 1, 1, self.ns)) * 2 * torch.pi).to(
+            DEVICE).to(torch.complex128)
+        steering_mat = torch.einsum("lntj, lnt -> lntj", F, steering_mat)
+        channel_response = torch.sum(
+            (power_from_dbm(channel.powers) / noise_amp).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).to(
+                DEVICE) * steering_mat, dim=0)
         # Add white Gaussian noise, use numpy for the random numbers
         normal_gaussian_noise = (1 / np.sqrt(2) *
                                  (torch.from_numpy(np.random.randn(band.n, band.k, self.ns))
-                                  + 1j * torch.from_numpy(np.random.randn(band.n, band.k, self.ns))))
+                                  + 1j * torch.from_numpy(np.random.randn(band.n, band.k, self.ns)))).to(device=DEVICE).to(torch.complex128)
         self.data = channel_response + normal_gaussian_noise
 
     def set_observations(self, data):

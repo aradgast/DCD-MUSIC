@@ -8,6 +8,7 @@ from pandas.errors import DataError
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import numpy as np
+import torch
 
 from FR3.src.observations.band import Bands
 from FR3.src.observations.observations import Observations
@@ -39,9 +40,12 @@ class NYDataset(Dataset):
                 raise FileNotFoundError(f"The band {name} is missing.")
 
         data = []
+        # hold the csv files for the bs index for each band
+        csv_files = [os.path.join(self.data_dir, name, f"bs_{str(bs_ind)}.csv") for name in name_of_bands]
+        csv_loaded = [pd.read_csv(file) for file in csv_files]
         # start with extract all possible locations of the ue from the csv files named rx_x and rx_y
-        tmp_data = pd.read_csv(os.path.join(self.data_dir, name_of_bands[0], f"bs_{str(bs_ind)}.csv"))
-        ue_locations = tmp_data[tmp_data["link state"] == 1][['rx_x', 'rx_y']].to_numpy()
+        csv_tmp = csv_loaded[0]
+        ue_locations = csv_tmp[csv_tmp["link state"] == 1][['rx_x', 'rx_y']].to_numpy()
 
         # now we can use Channel and Observations to create the data by iterating over the ue locations
         channel = Channel(synthetic=False)
@@ -49,11 +53,11 @@ class NYDataset(Dataset):
             link_flag = False
             observations = []
             gt = {'angle': [], 'time_delay': [], 'power': [], 'ue_pos': ue_pos, "bs_loc": None, "medium_speed": C}
-            for band in self.bands:
+            for idx, band in enumerate(self.bands):
                 if link_flag:
                     break
                 try:
-                    channel.init_channel(bs_ind, ue_pos, band)
+                    channel.init_channel(bs_ind, ue_pos, band, csv_loaded=csv_loaded[idx])
                     gt['bs_loc'] = channel.get_bs_loc()
                 # Except value error in case the link state is not 1. in that case, skip this ue position.
                 except ValueError:
@@ -108,7 +112,7 @@ class NYDataset(Dataset):
         Returns:
             None
         """
-        np.save(path, self.data)
+        torch.save(self.data, path)
 
     def load(self, path):
         """
@@ -119,7 +123,7 @@ class NYDataset(Dataset):
         Returns:
             None
         """
-        self.data = np.load(path, allow_pickle=True)
+        self.data = torch.load(path)
 
 if __name__ == "__main__":
     # test the NYDataset

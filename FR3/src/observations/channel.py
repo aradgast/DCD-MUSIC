@@ -25,14 +25,14 @@ class Channel:
         self.medium_speed = None
         self.is_synthetic = synthetic
 
-    def init_channel(self, bs_ind: int, ue_pos, band, scatterers=None):
+    def init_channel(self, bs_ind: int, ue_pos, band, scatterers=None, csv_loaded=None):
         ue_pos = np.array(ue_pos)
         if self.is_synthetic:
             self.bs_loc = create_bs_locs(bs_ind)
             scatterers = create_scatter_points(SYNTHETIC_L_MAX)
             self.__generate_synthetic_params(self.bs_loc, ue_pos, scatterers, band)
         else:
-            self.__load_ny_scenario(bs_ind, ue_pos, band)
+            self.__load_ny_scenario(bs_ind, ue_pos, band, csv_loaded)
 
     def get_bs_loc(self):
         return self.bs_loc
@@ -55,7 +55,7 @@ class Channel:
     def get_powers(self):
         return self.powers
 
-    def __load_ny_scenario(self, bs_ind, ue_pos, band: Band):
+    def __load_ny_scenario(self, bs_ind, ue_pos, band: Band, csv_loaded):
         """
         Generate the parameters for each of the L_MAX paths in the current bs-ue link.
         Each path includes the toa, aoa and power.
@@ -67,8 +67,9 @@ class Channel:
         Returns:
 
         """
-        csv_path = os.path.join(DATA_DIR, band.get_fc_file_name(), f"bs_{str(bs_ind)}.csv")
-        csv_loaded = pd.read_csv(csv_path)
+        if csv_loaded is None:
+            csv_path = os.path.join(DATA_DIR, band.get_fc_file_name(), f"bs_{str(bs_ind)}.csv")
+            csv_loaded = pd.read_csv(csv_path)
         row_ind = csv_loaded.index[(csv_loaded[['rx_x', 'rx_y']] == ue_pos).all(axis=1)].item()
         row = csv_loaded.iloc[row_ind]
         if row['link state'] != 1:
