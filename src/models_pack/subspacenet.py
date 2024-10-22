@@ -8,7 +8,7 @@ from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
 from src.utils import *
 
-from src.methods_pack.music import MUSIC
+from src.methods_pack.music import MUSIC, SubspaceMethod
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.root_music import RootMusic, root_music
 
@@ -124,21 +124,29 @@ class SubspaceNet(ParentModel):
         # Feed surrogate covariance to the differentiable subspace algorithm
 
         if self.field_type == "Far":
-            method_output = self.diff_method(Rz, sources_num)
-            if isinstance(self.diff_method, RootMusic):
-                doa_prediction, doa_all_predictions, roots = method_output
-                return doa_prediction, doa_all_predictions, roots
-            elif isinstance(self.diff_method, ESPRIT):
-                # Esprit output
-                doa_prediction, sources_estimation, eigen_regularization = method_output
-                return doa_prediction, sources_estimation, eigen_regularization
-            elif isinstance(self.diff_method, MUSIC):
-                doa_prediction, sources_estimation, eigen_regularization = method_output
-                return doa_prediction, sources_estimation, eigen_regularization
+            if isinstance(self.diff_method, MUSIC) and self.training:
+                    _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
+                    return [noise_subspace, source_estimation, eigen_regularization]
             else:
-                raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
+                method_output = self.diff_method(Rz, sources_num)
+                if isinstance(self.diff_method, RootMusic):
+                    doa_prediction, doa_all_predictions, roots = method_output
+                    return doa_prediction, doa_all_predictions, roots
+                elif isinstance(self.diff_method, ESPRIT):
+                    # Esprit output
+                    doa_prediction, sources_estimation, eigen_regularization = method_output
+                    return doa_prediction, sources_estimation, eigen_regularization
+                elif isinstance(self.diff_method, MUSIC):
+                    doa_prediction, sources_estimation, eigen_regularization = method_output
+                    return doa_prediction, sources_estimation, eigen_regularization
+
+                else:
+                    raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
         elif self.field_type == "Near":
+            if self.training and self.diff_method.estimation_params == "angle, range":
+                _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
+                return [noise_subspace, source_estimation, eigen_regularization]
             if known_angles is None:
                 predictions, sources_estimation, eigen_regularization = self.diff_method(
                     Rz, number_of_sources=sources_num)
@@ -221,7 +229,7 @@ class SubspaceNet(ParentModel):
 
     def adjust_diff_method_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC):
-            if epoch % 20 == 0 and epoch != 0:
+            if epoch % 10 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
 
@@ -233,7 +241,73 @@ class SubspaceNet(ParentModel):
                 return {"angle_cell_size": self.diff_method.cell_size_angle,
                         "distance_cell_size": self.diff_method.cell_size_distance}
 
-    def get_model_params(self):
+    def print_model_params(self):
         tau = self.tau
         diff_method = self.diff_method
         return f"tau={tau}_diff_method={diff_method}"
+
+    def get_model_params(self):
+        return {"tau": self.tau, "diff_method": self.diff_method, "field_type": self.field_type}
+
+    def loss(self, loss_type:str="orthogonality", **kwargs):
+        if loss_type == "orthogonality":
+            return self.orthogonality_loss(**kwargs)
+        else:
+            raise ValueError(f"SubspaceNet.loss: Unrecognized loss type: {loss_type}")
+
+    def orthogonality_loss(self, **kwargs):
+        if self.system_model.params.field_type.startswith("Far"):
+            return self.__orthogonality_loss_far_field(noise_subspace=kwargs["noise_subspace"],angles=kwargs["angles"])
+        elif self.system_model.params.field_type.startswith("Near"):
+            return self.__orthogonality_loss_near_field(noise_subspace=kwargs["noise_subspace"],
+                                                        angles=kwargs["angles"], ranges=kwargs["ranges"])
+        else:
+            raise ValueError(f"MUSIC.orthogonality_loss: Unrecognized field type: "
+                             f"{self.system_model.params.field_type}")
+
+    def __orthogonality_loss_far_field(self, noise_subspace, angles):
+        # compute the spectrum in the angles points using the noise subspace, sum the values and return the loss.
+        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
+        theta = angles.unsqueeze(-1)
+        time_delay = torch.einsum("nm, ban -> ban",
+                                  array,
+                                  torch.sin(theta).repeat(1, 1, self.system_model.params.N) *
+                                  self.system_model.dist_array_elems["NarrowBand"])
+        search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
+        var1 = torch.bmm(search_grid.conj(), noise_subspace.to(torch.complex128))
+        inverse_spectrum = torch.norm(var1, dim=-1)
+        spectrum = 1 / inverse_spectrum
+        loss = -torch.sum(spectrum, dim=1).sum()
+        return loss
+
+    def __orthogonality_loss_near_field(self, noise_subspace, angles, ranges):
+        dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
+        theta = angles[:, :, None]
+        distances = ranges[:, :, None].to(torch.float64)
+        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
+        array_square = torch.pow(array, 2).to(torch.float64)
+
+        first_order = torch.einsum("nm, bna -> bna",
+                                   array,
+                                   torch.sin(theta).repeat(1, 1, self.system_model.params.N).transpose(1,
+                                                                                                       2) * dist_array_elems)
+
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.transpose(1, 2))
+        second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.system_model.params.N)
+        second_order = torch.einsum("nm, bnda -> bnda",
+                                    array_square,
+                                    second_order.transpose(3, 1).transpose(2, 3))
+
+        first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
+
+        time_delay = first_order + second_order
+
+        search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
+        var1 = torch.einsum("badk, bkl -> badl",
+                            search_grid.conj().transpose(1, 3).transpose(1, 2)[:, :, :, :noise_subspace.shape[1]],
+                            noise_subspace.to(torch.complex128))
+        # get the norm value for each element in the batch.
+        inverse_spectrum = torch.linalg.diagonal(torch.norm(var1, dim=-1)) ** 2
+        # spectrum = 1 / inverse_spectrum
+        loss = torch.sum(inverse_spectrum, dim=-1).sum()
+        return loss

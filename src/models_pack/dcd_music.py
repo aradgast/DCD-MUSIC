@@ -81,5 +81,8 @@ class DCDMUSIC(SubspaceNet):
             # angles = torch.sort(angles, dim=1)[0]
         return angles, sources_estimation, eigen_regularization
 
-    def get_model_params(self):
+    def print_model_params(self):
         return f"tau={self.tau}"
+
+    def get_model_params(self):
+        return {"tau": self.tau}

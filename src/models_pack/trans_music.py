@@ -194,5 +194,8 @@ class TransMUSIC(ParentModel):
         x = torch.cat([x.real, x.imag], dim=1)
         return x
 
-    def get_model_params(self):
+    def print_model_params(self):
         return f"in_dim={self.input_dim}"
+
+    def get_model_params(self):
+        return {"in_dim": self.input_dim}

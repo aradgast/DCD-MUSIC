@@ -8,21 +8,21 @@ import argparse
 
 # default values for the argparse
 number_sensors = 15
-number_sources = None
-number_snapshots = 20
+number_sources = 2
+number_snapshots = 50
 snr = 0
 field_type = "Near"
 signal_nature = "coherent"
 err_loc_sv = 0.0
 tau = 8
 sample_size = 4096
-train_test_ratio = 0.0
-batch_size = 256
-epochs = 150
+train_test_ratio = 0.1
+batch_size = 128
+epochs = 50
 optimizer = "Adam"
 learning_rate = 0.001
 weight_decay = 1e-9
-step_size = 50
+step_size = 20
 gamma = 0.5
 
 

@@ -8,7 +8,10 @@ class ParentModel(nn.Module):
         self.system_model = system_model
 
     def get_model_name(self):
-        return f"{self._get_name()}_{self.get_model_params()}"
+        return f"{self._get_name()}_{self.print_model_params()}"
+
+    def print_model_params(self):
+        return None
 
     def get_model_params(self):
         return None
@@ -28,6 +31,9 @@ class ParentModel(nn.Module):
             f"{self.system_model.params.signal_nature}_" + \
             f"eta={self.system_model.params.eta}_" + \
             f"sv_var={self.system_model.params.sv_noise_var}"
+
+    def loss(self, *args, **kwargs):
+        raise NotImplementedError
 
 if __name__ == "__main__":
     pass

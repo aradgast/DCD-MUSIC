@@ -82,7 +82,7 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
     model = model_config.model
     path = os.path.join(Path(__file__).parent.parent, "data", "weights", "final_models", model.get_model_file_name())
     try:
-        model.load_state_dict(torch.load(path))
+        model.load_state_dict(torch.load(path, map_location=device))
     except FileNotFoundError as e:
         print("####################################")
         print(e)
@@ -763,7 +763,7 @@ def evaluate(
             plot_spec=plot_spec,
             algorithm=algorithm,
             figures=figures)
-        if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "r-music", "esprit"]:
+        if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["music_1d", "2d-music", "r-music", "esprit"]:
             algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")
         res[algorithm] = loss

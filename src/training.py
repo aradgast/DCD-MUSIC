@@ -28,6 +28,10 @@ Attributes:
 None
 """
 import warnings
+
+from src.methods_pack.esprit import ESPRIT
+from src.methods_pack.subspace_method import SubspaceMethod
+
 EIGEN_REGULARIZATION_WEIGHT = 100
 # Imports
 import matplotlib.pyplot as plt
@@ -45,6 +49,7 @@ from src.criterions import *
 from src.system_model import SystemModel, SystemModelParams
 from src.models import (SubspaceNet, DeepCNN, DeepAugmentedMUSIC,
                         ModelGenerator, DCDMUSIC, TransMUSIC, DeepRootMUSIC)
+from src.methods_pack.music import MUSIC
 from src.evaluation import evaluate_dnn_model
 from src.data_handler import TimeSeriesDataset, collate_fn, SameLengthBatchSampler
 
@@ -479,19 +484,25 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
                 eigen_regularization = model_output[3]
             elif isinstance(model, SubspaceNet):
                 model_output = model(x, sources_num=sources_num)
-                # in this case there are 2 labels - angles and distances.
-                if training_params.training_objective == "angle, range":
-                    angles_pred = model_output[0]
-                    ranges_pred = model_output[1]
-                    source_estimation = model_output[2]
-                    eigen_regularization = model_output[3]
-                elif training_params.training_objective.endswith("angle"):
-                    angles_pred = model_output[0]
-                    source_estimation = model_output[1]
-                    eigen_regularization = model_output[2]
+                if isinstance(model_output, tuple):
+                    # in this case there are 2 labels - angles and distances.
+                    if training_params.training_objective == "angle, range":
+                        angles_pred = model_output[0]
+                        ranges_pred = model_output[1]
+                        source_estimation = model_output[2]
+                        eigen_regularization = model_output[3]
+                    elif training_params.training_objective.endswith("angle"):
+                        if isinstance(model.diff_method, MUSIC):
+                            noise_subspace, source_estimation, eigen_regularization = model_output[0], model_output[1], model_output[2]
+                        else:
+                            angles_pred = model_output[0]
+                            source_estimation = model_output[1]
+                            eigen_regularization = model_output[2]
+                    else:
+                        raise Exception(f"train_model: Unrecognized training objective"
+                                        f" {training_params.training_objective}, for SubspaceNet model")
                 else:
-                    raise Exception(f"train_model: Unrecognized training objective"
-                                    f" {training_params.training_objective}, for SubspaceNet model")
+                    noise_subspace, source_estimation, eigen_regularization = model_output[0], model_output[1], model_output[2]
             elif isinstance(model, TransMUSIC):
                 model_output = model(x, mode=transmusic_mode)
                 if training_params.training_objective == "angle":
@@ -537,14 +548,34 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
                         train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                         if isinstance(train_loss, tuple):
                             train_loss, train_loss_angle, train_loss_distance = train_loss
-            elif isinstance(model, SubspaceNet):
+            elif isinstance(model, DCDMUSIC):
                 if training_params.training_objective == "angle":
                     train_loss = training_params.criterion(angles_pred, angles)
                 elif training_params.training_objective == "range":
                     train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
                 elif training_params.training_objective == "angle, range":
-                    # in the RMSPE case, we can return the loss for each part of the loss.
-                    train_loss = training_params.criterion(angles_pred,
+                    train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
+                if isinstance(train_loss, tuple):
+                    train_loss, train_loss_angle, train_loss_distance = train_loss
+                if eigen_regularization is not None:
+                    train_loss += eigen_regularization * eigen_regularization_weight
+
+            elif isinstance(model, SubspaceNet):
+                if training_params.training_objective == "angle":
+                    if isinstance(model.diff_method, MUSIC):
+                        # in this case, the loss is calculated using the noise subspace
+                        train_loss = model.loss(noise_subspace=noise_subspace, angles=angles)
+                    else:
+                        train_loss = training_params.criterion(angles_pred, angles)
+                elif training_params.training_objective == "range":
+                    train_loss = training_params.criterion(angles_pred, angles, ranges_pred, ranges)
+                elif training_params.training_objective == "angle, range":
+                    if isinstance(model.diff_method, MUSIC):
+                        # in this case, the loss is calculated using the noise subspace
+                        train_loss = model.loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
+                    else:
+                        # in the RMSPE case, we can return the loss for each part of the loss.
+                        train_loss = training_params.criterion(angles_pred,
                                                            angles,
                                                            ranges_pred,
                                                            ranges)
@@ -758,21 +789,20 @@ def simulation_summary(
     print("\n--- New Simulation ---\n")
     print(f"Description: Simulation of {model_type}, {phase} stage")
     print("System model parameters:")
-    print(f"Number of sources = {M}")
+    print(f"Number of sources = {M} {system_model_params.signal_nature}")
     print(f"Number of sensors = {system_model_params.N}")
     print(f"field_type = {system_model_params.field_type}")
     print(f"signal_type = {system_model_params.signal_type}")
     print(f"Observations = {system_model_params.T}")
-    print(
-        f"SNR = {system_model_params.snr}, {system_model_params.signal_nature} sources"
-    )
+    print(f"SNR = {system_model_params.snr}")
     print(f"Spacing deviation (eta) = {system_model_params.eta}")
     print(f"Bias spacing deviation (eta) = {system_model_params.bias}")
     print(f"Geometry noise variance = {system_model_params.sv_noise_var}")
     print("Simulation parameters:")
     print(f"Model: {model_type}")
-    print(f"Model parameters: {parameters.model.get_model_params()}")
+    print(f"Model parameters:", *[f" {key} = {val} |" for key,val in parameters.model.get_model_params().items() if val is not None])
     if phase.startswith("training"):
+        print("Training parameters:")
         print(f"Epochs = {parameters.epochs}")
         print(f"Batch Size = {parameters.batch_size}")
         print(f"Learning Rate = {parameters.learning_rate}")

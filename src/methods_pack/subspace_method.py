@@ -58,6 +58,32 @@ class SubspaceMethod(nn.Module):
 
         return signal_subspace.to(device), noise_subspace.to(device), source_estimation, l_eig
 
+    def get_noise_subspace(self, covariance: torch.Tensor, number_of_sources: int):
+        """
+
+        Args:
+            covariance:
+            number_of_sources:
+
+        Returns:
+
+        """
+        _, noise_subspace, _, _ = self.subspace_separation(covariance, number_of_sources)
+        return noise_subspace
+
+    def get_signal_subspace(self, covariance: torch.Tensor, number_of_sources: int):
+        """
+
+        Args:
+            covariance:
+            number_of_sources:
+
+        Returns:
+
+        """
+        signal_subspace, _, _, _ = self.subspace_separation(covariance, number_of_sources)
+        return signal_subspace
+
     def eigen_regularization(self, number_of_sources: int):
         """
 
@@ -160,7 +186,7 @@ class SubspaceMethod(nn.Module):
         plt.figure()
         plt.stem(self.normalized_eigen[batch_idx].cpu().detach().numpy(), label="Normalized Eigenvalues")
         # ADD threshold line
-        plt.axhline(y=self.__get_eigen_threshold(), color='r', linestyle='--', label="Threshold")
+        plt.axhline(y=self.__get_eigen_threshold().cpu().detach().numpy(), color='r', linestyle='--', label="Threshold")
         plt.title("Eigenvalues Spectrum")
         plt.xlabel("Eigenvalue Index")
         plt.ylabel("Eigenvalue")

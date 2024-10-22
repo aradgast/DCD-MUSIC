@@ -360,7 +360,7 @@ class MUSIC(SubspaceMethod):
     def __define_grid_params(self):
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 1440, device=device,
+            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720, device=device,
                                        dtype=torch.float64).requires_grad_(True).to(torch.float64)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
@@ -382,10 +382,10 @@ class MUSIC(SubspaceMethod):
         if self.estimation_params == "range":
             self.cell_size = int(self.distances.shape[0] * 0.3)
         elif self.estimation_params == "angle":
-            self.cell_size = int(self.angels.shape[0] * 0.3)
+            self.cell_size = int(self.angels.shape[0] * 0.2)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angels.shape[0] * 0.1)
-            self.cell_size_distance = int(self.distances.shape[0] * 0.1)
+            self.cell_size_angle = int(self.angels.shape[0] * 0.2)
+            self.cell_size_distance = int(self.distances.shape[0] * 0.2)
 
         if self.cell_size is not None:
             if self.cell_size % 2 == 0:
@@ -496,6 +496,62 @@ class MUSIC(SubspaceMethod):
             plt.xlabel(x_label)
             plt.legend()
             plt.show()
+
+    def orthogonality_loss(self, noise_subspace, angles, ranges=None):
+        if self.system_model.params.field_type.startswith("Far"):
+            return self.__orthogonality_loss_far_field(noise_subspace, angles)
+        elif self.system_model.params.field_type.startswith("Near"):
+            return self.__orthogonality_loss_near_field(noise_subspace, angles, ranges)
+        else:
+            raise ValueError(f"MUSIC.orthogonality_loss: Unrecognized field type: "
+                             f"{self.system_model.params.field_type}")
+
+    def __orthogonality_loss_far_field(self, noise_subspace, angles):
+        # compute the spectrum in the angles points using the noise subspace, sum the values and return the loss.
+        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
+        theta = angles.unsqueeze(-1)
+        time_delay = torch.einsum("nm, ban -> ban",
+                                  array,
+                                  torch.sin(theta).repeat(1, 1, self.system_model.params.N) *
+                                  self.system_model.dist_array_elems["NarrowBand"])
+        search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
+        var1 = torch.bmm(search_grid.conj(), noise_subspace.to(torch.complex128))
+        inverse_spectrum = torch.norm(var1, dim=-1)
+        spectrum = 1 / inverse_spectrum
+        loss = -torch.sum(spectrum, dim=1).sum()
+        return loss
+
+    def __orthogonality_loss_near_field(self, noise_subspace, angles, ranges):
+        dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
+        theta = angles[:, :, None]
+        distances = ranges[:, :, None].to(torch.float64)
+        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
+        array_square = torch.pow(array, 2).to(torch.float64)
+
+        first_order = torch.einsum("nm, bna -> bna",
+                                   array,
+                                   torch.sin(theta).repeat(1, 1, self.system_model.params.N).transpose(1,
+                                                                                                       2) * dist_array_elems)
+
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.transpose(1, 2))
+        second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.system_model.params.N)
+        second_order = torch.einsum("nm, bnda -> bnda",
+                                    array_square,
+                                    second_order.transpose(3, 1).transpose(2, 3))
+
+        first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
+
+        time_delay = first_order + second_order
+
+        search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
+        var1 = torch.einsum("badk, bkl -> badl",
+                            search_grid.conj().transpose(1, 3).transpose(1, 2)[:, :, :, :noise_subspace.shape[1]],
+                            noise_subspace.to(torch.complex128))
+        # get the norm value for each element in the batch.
+        inverse_spectrum = torch.linalg.diagonal(torch.norm(var1, dim=-1)) ** 2
+        spectrum = 1 / inverse_spectrum
+        loss = -torch.sum(spectrum, dim=-1).sum()
+        return loss
 
     def __str__(self):
         return f"music_{self.estimation_params}"
