@@ -1,6 +1,8 @@
 import torch.nn as nn
+import torch
 from src.system_model import SystemModel
 
+EIGEN_REGULARIZATION_WEIGHT = 10
 
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
@@ -32,8 +34,36 @@ class ParentModel(nn.Module):
             f"eta={self.system_model.params.eta}_" + \
             f"sv_var={self.system_model.params.sv_noise_var}"
 
-    def loss(self, *args, **kwargs):
+    def training_step(self, batch, batch_idx):
         raise NotImplementedError
+
+    def validation_step(self, batch, batch_idx):
+        raise NotImplementedError
+
+    def test_step(self, batch, batch_idx):
+        raise NotImplementedError
+
+    def predict_step(self, batch, batch_idx):
+        raise NotImplementedError
+
+    def forward(self, batch, batch_idx):
+        raise NotImplementedError
+
+    def set_eigenregularization_schedular(self, init_value=EIGEN_REGULARIZATION_WEIGHT, step_size=10, gamma=0.5):
+        self.schedular_counter = 0
+        self.schedular_step_size = step_size
+        self.schedular_gamma = gamma
+        self.eigenregularization_weight = init_value
+
+    def update_eigenregularization_weight(self):
+        if self.schedular_counter % self.schedular_step_size == 0 and self.schedular_counter != 0:
+            self.eigenregularization_weight *= self.schedular_gamma
+            print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+        self.schedular_counter += 1
+
+    def source_estimation_accuracy(self, sources_num, source_estimation):
+        return torch.sum(source_estimation == sources_num * torch.ones_like(source_estimation).float()).item()
+
 
 if __name__ == "__main__":
     pass

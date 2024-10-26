@@ -142,7 +142,7 @@ class MUSIC(SubspaceMethod):
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("an, nbm -> abm", self.search_grid.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
-                inverse_spectrum = torch.norm(var1, dim=2).T
+                inverse_spectrum = torch.norm(var1, dim=-1).T
             elif self.estimation_params.startswith("range"):
                 var1 = torch.einsum("dbn, nbm -> bdm", self.search_grid.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))

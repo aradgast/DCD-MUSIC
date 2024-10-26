@@ -32,8 +32,14 @@ import numpy as np
 import torch.nn as nn
 import torch
 from itertools import permutations
+
+from numpy.ma.core import array
+
 from src.utils import *
 import time
+
+from train_dcd import number_sensors, number_sources
+
 BALANCE_FACTOR = 1.0
 
 
@@ -120,8 +126,8 @@ class RMSPELoss(nn.Module):
         else:
             self.balance_factor = nn.Parameter(torch.Tensor([balance_factor])).to(device).to(torch.float64)
 
-    def forward(self, doa_predictions: torch.Tensor, doa: torch.Tensor,
-                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None):
+    def forward(self, angles_pred: torch.Tensor, angles: torch.Tensor,
+                ranges_pred: torch.Tensor = None, ranges: torch.Tensor = None):
         """
         Compute the RMSPE loss between the predictions and target values.
         The forward method takes two input tensors: doa_predictions and doa,
@@ -136,11 +142,11 @@ class RMSPELoss(nn.Module):
         Finally, the method averged the RMSE values for all samples in the batch and returns the result as the computed loss.
 
         Args:
-            doa_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
-            doa (torch.Tensor): Target values tensor of shape (batch_size, num_targets).
-            distance_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
+            angles_pred (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
+            angles (torch.Tensor): Target values tensor of shape (batch_size, num_targets).
+            ranges_pred (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
             The default value is None.
-            distance (torch.Tensor): Target values tensor of shape (batch_size, num_targets).The default value is None.
+            ranges (torch.Tensor): Target values tensor of shape (batch_size, num_targets).The default value is None.
 
 
         Returns:
@@ -150,27 +156,27 @@ class RMSPELoss(nn.Module):
             None
         """
         # Calculate RMSPE loss for only DOA
-        num_sources = doa_predictions.shape[1]
+        num_sources = angles_pred.shape[1]
         perm = list(permutations(range(num_sources), num_sources))
         num_of_perm = len(perm)
 
-        err_angle = (doa_predictions[:, perm] - torch.tile(doa[:, None, :], (1, num_of_perm, 1)).to(torch.float32))
+        err_angle = (angles_pred[:, perm] - torch.tile(angles[:, None, :], (1, num_of_perm, 1)).to(torch.float32))
         # Calculate error with modulo pi in the range [-pi/2, pi/2]
         err_angle += torch.pi / 2
         err_angle %= torch.pi
         err_angle -= torch.pi / 2
         rmspe_angle = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
-        if distance is None:
+        if ranges is None:
             rmspe, min_idx = torch.min(rmspe_angle, dim=-1)
         else:
-            err_distance = (distance_predictions[:, perm].to(device) - torch.tile(distance[:, None, :], (1, num_of_perm, 1)).to(device))
+            err_distance = (ranges_pred[:, perm].to(device) - torch.tile(ranges[:, None, :], (1, num_of_perm, 1)).to(device))
             rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
             rmspe_angle, min_idx = torch.min(rmspe_angle, dim=-1)
             # always consider the permutation which yields the minimal RMSPE over the angles.
             rmspe_distance = torch.gather(rmspe_distance, 1, min_idx.unsqueeze(0)).squeeze()
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
         result = torch.sum(rmspe)
-        if distance is None:
+        if ranges is None:
             return result
         else:
             result_angle = torch.sum(rmspe_angle)
@@ -441,31 +447,31 @@ class CartesianLoss(nn.Module):
     def __init__(self):
         super(CartesianLoss, self).__init__()
 
-    def forward(self, predictions_angle: torch.Tensor, targets_angle: torch.Tensor, predictions_distance: torch.Tensor,
-                targets_distance: torch.Tensor):
+    def forward(self, angles_pred: torch.Tensor, angles: torch.Tensor, ranges_pred: torch.Tensor,
+                ranges: torch.Tensor):
         """
         the input given is expected to contain angels and distances.
         """
-        M = targets_angle.shape[1]
-        if predictions_angle.shape[1] > targets_angle.shape[1]:
+        M = angles.shape[1]
+        if angles_pred.shape[1] > angles.shape[1]:
             # in this case, randomly drop some of the predictions
-            indices = torch.randperm(predictions_angle.shape[1])[:M].to(device)
-            predictions_angle = torch.gather(predictions_angle, 1, indices[None, :])
-            predictions_distance = torch.gather(predictions_distance, 1, indices[None, :])
+            indices = torch.randperm(angles_pred.shape[1])[:M].to(device)
+            angles_pred = torch.gather(angles_pred, 1, indices[None, :])
+            ranges_pred = torch.gather(ranges_pred, 1, indices[None, :])
 
-        elif predictions_angle.shape[1] < targets_angle.shape[1]:
+        elif angles_pred.shape[1] < angles.shape[1]:
             # add a random angle to the predictions
-            random_angles = torch.distributions.uniform.Uniform(-torch.pi / 3, torch.pi / 3).sample([predictions_angle.shape[0], M - predictions_angle.shape[1]])
-            random_ranges = torch.distributions.uniform.Uniform(torch.min(targets_distance).item(), torch.max(targets_distance).item()).sample([predictions_angle.shape[0], M - predictions_angle.shape[1]])
-            predictions_angle = torch.cat((predictions_angle, random_angles.to(device)), dim=1)
-            predictions_distance = torch.cat((predictions_distance, random_ranges.to(device)), dim=1)
+            random_angles = torch.distributions.uniform.Uniform(-torch.pi / 3, torch.pi / 3).sample([angles_pred.shape[0], M - angles_pred.shape[1]])
+            random_ranges = torch.distributions.uniform.Uniform(torch.min(ranges).item(), torch.max(ranges).item()).sample([angles_pred.shape[0], M - angles_pred.shape[1]])
+            angles_pred = torch.cat((angles_pred, random_angles.to(device)), dim=1)
+            ranges_pred = torch.cat((ranges_pred, random_ranges.to(device)), dim=1)
 
-        number_of_samples = predictions_angle.shape[0]
-        true_x = torch.cos(targets_angle) * targets_distance
-        true_y = torch.sin(targets_angle) * targets_distance
+        number_of_samples = angles_pred.shape[0]
+        true_x = torch.cos(angles) * ranges
+        true_y = torch.sin(angles) * ranges
         coords_true = torch.stack((true_x, true_y), dim=2)
-        pred_x = torch.cos(predictions_angle) * predictions_distance
-        pred_y = torch.sin(predictions_angle) * predictions_distance
+        pred_x = torch.cos(angles_pred) * ranges_pred
+        pred_y = torch.sin(angles_pred) * ranges_pred
         coords_pred = torch.stack((pred_x, pred_y), dim=2)
         # need to consider all possible permutations for M sources
         perm = list(permutations(range(M), M))
@@ -485,6 +491,63 @@ class CartesianLoss(nn.Module):
         #     loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
         # if (loss_[0] != torch.stack(loss, dim=0)).all():
         #     raise ValueError("Error in Cartesian Loss")
+
+class NoiseOrthogonalLoss(nn.Module):
+    def __init__(self, array, sensors_distance):
+        super(NoiseOrthogonalLoss, self).__init__()
+        self.array = array
+        self.sensors_distance = sensors_distance
+        self.number_sensors = array.shape[1]
+
+    def forward(self, **kwargs):
+        if "ranges" in kwargs:
+            return self.__forward_with_ranges(**kwargs)
+        else:
+            return self.__forward_without_ranges(**kwargs)
+
+    def __forward_without_ranges(self, **kwargs):
+        theta = kwargs["angles"].unsqueeze(-1)
+        time_delay = torch.einsum("nm, ban -> ban",
+                                  self.array,
+                                  torch.sin(theta).repeat(1, 1, self.number_sensors) * self.sensors_distance)
+        search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
+        var1 = torch.bmm(search_grid.conj(), kwargs["noise_subspace"].to(torch.complex128))
+        inverse_spectrum = torch.norm(var1, dim=-1)
+        spectrum = 1 / inverse_spectrum
+        loss = -torch.sum(spectrum, dim=1).sum()
+        return loss
+
+    def __forward_with_ranges(self, **kwargs):
+        theta = kwargs["angles"][:, :, None]
+        distances = kwargs["ranges"][:, :, None].to(torch.float64)
+        array_square = torch.pow(self.array, 2).to(torch.float64)
+        noise_subspace = kwargs["noise_subspace"].to(torch.complex128)
+
+        first_order = torch.einsum("nm, bna -> bna",
+                                   self.array,
+                                   torch.sin(theta).repeat(1, 1, self.number_sensors).transpose(1, 2) * self.sensors_distance)
+
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * self.sensors_distance, 2), distances.transpose(1, 2))
+        second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.number_sensors)
+        second_order = torch.einsum("nm, bnda -> bnda",
+                                    array_square,
+                                    second_order.transpose(3, 1).transpose(2, 3))
+
+        first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
+
+        time_delay = first_order + second_order
+
+        search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
+        var1 = torch.einsum("badk, bkl -> badl",
+                            search_grid.conj().transpose(1, 3).transpose(1, 2)[:, :, :, :noise_subspace.shape[1]],
+                            noise_subspace)
+        # get the norm value for each element in the batch.
+        inverse_spectrum = torch.linalg.diagonal(torch.norm(var1, dim=-1)) ** 2
+        # spectrum = 1 / inverse_spectrum
+        loss = torch.sum(inverse_spectrum, dim=-1).sum()
+        return loss
+
+
 def set_criterions(criterion_name: str, balance_factor: float = 0.0):
     """
     Set the loss criteria based on the criterion name.

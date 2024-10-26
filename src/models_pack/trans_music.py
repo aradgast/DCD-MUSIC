@@ -19,6 +19,7 @@ from src.system_model import SystemModel
 from src.utils import *
 from src.methods_pack.music import MUSIC
 from src.models_pack.parent_model import ParentModel
+from src.criterions import RMSPELoss, CartesianLoss
 
 
 class ShiftedReLU(nn.ReLU):
@@ -58,11 +59,15 @@ class TransMUSIC(ParentModel):
         self.params = self.system_model.params
         self.N = self.params.N
         self.estimation_params = None
+        self.train_mode = "subspace_train"
         if self.params.field_type == "Far":
             self.estimation_params = "angle"
+            self.rmspe_loss = RMSPELoss()
         elif self.params.field_type == "Near":
             self.estimation_params = "angle, range"
+            self.rmspe_loss = CartesianLoss()
         self.music = MUSIC(system_model=self.system_model, estimation_parameter=self.estimation_params)
+        self.ce_loss = nn.CrossEntropyLoss(reduction="sum")
 
         if mode == "batch_norm":
             self.norm = nn.BatchNorm1d(self.N * 2).to(device)
@@ -131,7 +136,7 @@ class TransMUSIC(ParentModel):
             nn.Softmax(dim=1)
         ).to(device)
 
-    def forward(self, x, mode: str = "subspace_train"):
+    def forward(self, x):
         N = self.N
         x = self.pre_processing(x)
         # The input X is [size, 16200] batch_ Size=16, input dimension N*2, sequence length T
@@ -139,7 +144,7 @@ class TransMUSIC(ParentModel):
         size = x.shape[0]  # Get batch size
 
         x3 = self._get_noise_subspace(x)
-        if mode == "subspace_train":
+        if self.train_mode == "subspace_train":
             x4 = x3.reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
             Un = torch.complex(x4[:, :N, :], x4[:, N:, :]).to(torch.complex128)  # feature vector  [size, N, N]
             spectrum = self.music.get_music_spectrum_from_noise_subspace(Un)  # Calculate spectrum
@@ -153,7 +158,7 @@ class TransMUSIC(ParentModel):
             with torch.no_grad():
                 x9 = x3.detach()
                 prob_sources_est = self.source_number_estimator(x9)
-        elif mode == "num_source_train":
+        elif self.train_mode == "num_source_train":
             prob_sources_est = self.source_number_estimator(x3)
             with torch.no_grad():
                 x4 = x3.detach().reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
@@ -167,7 +172,7 @@ class TransMUSIC(ParentModel):
                     distances = self.activation(distances).to(device)
                     predictions = torch.cat([angles, distances], dim=1).to(device)
         else:
-            raise ValueError(f"TransMUSIC.forward: Unrecognized {mode}")
+            raise ValueError(f"TransMUSIC.forward: Unrecognized {self.train_mode}")
         return predictions, prob_sources_est
 
     def _get_noise_subspace(self, x):
@@ -194,8 +199,137 @@ class TransMUSIC(ParentModel):
         x = torch.cat([x.real, x.imag], dim=1)
         return x
 
+    def update_train_mode(self, train_mode: str):
+        if train_mode not in ["subspace_train", "num_source_train"]:
+            raise ValueError(f"TransMUSIC.update_train_mode: Unrecognized train_mode {train_mode}")
+        self.train_mode = train_mode
+
     def print_model_params(self):
         return f"in_dim={self.input_dim}"
 
     def get_model_params(self):
         return {"in_dim": self.input_dim}
+
+    def training_step(self, batch, batch_idx):
+        if self.params.field_type == "Far":
+            return self.__training_step_far_field(batch, batch_idx)
+        elif self.params.field_type == "Near":
+            return self.__training_step_near_field(batch, batch_idx)
+
+    def validation_step(self, batch, batch_idx):
+        if self.params.field_type == "Far":
+            return self.__valid_step_far_field(batch, batch_idx)
+        elif self.params.field_type == "Near":
+            return self.__valid_step_near_field(batch, batch_idx)
+
+    def test_step(self, batch, batch_idx):
+        raise NotImplementedError
+
+    def predict_step(self, batch, batch_idx):
+        raise NotImplementedError
+
+    def __training_step_far_field(self, batch, batch_idx):
+        x, sources_num, angles, masks = batch
+        x = x.requires_grad_(True).to(device)
+        angles = angles.requires_grad_(True).to(device)
+        if x.dim() == 2:
+            x = x[None, :, :]
+            angles = angles[None, :, :]
+        if (sources_num != sources_num[0]).any():
+            raise ValueError(f"SubspaceNet.__training_step_far_field: "
+                             f"Number of sources in the batch is not equal for all samples.")
+        sources_num = sources_num[0]
+        angles_pred, prob_source_number = self(x)
+        if self.train_mode == "num_source_train":
+            # calculate the cross entropy loss for the source number estimation
+            one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                   .to(device).to(torch.float32))
+            loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
+                prob_source_number.shape[0], 1)) * x.shape[0]
+        else:
+            loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles)
+        # calculate the source estimation
+        source_estimation = torch.argmax(prob_source_number, dim=1)
+        acc = self.source_estimation_accuracy(sources_num, source_estimation)
+        return loss, acc
+
+    def __training_step_far_field(self, batch, batch_idx):
+        x, sources_num, angles, masks = batch
+        x = x.to(device)
+        angles = angles.to(device)
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        if (sources_num != sources_num[0]).any():
+            raise ValueError(f"SubspaceNet.__training_step_far_field: "
+                             f"Number of sources in the batch is not equal for all samples.")
+        sources_num = sources_num[0]
+        angles_pred, prob_source_number = self(x)
+        angles_pred = angles_pred[:, :angles.shape[1]]
+        if self.train_mode == "num_source_train":
+            # calculate the cross entropy loss for the source number estimation
+            one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                   .to(device).to(torch.float32))
+            loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
+                prob_source_number.shape[0], 1)) * x.shape[0]
+        else:
+            loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles)
+        # calculate the source estimation
+        source_estimation = torch.argmax(prob_source_number, dim=1)
+        acc = self.source_estimation_accuracy(sources_num, source_estimation)
+        return loss, acc
+
+    def __training_step_near_field(self, batch, batch_idx):
+        x, sources_num, labels, masks = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        if (sources_num != sources_num[0]).any():
+            raise ValueError(f"SubspaceNet.__training_step_near_field: "
+                             f"Number of sources in the batch is not equal for all samples.")
+        sources_num = sources_num[0]
+        angles, ranges = torch.split(labels, sources_num, dim=1)
+        masks, _ = torch.split(masks, sources_num, dim=1)
+        x = x.requires_grad_(True).to(device)
+        angles = angles.requires_grad_(True).to(device)
+        ranges = ranges.requires_grad_(True).to(device)
+        model_output, prob_source_number = self(x)
+        if self.train_mode == "num_source_train":
+            # calculate the cross entropy loss for the source number estimation
+            one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                   .to(device).to(torch.float32))
+            loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
+                prob_source_number.shape[0], 1)) * x.shape[0]
+        else:
+            angles_pred, ranges_pred = torch.split(model_output, model_output.shape[1] // 2, dim=1)
+            angles_pred = angles_pred[:, :angles.shape[1]]
+            ranges_pred = ranges_pred[:, :ranges.shape[1]]
+            loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+        source_estimation = torch.argmax(prob_source_number, dim=1)
+        acc = self.source_estimation_accuracy(sources_num, source_estimation)
+        return loss, acc
+
+    def __valid_step_near_field(self, batch, batch_idx):
+        x, sources_num, labels, masks = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        if (sources_num != sources_num[0]).any():
+            raise ValueError(f"SubspaceNet.__training_step_near_field: "
+                             f"Number of sources in the batch is not equal for all samples.")
+        sources_num = sources_num[0]
+        angles, ranges = torch.split(labels, sources_num, dim=1)
+        masks, _ = torch.split(masks, sources_num, dim=1)
+        x = x.to(device)
+        angles = angles.to(device)
+        ranges = ranges.to(device)
+        model_output, prob_source_number = self(x)
+        if self.train_mode == "num_source_train":
+            # calculate the cross entropy loss for the source number estimation
+            one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
+                                   .to(device).to(torch.float32))
+            loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
+                prob_source_number.shape[0], 1)) * x.shape[0]
+        else:
+            angles_pred, ranges_pred = torch.split(model_output, model_output.shape[1] // 2, dim=1)
+            loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+        source_estimation = torch.argmax(prob_source_number, dim=1)
+        acc = self.source_estimation_accuracy(sources_num, source_estimation)
+        return loss, acc

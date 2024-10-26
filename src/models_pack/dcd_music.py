@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from src.criterions import CartesianLoss, RMSPELoss
 from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
 from src.utils import *
@@ -19,8 +20,11 @@ class DCDMUSIC(SubspaceNet):
         self.angle_extractor = None
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
+        self.train_angle_extractor = False
+        self.__set_criterion()
+        self.set_eigenregularization_schedular()
 
-    def forward(self, x: torch.Tensor, number_of_sources: int, train_angle_extractor: bool = False):
+    def forward(self, x: torch.Tensor, number_of_sources: int):
         """
         Performs the forward pass of the DCD-MUSIC. Using the subspaceNet forward but,
         calling the angle extractor method first.
@@ -33,9 +37,7 @@ class DCDMUSIC(SubspaceNet):
         Returns
             The distance prediction.
          """
-        eigen_regularization = None
-        angles, sources_estimation, eigen_regularization = self.extract_angles(
-            x, number_of_sources, train_angle_extractor=train_angle_extractor)
+        angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
         _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
         return angles, distances, sources_estimation, eigen_regularization
 
@@ -58,7 +60,7 @@ class DCDMUSIC(SubspaceNet):
         except FileNotFoundError as e:
             print(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
 
-    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources: int, train_angle_extractor: bool = False):
+    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources: int):
         """
 
         Args:
@@ -70,7 +72,7 @@ class DCDMUSIC(SubspaceNet):
                 The angles from the first SubspaceNet model.
         """
         eigen_regularization = None
-        if not train_angle_extractor:
+        if not self.train_angle_extractor:
             with torch.no_grad():
                 self.angle_extractor.eval()
                 angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
@@ -86,3 +88,65 @@ class DCDMUSIC(SubspaceNet):
 
     def get_model_params(self):
         return {"tau": self.tau}
+
+    def training_step(self, batch, batch_idx):
+        x, sources_num, labels, masks = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        if (sources_num != sources_num[0]).any():
+            raise ValueError(f"SubspaceNet.__training_step_near_field: "
+                             f"Number of sources in the batch is not equal for all samples.")
+        sources_num = sources_num[0]
+        angles, ranges = torch.split(labels, sources_num, dim=1)
+        masks, _ = torch.split(masks, sources_num, dim=1)
+        x = x.requires_grad_(True).to(device)
+        angles = angles.requires_grad_(True).to(device)
+        ranges = ranges.requires_grad_(True).to(device)
+
+        angles_pred, distances_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+        loss = self.train_loss(angles, angles_pred, ranges, distances_pred)
+        if isinstance(loss, tuple):
+            loss = loss[0]
+        acc = self.source_estimation_accuracy(sources_num, sources_estimation)
+        return loss + eigen_regularization * self.eigenregularization_weight, acc
+
+
+    def validation_step(self, batch, batch_idx):
+        x, sources_num, labels, masks = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        if (sources_num != sources_num[0]).any():
+            raise ValueError(f"SubspaceNet.__training_step_near_field: "
+                             f"Number of sources in the batch is not equal for all samples.")
+        sources_num = sources_num[0]
+        angles, ranges = torch.split(labels, sources_num, dim=1)
+        masks, _ = torch.split(masks, sources_num, dim=1)
+        x = x.requires_grad_(True).to(device)
+        angles = angles.requires_grad_(True).to(device)
+        ranges = ranges.requires_grad_(True).to(device)
+
+        angles_pred, distances_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+        loss = self.train_loss(angles, angles_pred, ranges, distances_pred)
+        acc = self.source_estimation_accuracy(sources_num, sources_estimation)
+        return loss, acc
+
+    def test_step(self, batch, batch_idx):
+        return self.validation_step(batch, batch_idx)
+
+    def predict_step(self, batch, batch_idx):
+        x = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        angles, distances, sources_estimation, eigen_regularization = self.forward(x, self.system_model.params.M)
+        return angles, distances, sources_estimation
+
+    def __set_criterion(self):
+        if self.train_angle_extractor:
+            self.train_loss = CartesianLoss()
+        else:
+            self.train_loss = RMSPELoss(balance_factor=0.0)
+
+    def update_criterion(self):
+        self.__set_criterion()
+
+

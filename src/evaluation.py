@@ -104,9 +104,7 @@ def evaluate_dnn_model(
         dataset: list,
         criterion: nn.Module,
         plot_spec: bool = False,
-        figures: dict = None,
-        phase: str = "test",
-        eigen_regula_weight = None) -> dict:
+        figures: dict = None) -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -132,159 +130,35 @@ def evaluate_dnn_model(
     overall_loss_distance = None
     overall_accuracy = None
     test_length = 0
-    ranges = None
-    source_estimation = None
-    eigen_regularization = None
-    if isinstance(model, TransMUSIC):
-        ce_loss = nn.CrossEntropyLoss(reduction="sum")
+    if isinstance(model, DCDMUSIC):
+        model.train_angle_extractor = False
+        model.update_criterion()
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
     with (torch.no_grad()):
-        for data in dataset:
-            x, sources_num, label, masks = data #TODO
-            if x.dim() == 2:
-                x = x.unsqueeze(0)
-            # x, sources_num, label = data #TODO
-            # Split true label to angles and ranges, if needed
-            if max(sources_num) * 2 == label.shape[1]:
-                angles, ranges = torch.split(label, max(sources_num), dim=1)
-                masks, _ = torch.split(masks, max(sources_num), dim=1) #TODO
-            else:
-                angles = label  # only angles
-            # Check if the sources number is the same for all samples in the batch
-            if (sources_num != sources_num[0]).any():
-                # in this case, the sources number is not the same for all samples in the batch
-                raise Exception(f"train_model:"
-                                f" The sources number is not the same for all samples in the batch.")
-            else:
-                sources_num = sources_num[0]
-            test_length += x.shape[0]
-            # Convert observations and DoA to device
-            x = x.to(device)
-            angles = angles.to(device)
-            ############################################################################################################
-            # Get model output
-            if isinstance(model, DCDMUSIC):
-                model_output = model(x, sources_num, train_angle_extractor=False)
-                angles_pred = model_output[0].to(device)
-                ranges_pred = model_output[1].to(device)
-                source_estimation = model_output[2].to(device)
-            elif isinstance(model, SubspaceNet):
-                model_output = model(x, sources_num=sources_num)
-                if model.field_type.endswith("Near"):
-                    angles_pred = model_output[0].to(device)
-                    ranges_pred = model_output[1].to(device)
-                    source_estimation = model_output[2].to(device)
-                    if eigen_regularization is not None:
-                        eigen_regularization = model_output[3].to(device)
-                elif model.field_type.endswith("Far"):
-                    angles_pred = model_output[0].to(device)
-                    source_estimation = model_output[1].to(device)
-                    if eigen_regularization is not None:
-                        eigen_regularization = model_output[2].to(device)
-            elif isinstance(model, TransMUSIC):
-                model_output = model(x)
-                if model.estimation_params == "angle":
-                    angles_pred = model_output[0].to(device)
-                    prob_source_number = model_output[1].to(device)
-                elif model.estimation_params == "angle, range":
-                    angles_pred, ranges_pred = torch.split(model_output[0], model_output[0].shape[1] // 2, dim=1)
-                    angles_pred = angles_pred.to(device)
-                    ranges_pred = ranges_pred.to(device)
-                    prob_source_number = model_output[1].to(device)
-                source_estimation = torch.argmax(prob_source_number, dim=1)
-                # CE loss
-                one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                       .to(device).to(torch.float32)) * x.shape[0]
-                source_est_regularization = ce_loss(prob_source_number, one_hot_sources_num.repeat(
-                    prob_source_number.shape[0], 1))
+        for idx, data in enumerate(dataset):
+            if isinstance(model, (SubspaceNet, TransMUSIC)):
+                eval_loss, acc = model.validation_step(data, idx)
+                if isinstance(eval_loss, tuple):
+                    eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
+                    if overall_loss_angle is None:
+                        overall_loss_angle, overall_loss_distance = 0.0, 0.0
 
-            elif isinstance(model, DeepAugmentedMUSIC) or isinstance(model, DeepRootMUSIC):
-                # Deep Augmented MUSIC
-                angles_pred = model_output.to(device)
-                raise Exception("evaluate_dnn_model: DeepAugmentedMUSIC model was not tested")
-            elif isinstance(model, DeepCNN):
-                # Deep CNN
-                if isinstance(criterion, nn.BCELoss):
-                    # If evaluation performed over validation set, loss is BCE
-                    angles_pred = model_output.to(device)
-                    # find peaks in the pseudo spectrum of probabilities
-                    angles_pred = (
-                            get_k_peaks(361, angles.shape[1], angles_pred[0]) * D2R
-                    )
-                    angles_pred = angles_pred.view(1, angles_pred.shape[0])
-                elif isinstance(criterion, [RMSPELoss, MSPELoss]):
-                    # If evaluation performed over testset, loss is RMSPE / MSPE
-                    angles_pred = model_output.to(device)
+                    overall_loss_angle += eval_loss_angle.item()
+                    overall_loss_distance += eval_loss_distance.item()
+                overall_loss += eval_loss.item()
+                if acc is not None:
+                    if overall_accuracy is None:
+                        overall_accuracy = 0.0
+                    overall_accuracy += acc
+                if data[0].dim() == 2:
+                    test_length += 1
                 else:
-                    raise Exception(
-                        f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
-                        f" {model.get_model_name()} model"
-                    )
-                raise Exception("evaluate_dnn_model: DeepCNN model was not tested")
-
+                    test_length += data[0].shape[0]
             else:
-                raise Exception(
-                    f"evaluate_dnn_model: Model {model._get_name()} is not defined"
-                )
-            ############################################################################################################
-            if source_estimation is not None:
-                source_acc = torch.sum((
-                    source_estimation == sources_num * torch.ones_like(source_estimation)).float()).item()
-                if overall_accuracy is None:
-                    overall_accuracy = 0.0
-                overall_accuracy += source_acc
-            ############################################################################################################
-            # Compute prediction loss
-            if isinstance(model, DeepCNN) and isinstance(criterion, RMSPELoss):
-                eval_loss = criterion(angles_pred.float(), angles.float())
-            elif isinstance(model, TransMUSIC):
-                if isinstance(criterion, nn.CrossEntropyLoss):
-                    eval_loss = source_est_regularization
-                else:
-                    # angles_pred = angles_pred[:, :source_estimation]
-                    angles_pred = angles_pred[:, :angles.shape[1]]
-                    if model.estimation_params == "angle":
-                        eval_loss = criterion(angles_pred, angles)
-                    elif model.estimation_params == "angle, range":
-                        ranges_pred = ranges_pred[:, :ranges.shape[1]]
-                        # ranges_pred = ranges_pred[:, :source_estimation]
-                        if isinstance(criterion, RMSPELoss):
-                            eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges)
-                            if overall_loss_angle is not None:
-                                overall_loss_angle += eval_loss_angle.item()
-                                overall_loss_distance += eval_loss_distance.item()
-                            else:
-                                overall_loss_angle, overall_loss_distance = 0.0, 0.0
-                                overall_loss_angle += eval_loss_angle.item()
-                                overall_loss_distance += eval_loss_distance.item()
-                        elif isinstance(criterion, CartesianLoss):
-                            eval_loss = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
-                        else:
-                            raise Exception(f"evaluate_dnn_model: Loss criterion {criterion} is not defined for"
-                                            f" {model._get_name()} model")
-            elif isinstance(model, SubspaceNet):
-                if model.field_type.endswith("Near"):
-                    if isinstance(criterion, RMSPELoss):
-                        eval_loss, eval_loss_angle, eval_loss_distance = criterion(angles_pred, angles, ranges_pred, ranges.to(device))
-                        if overall_loss_angle is None:
-                            overall_loss_angle, overall_loss_distance = 0.0, 0.0
-
-                        overall_loss_angle += eval_loss_angle.item()
-                        overall_loss_distance += eval_loss_distance.item()
-                    elif isinstance(criterion, CartesianLoss):
-                        eval_loss = criterion(angles_pred, angles.to(device), ranges_pred, ranges.to(device))
-                elif model.field_type.endswith("Far"):
-                    eval_loss = criterion(angles_pred, angles)
-                    # add eigen regularization to the loss if phase is validation
-                if phase == "validation" and eigen_regularization is not None:
-                    eval_loss += eigen_regularization * eigen_regula_weight
-
-            else:
-                raise Exception(f"evaluate_dnn_model: Model type is not defined: {model._get_name()}")
-            # add the batch evaluation loss to epoch loss
-            overall_loss += eval_loss.item()
+                raise NotImplementedError(f"evaluate_dnn_model: "
+                                          f"Evaluation for {model._get_name()} is not implemented yet.")
             ############################################################################################################
     overall_loss /= test_length
     if overall_loss_angle is not None and overall_loss_distance is not None:
@@ -305,10 +179,8 @@ def evaluate_dnn_model(
         )
     overall_loss = {"Overall": overall_loss,
                     "Angle": overall_loss_angle,
-                    "Distance": overall_loss_distance}
-
-    if source_estimation is not None:
-        overall_loss["Accuracy"] = overall_accuracy
+                    "Distance": overall_loss_distance,
+                    "Accuracy": overall_accuracy}
 
     return overall_loss
 
@@ -435,10 +307,8 @@ def evaluate_model_based(
         Exception: If the algorithm is not supported.
     """
     # Initialize parameters for evaluation
-    loss_list = []
-    loss_list_angle = []
-    loss_list_distance = []
-    acc_list = []
+    over_all_loss, angle_loss, distance_loss, acc = 0.0, 0.0, 0.0, 0.0
+    test_length = 0
     if algorithm.lower() == "ccrb":
         if system_model.params.signal_nature.lower() == "non-coherent":
             crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
@@ -454,6 +324,7 @@ def evaluate_model_based(
             x, sources_num, label, masks = data
             if x.dim() == 2:
                 x = x.unsqueeze(0)
+            test_length += x.shape[0]
             x = x.to(device)
             if max(sources_num) * 2 == label.shape[1]:
                 angles, ranges = torch.split(label, max(sources_num), dim=1)
@@ -487,7 +358,7 @@ def evaluate_model_based(
                 predictions = add_random_predictions(M, predictions, algorithm)
                 # Calculate loss criterion
                 loss = criterion(predictions, doa * R2D)
-                loss_list.append(loss)
+                over_all_loss += loss
                 # Plot spectrum
                 if plot_spec and i == len(dataset.dataset) - 1:
                     plot_spectrum(
@@ -513,7 +384,7 @@ def evaluate_model_based(
                 # predictions = add_random_predictions(M, predictions, algorithm)
                 # Calculate loss criterion
                 loss = criterion(angles_prediction, angles)
-                loss_list.append(loss / x.shape[0])
+                over_all_loss += loss
 
             # ESPRIT algorithms
             elif "esprit" in algorithm:
@@ -532,7 +403,7 @@ def evaluate_model_based(
                 #     y = angles[0]
                 #     angles, distances = y[:len(y) // 2][None, :], y[len(y) // 2:][None, :]
                 loss = criterion(angles_prediction, angles)
-                loss_list.append(loss.item() / x.shape[0])
+                over_all_loss += loss
 
             # MVDR algorithm
             elif algorithm.startswith("mvdr"):
@@ -559,22 +430,22 @@ def evaluate_model_based(
                 angles_prediction, ranges_prediction = predictions
                 if isinstance(criterion, RMSPELoss):
                     rmspe, rmspe_angle, rmspe_distance = criterion(angles_prediction, angles, ranges_prediction, ranges)
-                    loss_list_angle.append(rmspe_angle.item() / x.shape[0])
-                    loss_list_distance.append(rmspe_distance.item() / x.shape[0])
+                    angle_loss += rmspe_angle.item()
+                    distance_loss += rmspe_distance.item()
                 else:
                     rmspe = criterion(angles_prediction, angles, ranges_prediction, ranges)
-                loss_list.append(rmspe.item() / x.shape[0])
-                acc_tmp = torch.mean((sources_num_estimation == sources_num).float()).item()
-                acc_list.append(acc_tmp)
+                over_all_loss += rmspe.item()
+                acc_tmp = torch.sum((sources_num_estimation == sources_num).float()).item()
+                acc += acc_tmp
 
             else:
                 warnings.warn(f"evaluate_augmented_model: Algorithm {algorithm} is not supported.")
-        result = {"Overall": torch.mean(torch.Tensor(loss_list)).item()}
-        if loss_list_angle and loss_list_distance:
-            result["Angle"] = torch.mean(torch.Tensor(loss_list_angle)).item()
-            result["Distance"] = torch.mean(torch.Tensor(loss_list_distance)).item()
-        if acc_list:
-            result["Accuracy"] = torch.mean(torch.Tensor(acc_list)).item()
+        result = {"Overall": over_all_loss / test_length}
+        if distance_loss != 0 and angle_loss != 0:
+            result["Angle"] = angle_loss / test_length
+            result["Distance"] = distance_loss / test_length
+        if acc != 0:
+            result["Accuracy"] = acc / test_length
     return result
 
 
@@ -771,5 +642,6 @@ def evaluate(
     # mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
     # res["MLE"] = mle_loss
     for method, loss_ in res.items():
-        print(f"{method.upper() + ' test loss' : <30} = {loss_}")
+        cleaned_dict = {k: v for k, v in loss_.items() if v is not None}
+        print(f"{method.upper() + ' test loss' : <30} = {cleaned_dict}")
     return res
