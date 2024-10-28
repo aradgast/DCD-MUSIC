@@ -263,12 +263,15 @@ class SubspaceNet(ParentModel):
         if x.dim() == 2:
             x = x.unsqueeze(0)
         x = x.requires_grad_(True).to(device)
+
         angles = angles.requires_grad_(True).to(device)
 
         if (sources_num != sources_num[0]).any():
             raise ValueError(f"SubspaceNet.__training_step_far_field: "
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
+        if self.field_type != self.system_model.params.field_type:
+            angles, _ = torch.split(angles, sources_num, dim=1)
         if self.loss_type == "orthogonality":
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles)
@@ -288,6 +291,8 @@ class SubspaceNet(ParentModel):
             raise ValueError(f"SubspaceNet.__validation_step_far_field: "
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
+        if self.field_type != self.system_model.params.field_type:
+            angles, _ = torch.split(angles, sources_num, dim=1)
         angles_pred, source_estimation, eigen_regularization = self(x, sources_num)
         loss = self.validation_loss(angles_pred=angles_pred, angles=angles)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
