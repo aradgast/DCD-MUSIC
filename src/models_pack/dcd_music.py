@@ -148,9 +148,9 @@ class DCDMUSIC(SubspaceNet):
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
         masks, _ = torch.split(masks, sources_num, dim=1)
-        x = x.requires_grad_(True).to(device)
-        angles = angles.requires_grad_(True).to(device)
-        ranges = ranges.requires_grad_(True).to(device)
+        x = x.to(device)
+        angles = angles.to(device)
+        ranges = ranges.to(device)
 
         angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
         loss = self.validation_loss(angles_pred, angles, ranges_pred, ranges)

@@ -282,6 +282,8 @@ class SubspaceNet(ParentModel):
         x, sources_num, angles, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
+        x = x.to(device)
+        angles = angles.to(device)
         if (sources_num != sources_num[0]).any():
             raise ValueError(f"SubspaceNet.__validation_step_far_field: "
                              f"Number of sources in the batch is not equal for all samples.")
@@ -298,6 +300,7 @@ class SubspaceNet(ParentModel):
         x = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
+        x = x.to(device)
         angles_pred, source_estimation, _ = self(x)
         return angles_pred, source_estimation
 
@@ -312,6 +315,9 @@ class SubspaceNet(ParentModel):
         angles, ranges = torch.split(labels, sources_num, dim=1)
         masks, _ = torch.split(masks, sources_num, dim=1)
 
+        x = x.requires_grad_(True).to(device)
+        angles = angles.requires_grad_(True).to(device)
+        ranges = ranges.requires_grad_(True).to(device)
         if self.loss_type == "orthogonality":
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num, angles)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
@@ -332,6 +338,10 @@ class SubspaceNet(ParentModel):
         angles, ranges = torch.split(labels, sources_num.item(), dim=1)
         masks, _ = torch.split(masks, sources_num.item(), dim=1)
 
+        x = x.to(device)
+        angles = angles.to(device)
+        ranges = ranges.to(device)
+
         angles_pred, distance_pred, source_estimation, eigen_regularization = self(x, sources_num)
         loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
@@ -344,6 +354,7 @@ class SubspaceNet(ParentModel):
         x = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
+        x = x.to(device)
         angles_pred, distance_pred, _, _ = self(x)
         return angles_pred, distance_pred
 
