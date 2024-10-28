@@ -152,6 +152,7 @@ class ModelGenerator(object):
         """
         tau = self.model_params.get("tau")
         self.model = DCDMUSIC(tau=tau,
+                              diff_method=self.model_params.get("diff_method"),
                               system_model=self.system_model)
 
     def __set_transmusic(self):

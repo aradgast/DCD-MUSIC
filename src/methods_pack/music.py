@@ -70,7 +70,7 @@ class MUSIC(SubspaceMethod):
         else:
             M = number_of_sources
         # single param estimation: the search grid should be updated for each batch, else, it's the same search grid.
-        if self.system_model.params.field_type.startswith("Near") and self.estimation_params == "range":
+        if self.system_model.params.field_type.startswith("Near") and self.estimation_params in ["range"]:
             if known_angles.shape[-1] == 1:
                 self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
             else:
@@ -259,7 +259,11 @@ class MUSIC(SubspaceMethod):
             peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(device)
         if not self.training:
             # if the model is not in training mode, return the peaks
-            return search_space[peaks]
+            if peaks.dim() == 1:
+                return search_space[peaks]
+            else:
+                labels = torch.gather(search_space.unsqueeze(1).repeat(1, source_number), 0, peaks)
+                return labels
         else:
             return self.__maskpeak_1d(peaks, search_space, source_number)
 
@@ -554,7 +558,12 @@ class MUSIC(SubspaceMethod):
         return loss
 
     def __str__(self):
-        return f"music_{self.estimation_params}"
+        if self.estimation_params == "angle":
+            return "music_angle"
+        elif self.estimation_params == "range":
+            return "music_range"
+        elif self.estimation_params == "angle, range":
+            return "2d_music"
 
 
 def keep_far_enough_points(tensor, M, D):

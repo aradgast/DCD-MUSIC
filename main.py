@@ -38,7 +38,7 @@ scenario_dict = {
 system_model_params = {
     "N": 15,                                    # number of antennas
     "M": 2,                                     # number of sources
-    "T": 100,                                   # number of snapshots
+    "T": 50,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
     "signal_nature": "coherent",                      # if defined, values in scenario_dict will be ignored
@@ -47,7 +47,7 @@ system_model_params = {
     "sv_noise_var": 0.0
 }
 model_config = {
-    "model_type": "SubspaceNet",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "DCDMUSIC",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -57,16 +57,17 @@ if model_config.get("model_type") == "SubspaceNet":
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
+    model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 512,
     "train_test_ratio": .1,
-    "training_objective": "angle, range",       # angle, range, source_estimation
+    "training_objective": "range",       # angle, range, source_estimation
     "batch_size": 32,
-    "epochs": 10,
+    "epochs": 3,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -76,7 +77,7 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-    "criterion": "cartesian",                   # rmse, rmspe, mse, mspe, bce, cartesian
+    "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
     "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
@@ -102,16 +103,16 @@ evaluation_params = {
         # "root_music",
         # "mvdr",
         # "bb-music",
-        "2D-MUSIC",
+        # "2D-MUSIC",
         # "CCRB"
     ]
 }
 simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
-    "LOAD_MODEL": True,
+    "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": False,                  # if True, the RMSE results of evaluation will be plotted

@@ -78,24 +78,7 @@ class SubspaceNet(ParentModel):
         self.__set_criterion()
         self.set_eigenregularization_schedular()
 
-    def forward(self, x: torch.Tensor, sources_num: torch.tensor = None, known_angles: torch.tensor = None):
-        """
-        Performs the forward pass of the SubspaceNet.
-
-        Args:
-        -----
-            x (torch.Tensor): Input tensor of shape [Batch size, N, T].
-            sources_num (torch.Tensor): The number of sources in the signal.
-            known_angles (torch.Tensor): The known angles for the near-field scenario.
-
-        Returns:
-        --------
-            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
-            doa_all_predictions (torch.Tensor): All DOA predictions for each root, over all batches.
-            roots_to_return (torch.Tensor): The unsorted roots.
-            Rz (torch.Tensor): Surrogate covariance matrix.
-
-        """
+    def get_surrogate_covariance(self, x: torch.Tensor):
         x = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
         self.N = x.shape[-1]
@@ -131,6 +114,27 @@ class SubspaceNet(ParentModel):
             Kx=Kx_tag, eps=1, batch_size=self.batch_size
         )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
+        return Rz
+
+    def forward(self, x: torch.Tensor, sources_num: torch.tensor = None, known_angles: torch.tensor = None):
+        """
+        Performs the forward pass of the SubspaceNet.
+
+        Args:
+        -----
+            x (torch.Tensor): Input tensor of shape [Batch size, N, T].
+            sources_num (torch.Tensor): The number of sources in the signal.
+            known_angles (torch.Tensor): The known angles for the near-field scenario.
+
+        Returns:
+        --------
+            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
+            doa_all_predictions (torch.Tensor): All DOA predictions for each root, over all batches.
+            roots_to_return (torch.Tensor): The unsorted roots.
+            Rz (torch.Tensor): Surrogate covariance matrix.
+
+        """
+        Rz = self.get_surrogate_covariance(x)
 
         if self.field_type == "Far":
             if self.loss_type == "orthogonality" and self.training:
@@ -220,10 +224,13 @@ class SubspaceNet(ParentModel):
     def print_model_params(self):
         tau = self.tau
         diff_method = self.diff_method
-        return f"tau={tau}_diff_method={diff_method}"
+        field_type = self.field_type.lower()
+        loss_type = self.loss_type
+        return f"tau={tau}_diff_method={diff_method}_field_type={field_type}_loss_type={loss_type}"
 
     def get_model_params(self):
-        return {"tau": self.tau, "diff_method": self.diff_method, "field_type": self.field_type}
+        return {"tau": self.tau, "diff_method": self.diff_method, "field_type": self.field_type,
+                "loss_type": self.loss_type}
 
     def training_step(self, batch, batch_idx):
         if self.field_type == "Far":
