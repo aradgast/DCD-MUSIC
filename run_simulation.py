@@ -267,6 +267,9 @@ def run_simulation(**kwargs):
         loss = __run_simulation(**kwargs)
         return loss
     loss_dict = {}
+    deafule_snr = kwargs["system_model_params"]["snr"]
+    default_T = kwargs["system_model_params"]["T"]
+    default_eta = kwargs["system_model_params"]["eta"]
     for key, value in kwargs["scenario_dict"].items():
         if key == "SNR":
             loss_dict["SNR"] = {snr: None for snr in value}
@@ -275,6 +278,7 @@ def run_simulation(**kwargs):
                 kwargs["system_model_params"]["snr"] = snr
                 loss = __run_simulation(**kwargs)
                 loss_dict["SNR"][snr] = loss
+                kwargs["system_model_params"]["snr"] = deafule_snr
         if key == "T":
             loss_dict["T"] = {T: None for T in value}
             print(f"Testing T values: {value}")
@@ -282,6 +286,7 @@ def run_simulation(**kwargs):
                 kwargs["system_model_params"]["T"] = T
                 loss = __run_simulation(**kwargs)
                 loss_dict["T"][T] = loss
+                kwargs["system_model_params"]["T"] = default_T
         if key == "eta":
             loss_dict["eta"] = {eta: None for eta in value}
             print(f"Testing eta values: {value}")
@@ -289,6 +294,7 @@ def run_simulation(**kwargs):
                 kwargs["system_model_params"]["eta"] = eta
                 loss = __run_simulation(**kwargs)
                 loss_dict["eta"][eta] = loss
+                kwargs["system_model_params"]["eta"] = default_eta
     if None not in list(next(iter(loss_dict.values())).values()):
         print_loss_results_from_simulation(loss_dict)
         if kwargs["simulation_commands"]["PLOT_LOSS_RESULTS"]:

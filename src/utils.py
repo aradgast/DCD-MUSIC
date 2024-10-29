@@ -35,15 +35,17 @@ D2R = 1 / R2D
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 plot_styles = {
     'CCRB': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 10},
-    'DCDMUSIC': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
-    'TransMUSIC': {'color': 'b', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
-    '2D-MUSIC': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 10},
-    '2D-MUSIC(SPS)': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 10},
-    'SubspaceNet': {'color': 'y', 'linestyle': '--', 'marker': 'p', "markersize": 10},
-    'esprit': {'color': 'm', 'linestyle': '-', 'marker': 'v', "markersize": 10},
-    'esprit(SPS)': {'color': 'm', 'linestyle': '-', 'marker': 'v', "markersize": 10},
-    'music': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
-    'music(SPS)': {'color': 'g', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'DCDMUSIC': {'color': 'g', 'linestyle': 'solid', 'marker': 's', "markersize": 10},
+    'DCDMUSIC1Ortho': {'color': 'b', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'DCDMUSIC2Ortho': {'color': 'c', 'linestyle': '-.', 'marker': 's', "markersize": 10},
+    'TransMUSIC': {'color': 'm', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
+    '2D-MUSIC': {'color': 'y', 'linestyle': ':', 'marker': '^', "markersize": 10},
+    '2D-MUSIC(SPS)': {'color': 'y', 'linestyle': ':', 'marker': '^', "markersize": 10},
+    'SubspaceNet': {'color': 'k', 'linestyle': '--', 'marker': 'p', "markersize": 10},
+    'esprit': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 10},
+    'esprit(SPS)': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 10},
+    'music': {'color': 'y', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'music(SPS)': {'color': 'y', 'linestyle': '--', 'marker': 's', "markersize": 10},
 }
 # device = "cpu"
 print("Running on device: ", device)
