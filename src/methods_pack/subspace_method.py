@@ -30,7 +30,7 @@ class SubspaceMethod(nn.Module):
         Returns:
             the signal ana noise subspaces, both as torch.Tensor().
         """
-        eigenvalues, eigenvectors = torch.linalg.eig(covariance)
+        eigenvalues, eigenvectors = torch.linalg.eigh(covariance)
         sorted_idx = torch.argsort(torch.real(eigenvalues), descending=True)
         sorted_eigvectors = torch.gather(eigenvectors, 2,
                                          sorted_idx.unsqueeze(-1).expand(-1, -1, covariance.shape[-1]).transpose(1, 2))
