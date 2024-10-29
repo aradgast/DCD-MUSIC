@@ -288,10 +288,19 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
     # Insuring Tensor input
     if not isinstance(Kx, torch.Tensor):
         Kx = torch.tensor(Kx)
+    Kx = Kx.to(device)
 
-    Kx_garm = torch.matmul(torch.transpose(Kx.conj(), 1, 2).to("cpu"), Kx.to("cpu")).to(device)
+    # Kx_garm = torch.matmul(torch.transpose(Kx.conj(), 1, 2).to("cpu"), Kx.to("cpu")).to(device)
+    Kx_garm = torch.bmm(Kx.conj().transpose(1, 2), Kx)
     eps_addition = (eps * torch.diag(torch.ones(Kx_garm.shape[-1]))).to(device)
     Kx_Out = Kx_garm + eps_addition
+
+    # check if the matrix is PSD - eigenvalues should be positive and real
+    eigvals = torch.linalg.eigvals(Kx_Out)
+    if not torch.all(eigvals.real > 0):
+        warnings.warn("gram_diagonal_overload: The matrix is not PSD, adding more eps to the diagonal elements.")
+        Kx_Out = Kx_Out + 1e-6 * torch.eye(Kx_Out.shape[-1]).to(device)
+
     return Kx_Out
 
 
