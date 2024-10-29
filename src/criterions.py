@@ -511,8 +511,7 @@ class NoiseOrthogonalLoss(nn.Module):
                                   self.array,
                                   torch.sin(theta).repeat(1, 1, self.number_sensors) * self.sensors_distance)
         search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
-        var1 = torch.bmm(search_grid.conj(), kwargs["noise_subspace"].to(torch.complex128))
-        inverse_spectrum = torch.norm(var1, dim=-1)
+        inverse_spectrum = torch.norm(torch.abs(torch.bmm(search_grid.conj(), kwargs["noise_subspace"].to(torch.complex128))), dim=-1)
         spectrum = 1 / inverse_spectrum
         loss = -torch.sum(spectrum, dim=1).sum()
         return loss

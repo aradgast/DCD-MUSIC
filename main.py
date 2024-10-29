@@ -38,34 +38,34 @@ scenario_dict = {
 system_model_params = {
     "N": 15,                                    # number of antennas
     "M": 2,                                     # number of sources
-    "T": 50,                                   # number of snapshots
+    "T": 100,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
-    "signal_nature": "coherent",                      # if defined, values in scenario_dict will be ignored
+    "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
     "eta": 0.0,                                   # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0
 }
 model_config = {
-    "model_type": "DCDMUSIC",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "SubspaceNet",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_2D_noise_ss"  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
+    model_config["model_params"]["diff_method"] = "music_1D_noise_ss"  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Near"     # Near, Far
+    model_config["model_params"]["field_type"] = "Far"     # Near, Far
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
+    model_config["model_params"]["diff_method"] = ("esprit", "music_1D_noise_ss")  # esprit, music_1D, music_1D_noise_ss
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 512,
+    "samples_size": 1024,
     "train_test_ratio": .1,
-    "training_objective": "range",       # angle, range, source_estimation
+    "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 32,
     "epochs": 3,
     "optimizer": "Adam",                        # Adam, SGD
@@ -112,7 +112,7 @@ simulation_commands = {
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": False,                  # if True, the RMSE results of evaluation will be plotted
