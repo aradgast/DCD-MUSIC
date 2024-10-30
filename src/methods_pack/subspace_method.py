@@ -102,6 +102,9 @@ class SubspaceMethod(nn.Module):
         # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
         return l_eig
 
+    def test_step(self, batch, batch_idx):
+        raise NotImplementedError
+
     def __get_eigen_threshold(self, level: str = None):
         if self.training:
             if level is None:
@@ -193,3 +196,6 @@ class SubspaceMethod(nn.Module):
         plt.legend()
         plt.grid()
         plt.show()
+
+    def source_estimation_accuracy(self, sources_num, source_estimation):
+        return torch.sum(source_estimation == sources_num * torch.ones_like(source_estimation).float()).item()

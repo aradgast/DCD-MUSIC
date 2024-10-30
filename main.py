@@ -32,7 +32,7 @@ plt.close("all")
 scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
-    # "eta": [],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
@@ -40,7 +40,7 @@ system_model_params = {
     "M": 2,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
-    "field_type": "Near",                       # Near, Far
+    "field_type": "Far",                       # Near, Far
     "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
     "eta": 0.0,                                   # steering vector error
     "bias": 0,
@@ -63,8 +63,8 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
-    "train_test_ratio": .1,
+    "samples_size": 100,
+    "train_test_ratio": 1,
     "training_objective": "angle",       # angle, range, source_estimation
     "batch_size": 32,
     "epochs": 3,
@@ -81,12 +81,17 @@ training_params = {
     "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
-    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": training_params["balance_factor"],
     "models": {
-                # "DCDMUSIC": {"tau": 8},
+                # "DCDMUSIC": {"tau": 8,
+                #              "diff_method": ("esprit", "music_1D")},
+                # "DCDMUSIC1Ortho": {"tau": 8,
+                #              "diff_method": ("esprit", "music_1D_noise_ss")},
+                # "DCDMUSIC2Ortho": {"tau": 8,
+                #              "diff_method": ("music_1D_noise_ss", "music_1D_noise_ss")},
                 # "SubspaceNet": {"tau": 8,
-                #                 "diff_method": "music_2D",
+                #                 "diff_method": "music_2D_noise_ss",
                 #                 "field_type": "Near"},
                 # "TransMUSIC": {},
             },
@@ -98,9 +103,9 @@ evaluation_params = {
         # "2D-MUSIC",
     ],
     "subspace_methods": [
-        # "esprit",
-        # "music_1d",
-        # "root_music",
+        "ESPRIT",
+        # "1D-MUSIC",
+        # "Root-MUSIC",
         # "mvdr",
         # "bb-music",
         # "2D-MUSIC",
@@ -111,11 +116,11 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
+    "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": False,                  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": False,                         # if True, the plots will be saved to the results folder
 }

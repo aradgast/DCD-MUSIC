@@ -9,6 +9,7 @@ import scipy as sc
 from src.system_model import SystemModel
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.utils import *
+from src.criterions import RMSPELoss, CartesianLoss
 
 
 class MUSIC(SubspaceMethod):
@@ -36,6 +37,7 @@ class MUSIC(SubspaceMethod):
         self.cell_size_distance = None
         self.__define_grid_params()
         self.__init_cells()
+        self.__init_criteria()
 
         # if this is the music 2D case, the search grid is constant and can be calculated once.
         if self.system_model.params.field_type.startswith("Near"):
@@ -181,59 +183,49 @@ class MUSIC(SubspaceMethod):
         else:
             raise ValueError(f"MUSIC.set_search_grid: Unrecognized field type: {self.system_model.params.field_type}")
 
-    def __set_search_grid_far_field(self):
-        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-        theta = self.angels[:, None]
-        time_delay = torch.einsum("nm, na -> na",
-                                  array,
-                                  torch.sin(theta).repeat(1, self.system_model.params.N).T
-                                  * self.system_model.dist_array_elems["NarrowBand"])
-        self.search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
 
-    def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
-        """
-
-        Returns:
-
-        """
-        dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
-        if known_angles is None:
-            theta = self.angels[:, None]
-        else:
-            theta = known_angles.float()
-            if len(theta.shape) == 1:
-                theta = torch.atleast_1d(theta)[:, None].to(torch.float64)
-
-        if known_distances is None:
-            distances = self.distances[:, None].to(torch.float64)
-        else:
-            distances = known_distances.float()
-            if len(distances.shape) == 1:
-                distances = torch.atleast_1d(distances)[:, None]
-        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-        array_square = torch.pow(array, 2).to(torch.float64)
-
-        first_order = torch.einsum("nm, na -> na",
-                                   array,
-                                   torch.sin(theta).repeat(1, self.system_model.params.N).T * dist_array_elems)
-
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.T)
-        second_order = second_order[:, :, None].repeat(1, 1, self.system_model.params.N)
-        second_order = torch.einsum("nm, nda -> nda",
-                                    array_square,
-                                    torch.transpose(second_order, 2, 0)).transpose(1, 2)
-
-        first_order = first_order[:, :, None].repeat(1, 1, second_order.shape[-1])
-
-        time_delay = first_order + second_order
-
-        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
 
     def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0, method: str = "heatmap"):
         if self.estimation_params == "angle, range":
             self._plot_3d_spectrum(highlight_corrdinates, batch, method)
         else:
             self._plot_1d_spectrum(highlight_corrdinates, batch)
+
+    def test_step(self, batch, batch_idx):
+        x, sources_num, label, masks = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        test_length = x.shape[0]
+        x = x.to(device)
+        if self.estimation_params == "angle, range":
+            angles, ranges = torch.split(label, max(sources_num), dim=1)
+            angles = angles.to(device)
+            ranges = ranges.to(device)
+            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
+        else:
+            angles = label.to(device)  # only angles
+        # Check if the sources number is the same for all samples in the batch
+        if (sources_num != sources_num[0]).any():
+            # in this case, the sources number is not the same for all samples in the batch
+            raise Exception(f"train_model:"
+                            f" The sources number is not the same for all samples in the batch.")
+        else:
+            sources_num = sources_num[0]
+
+        if self.system_model.params.signal_nature == "non-coherent":
+            Rx = self.pre_processing(x, mode="sample")
+        else:
+            Rx = self.pre_processing(x, mode="sps")
+        predictions, sources_num_estimation, _ = self(Rx, number_of_sources=sources_num)
+        if self.estimation_params == "angle, range":
+            angles_prediction, ranges_prediction = predictions
+            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges)
+        else:
+            rmspe = self.criterion(predictions, angles)
+
+        acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
+
+        return rmspe.item(), acc, test_length
 
     def _peak_finder_1d(self, search_space, source_number: int = None):
         if source_number is None:
@@ -501,61 +493,53 @@ class MUSIC(SubspaceMethod):
             plt.legend()
             plt.show()
 
-    def orthogonality_loss(self, noise_subspace, angles, ranges=None):
-        if self.system_model.params.field_type.startswith("Far"):
-            return self.__orthogonality_loss_far_field(noise_subspace, angles)
-        elif self.system_model.params.field_type.startswith("Near"):
-            return self.__orthogonality_loss_near_field(noise_subspace, angles, ranges)
-        else:
-            raise ValueError(f"MUSIC.orthogonality_loss: Unrecognized field type: "
-                             f"{self.system_model.params.field_type}")
-
-    def __orthogonality_loss_far_field(self, noise_subspace, angles):
-        # compute the spectrum in the angles points using the noise subspace, sum the values and return the loss.
+    def __set_search_grid_far_field(self):
         array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-        theta = angles.unsqueeze(-1)
-        time_delay = torch.einsum("nm, ban -> ban",
+        theta = self.angels[:, None]
+        time_delay = torch.einsum("nm, na -> na",
                                   array,
-                                  torch.sin(theta).repeat(1, 1, self.system_model.params.N) *
-                                  self.system_model.dist_array_elems["NarrowBand"])
-        search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
-        var1 = torch.bmm(search_grid.conj(), noise_subspace.to(torch.complex128))
-        inverse_spectrum = torch.norm(var1, dim=-1)
-        spectrum = 1 / inverse_spectrum
-        loss = -torch.sum(spectrum, dim=1).sum()
-        return loss
+                                  torch.sin(theta).repeat(1, self.system_model.params.N).T
+                                  * self.system_model.dist_array_elems["NarrowBand"])
+        self.search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
 
-    def __orthogonality_loss_near_field(self, noise_subspace, angles, ranges):
+    def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
+        """
+
+        Returns:
+
+        """
         dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
-        theta = angles[:, :, None]
-        distances = ranges[:, :, None].to(torch.float64)
+        if known_angles is None:
+            theta = self.angels[:, None]
+        else:
+            theta = known_angles.float()
+            if len(theta.shape) == 1:
+                theta = torch.atleast_1d(theta)[:, None].to(torch.float64)
+
+        if known_distances is None:
+            distances = self.distances[:, None].to(torch.float64)
+        else:
+            distances = known_distances.float()
+            if len(distances.shape) == 1:
+                distances = torch.atleast_1d(distances)[:, None]
         array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
         array_square = torch.pow(array, 2).to(torch.float64)
 
-        first_order = torch.einsum("nm, bna -> bna",
+        first_order = torch.einsum("nm, na -> na",
                                    array,
-                                   torch.sin(theta).repeat(1, 1, self.system_model.params.N).transpose(1,
-                                                                                                       2) * dist_array_elems)
+                                   torch.sin(theta).repeat(1, self.system_model.params.N).T * dist_array_elems)
 
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.transpose(1, 2))
-        second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.system_model.params.N)
-        second_order = torch.einsum("nm, bnda -> bnda",
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.T)
+        second_order = second_order[:, :, None].repeat(1, 1, self.system_model.params.N)
+        second_order = torch.einsum("nm, nda -> nda",
                                     array_square,
-                                    second_order.transpose(3, 1).transpose(2, 3))
+                                    torch.transpose(second_order, 2, 0)).transpose(1, 2)
 
-        first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
+        first_order = first_order[:, :, None].repeat(1, 1, second_order.shape[-1])
 
         time_delay = first_order + second_order
 
-        search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
-        var1 = torch.einsum("badk, bkl -> badl",
-                            search_grid.conj().transpose(1, 3).transpose(1, 2)[:, :, :, :noise_subspace.shape[1]],
-                            noise_subspace.to(torch.complex128))
-        # get the norm value for each element in the batch.
-        inverse_spectrum = torch.linalg.diagonal(torch.norm(var1, dim=-1)) ** 2
-        spectrum = 1 / inverse_spectrum
-        loss = -torch.sum(spectrum, dim=-1).sum()
-        return loss
+        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
 
     def __str__(self):
         if self.estimation_params == "angle":
@@ -564,6 +548,16 @@ class MUSIC(SubspaceMethod):
             return "music_range"
         elif self.estimation_params == "angle, range":
             return "2d_music"
+
+    def __init_criteria(self):
+        if self.estimation_params == "angle":
+            self.criterion = RMSPELoss(balance_factor=1.0)
+        elif self.estimation_params == "range":
+            self.criterion = RMSPELoss(balance_factor=0.0)
+        elif self.estimation_params == "angle, range":
+            self.criterion = CartesianLoss()
+        else:
+            raise ValueError(f"MUSIC.__init_criteria: Unrecognized estimation param {self.estimation_params}")
 
 
 def keep_far_enough_points(tensor, M, D):
