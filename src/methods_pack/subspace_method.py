@@ -105,6 +105,9 @@ class SubspaceMethod(nn.Module):
     def test_step(self, batch, batch_idx):
         raise NotImplementedError
 
+    def __init_criteria(self):
+        raise NotImplementedError
+
     def __get_eigen_threshold(self, level: str = None):
         if self.training:
             if level is None:

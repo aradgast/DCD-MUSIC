@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
@@ -11,6 +12,8 @@ class RootMusic(SubspaceMethod):
     def __init__(self, system_model: SystemModel):
         super(RootMusic, self).__init__(system_model)
         self.__init_criteria()
+        self.all_predictions_angles = None
+        self.all_predictions_roots = None
 
     def forward(self, cov: torch.Tensor, sources_num: torch.tensor = None):
         batch_size = cov.shape[0]
@@ -18,9 +21,9 @@ class RootMusic(SubspaceMethod):
         poly_generator = torch.bmm(noise_subspace, noise_subspace.conj().transpose(1, 2))
         diag_sum = self.sum_of_diag(poly_generator)
         roots = self.find_roots(diag_sum)
-        # Calculate doa
-        # angles_prediction_all = self.get_doa_from_roots(roots)
-
+        self.all_predictions_angles = self.get_doa_from_roots(roots)
+        self.all_predictions_roots = roots
+        # self.plot_spectrum(batch_idx=0)
         # the actual prediction is for roots that are closest to the unit circle.
         roots = self.extract_roots_closest_unit_circle(roots, k=sources_num)
         angles_prediction = self.get_doa_from_roots(roots)
@@ -105,6 +108,29 @@ class RootMusic(SubspaceMethod):
             if tensor.shape[-1] != tensor.shape[-2]:
                 raise ValueError("sum_of_diag: input tensor should be square matrices as a batch.")
         return tensor
+
+    def plot_spectrum(self, batch_idx: int = 0, ground_truth: list = None):
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111, polar=True)
+        # Set axis location and limits
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
+        ax.set_thetamin(90)
+        ax.set_thetamax(-90)
+        # plot roots ang angles
+        for i, angle in enumerate(self.all_predictions_angles[batch_idx]):
+            r = np.abs(self.all_predictions_roots[batch_idx][i])
+            ax.set_ylim([0, 1.2])
+            ax.set_yticks([0, 1])
+            ax.plot([0, angle], [0, r], marker='o')
+        if ground_truth is not None:
+            for angle in ground_truth:
+                ax.plot([angle], [1], marker='o', color='r')
+        ax.set_xlabel("Angels [deg]")
+        ax.set_ylabel("Amplitude")
+        plt.title("Root-MUSIC Spectrum")
+        plt.tight_layout()
+        plt.show()
 
 
 def root_music(Rz: torch.Tensor, M: int, batch_size: int):
