@@ -4,46 +4,53 @@ import torch.nn as nn
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
 from src.utils import *
+from src.criterions import RMSPELoss
 
 
 class RootMusic(SubspaceMethod):
     def __init__(self, system_model: SystemModel):
         super(RootMusic, self).__init__(system_model)
+        self.__init_criteria()
 
-    def forward(self, cov: torch.Tensor):
+    def forward(self, cov: torch.Tensor, sources_num: torch.tensor = None):
         batch_size = cov.shape[0]
-        _, noise_subspace, _ = self.subspace_separation(cov, number_of_sources=self.system_model.params.M)
-        poly_generator = torch.einsum("bnk, bkn -> bnn", noise_subspace, noise_subspace.conj().transpose(1, 2))
+        _, noise_subspace, source_estimation, _ = self.subspace_separation(cov, number_of_sources=sources_num)
+        poly_generator = torch.bmm(noise_subspace, noise_subspace.conj().transpose(1, 2))
         diag_sum = self.sum_of_diag(poly_generator)
         roots = self.find_roots(diag_sum)
         # Calculate doa
         # angles_prediction_all = self.get_doa_from_roots(roots)
 
         # the actual prediction is for roots that are closest to the unit circle.
-        roots = self.extract_roots_closest_unit_circle(roots, k=self.system_model.params.M)
+        roots = self.extract_roots_closest_unit_circle(roots, k=sources_num)
         angles_prediction = self.get_doa_from_roots(roots)
-        return angles_prediction
+        return angles_prediction, source_estimation
 
     def get_doa_from_roots(self, roots):
         roots_phase = torch.angle(roots)
         angle_predicted = torch.arcsin(
-            (1 / (2 * np.pi * self.system_model.dist_array_elems["Narrowband"])) * roots_phase)
+            (1 / (2 * np.pi * self.system_model.dist_array_elems["NarrowBand"])) * roots_phase)
         return angle_predicted
 
     def extract_roots_closest_unit_circle(self, roots, k: int):
         distances = torch.abs(torch.abs(roots) - 1)
         sorted_indcies = torch.argsort(distances, dim=1)
-        k_closest = sorted_indcies[:, :k]
-        closest_roots = roots.gather(1, k_closest)
+        roots_sorted = roots.gather(1, sorted_indcies)
+        # consider only the roots inside the unit circle
+        closest_roots = torch.zeros(roots.shape[0], k).to(torch.complex128)
+        for i in range(roots_sorted.shape[0]):
+            filter_roots = roots_sorted[i, torch.abs(roots_sorted[i]) < 1]
+            closest_roots[i] = filter_roots[:k]
+        # get the k closest roots
         return closest_roots
 
     def sum_of_diag(self, tensor: torch.Tensor):
         tensor = self.__check_diag_sums_dim(tensor)
-        N = torch.shape[-1]
+        N = tensor.shape[-1]
         diag_indcies = torch.linspace(-N + 1, N - 1, 2 * N - 1)
-        sum_of_diags = torch.zeros(tensor.shape[0], 2 * N - 1)
+        sum_of_diags = torch.zeros(tensor.shape[0], 2 * N - 1).to(torch.complex128)
         for idx, diag_idx in enumerate(diag_indcies):
-            sum_of_diags[:, idx] = torch.sum(torch.diagonal(tensor, dim1=-2, dim2=-1, offset=diag_idx), dim=-1)
+            sum_of_diags[:, idx] = torch.sum(torch.diagonal(tensor, dim1=1, dim2=2, offset=diag_idx.to(int)), dim=-1)
         return sum_of_diags
 
     def find_roots(self, coeffs: torch.Tensor):
@@ -52,6 +59,41 @@ class RootMusic(SubspaceMethod):
         A[:, 0, :] = -coeffs[:, 1:] / coeffs[:, 0]
         roots = torch.linalg.eigvals(A)
         return roots
+
+    def test_step(self, batch, batch_idx):
+        x, sources_num, label, masks = batch
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        test_length = x.shape[0]
+        x = x.to(device)
+        if max(sources_num) * 2 == label.shape[1]:
+            angles, _ = torch.split(label, max(sources_num), dim=1)
+            angles = angles.to(device)
+            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
+        else:
+            angles = label.to(device)  # only angles
+        # Check if the sources number is the same for all samples in the batch
+        if (sources_num != sources_num[0]).any():
+            # in this case, the sources number is not the same for all samples in the batch
+            raise Exception(f"train_model:"
+                            f" The sources number is not the same for all samples in the batch.")
+        else:
+            sources_num = sources_num[0]
+
+        if self.system_model.params.signal_nature == "coherent":
+            # Spatial smoothing
+            Rx = self.pre_processing(x, mode="sps")
+        else:
+            # Conventional
+            Rx = self.pre_processing(x, mode="sample")
+        angles_prediction, sources_num_estimation = self(Rx, sources_num=sources_num)
+        rmspe = self.criterion(angles_prediction, angles).item()
+        acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
+
+        return rmspe, acc, test_length
+
+    def __init_criteria(self):
+        self.criterion = RMSPELoss(balance_factor=1.0)
 
     def __check_diag_sums_dim(self, tensor):
         if len(tensor.shape) != 3:

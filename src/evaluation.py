@@ -40,7 +40,7 @@ from src.utils import *
 from src.criterions import (RMSPELoss, MSPELoss, RMSELoss, CartesianLoss, RMSPE, MSPE)
 from src.methods import MVDR
 from src.methods_pack.music import MUSIC
-from src.methods_pack.root_music import RootMusic
+from src.methods_pack.root_music import RootMusic, root_music
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
 from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC,
@@ -321,78 +321,13 @@ def evaluate_model_based(
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for i, data in enumerate(dataset):
-            if algorithm.lower() in ["1d-music", "2d-music", "esprit"]:
+            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music"]:
                 tmp_rmspe, tmp_acc, tmp_length = model_based.test_step(data, i)
                 over_all_loss += tmp_rmspe
                 acc += tmp_acc
                 test_length += tmp_length
             else:
-                x, sources_num, label, masks = data
-                if x.dim() == 2:
-                    x = x.unsqueeze(0)
-                test_length += x.shape[0]
-                x = x.to(device)
-                if max(sources_num) * 2 == label.shape[1]:
-                    angles, ranges = torch.split(label, max(sources_num), dim=1)
-                    angles = angles.to(device)
-                    ranges = ranges.to(device)
-                    masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
-                else:
-                    angles = label  # only angles
-                    angles = angles.to(device)
-                # Check if the sources number is the same for all samples in the batch
-                if (sources_num != sources_num[0]).any():
-                    # in this case, the sources number is not the same for all samples in the batch
-                    raise Exception(f"train_model:"
-                                    f" The sources number is not the same for all samples in the batch.")
-                else:
-                    sources_num = sources_num[0]
-                # Root-MUSIC algorithms
-                if algorithm.endswith("r-music"):
-                    root_music = RootMusic(system_model)
-                    if algorithm.startswith("sps"):
-                        # Spatial smoothing
-                        predictions, roots, predictions_all, _, M = root_music.narrowband(
-                            X=x, mode="spatial_smoothing"
-                        )
-                    else:
-                        # Conventional
-                        predictions, roots, predictions_all, _, M = root_music.narrowband(
-                            X=x, mode="sample"
-                        )
-                    # If the amount of predictions is less than the amount of sources
-                    predictions = add_random_predictions(M, predictions, algorithm)
-                    # Calculate loss criterion
-                    loss = criterion(predictions, doa * R2D)
-                    over_all_loss += loss
-                    # Plot spectrum
-                    if plot_spec and i == len(dataset.dataset) - 1:
-                        plot_spectrum(
-                            predictions=predictions_all,
-                            true_DOA=doa[0] * R2D,
-                            roots=roots,
-                            algorithm=algorithm.upper(),
-                            figures=figures,
-                        )
-
-                # MVDR algorithm
-                elif algorithm.startswith("mvdr"):
-                    mvdr = MVDR(system_model)
-                    # Conventional
-                    _, spectrum = mvdr.narrowband(X=X, mode="sample")
-                    # Plot spectrum
-                    if plot_spec and i == len(dataset.dataset) - 1:
-                        plot_spectrum(
-                            predictions=None,
-                            true_DOA=doa * R2D,
-                            system_model=system_model,
-                            spectrum=spectrum,
-                            algorithm=algorithm.upper(),
-                            figures=figures,
-                        )
-
-                else:
-                    warnings.warn(f"evaluate_augmented_model: Algorithm {algorithm} is not supported.")
+                raise NotImplementedError(f"evaluate_model_based: Algorithm {algorithm} is not supported.")
         result = {"Overall": over_all_loss / test_length}
         if distance_loss != 0 and angle_loss != 0:
             result["Angle"] = angle_loss / test_length
@@ -587,7 +522,7 @@ def evaluate(
             plot_spec=plot_spec,
             algorithm=algorithm,
             figures=figures)
-        if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "r-music", "esprit"]:
+        if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "root-music", "esprit"]:
             algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")
         res[algorithm] = loss
