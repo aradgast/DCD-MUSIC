@@ -39,16 +39,17 @@ class DCDMUSIC(SubspaceNet):
         Returns
             The distance prediction.
          """
-        if self.loss_type == "orthogonality" and self.training:
-            Rz = self.get_surrogate_covariance(x)
-            _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz,
-                                                                                                              number_of_sources)
-            return noise_subspace, source_estimation, eigen_regularization
 
         if not self.train_angle_extractor:
             angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
         else: # in this case, when using orthogonality loss, the angle extractor doesn't extract angles. TODO
             raise NotImplementedError
+
+        if self.loss_type == "orthogonality" and self.training:
+            Rz = self.get_surrogate_covariance(x)
+            _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz,
+                                                                                                              number_of_sources)
+            return angles, noise_subspace, source_estimation, eigen_regularization
 
         _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
         return angles, distances, sources_estimation, eigen_regularization
@@ -125,8 +126,12 @@ class DCDMUSIC(SubspaceNet):
         angles = angles.requires_grad_(True).to(device)
         ranges = ranges.requires_grad_(True).to(device)
         if self.loss_type == "orthogonality":
-            noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
+            if self.diff_method.estimation_params == "angle, range":
+                noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
+                loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
+            else:
+                angles_pred, noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
+                loss = self.train_loss(noise_subspace=noise_subspace, angles=angles_pred, ranges=ranges)
         else:
             angles_pred, distances_pred, sources_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(angles, angles_pred, ranges, distances_pred)
