@@ -208,7 +208,7 @@ class SubspaceNet(ParentModel):
         return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
 
     def adjust_diff_method_temperature(self, epoch):
-        if isinstance(self.diff_method, MUSIC):
+        if isinstance(self.diff_method, MUSIC) and self.loss_type == "rmspe":
             if epoch % 10 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")

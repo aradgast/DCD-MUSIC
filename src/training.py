@@ -487,10 +487,23 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
             training_params.valid_dataset,
         )
         loss_valid_list.append(valid_loss.get("Overall"))
+        acc_train_list.append(epoch_train_acc * 100)
+        acc_valid_list.append(valid_loss.get('Accuracy') * 100)
 
         # Update schedular
         training_params.schedular.step(loss_valid_list[-1])
         # training_params.schedular.step()
+
+        # Update eigenregularization weight
+        try:
+            model.update_eigenregularization_weight(acc_valid_list[-1])
+        except AttributeError:
+            pass
+
+        try:
+            model.adjust_diff_method_temperature(epoch)
+        except AttributeError:
+            pass
 
         # Report results
         result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}]"
@@ -500,16 +513,18 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
             loss_valid_list_angles.append(valid_loss.get("Angle"))
             loss_valid_list_ranges.append(valid_loss.get("Distance"))
             result_txt += f"\nAngle loss = {valid_loss.get('Angle'):.6f}, Range loss = {valid_loss.get('Distance'):.6f}"
-        acc_train_list.append(epoch_train_acc * 100)
-        acc_valid_list.append(valid_loss.get('Accuracy') * 100)
+
         result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                        f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
         result_txt += f"\nlr {training_params.schedular.get_last_lr()[0]}"
-
         try:
-            model.update_eigenregularization_weight(acc_valid_list[-1])
+            eigenregularization_weight_tmp = model.get_eigenregularization_weight()
         except AttributeError:
-            pass
+            eigenregularization_weight_tmp = None
+        if eigenregularization_weight_tmp is not None:
+            result_txt += f", Eigenregularization weight = {eigenregularization_weight_tmp}"
+
+
 
         print(result_txt)
         # Save best model weights
@@ -522,8 +537,7 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
             # Saving State Dict
             best_model_wts = copy.deepcopy(model.state_dict())
             torch.save(model.state_dict(), checkpoint_path / model.get_model_file_name())
-        if isinstance(model, SubspaceNet):
-            model.adjust_diff_method_temperature(epoch)
+
     # Training complete
     time_elapsed = time.time() - since
     print("\n--- Training summary ---")

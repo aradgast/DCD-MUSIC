@@ -39,13 +39,13 @@ system_model_params = {
     "N": 15,                                    # number of antennas
     "M": None,                                     # number of sources
     "T": 100,                                   # number of snapshots
-    "snr": 10,                                # if defined, values in scenario_dict will be ignored
+    "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
-    "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",                      # if defined, values in scenario_dict will be ignored
     "eta": 0.0,                                   # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
-    "doa_range": 60,
+    "doa_range": 55,
     "doa_resolution": 1,
     "max_range_ratio_to_limit": 0.4,
     "range_resolution": 1,
@@ -67,10 +67,10 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 512,
+    "samples_size": 4096,
     "train_test_ratio": .1,
     "training_objective": "angle, range",       # angle, range, source_estimation
-    "batch_size": 32,
+    "batch_size": 128,
     "epochs": 100,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.001,
@@ -83,8 +83,8 @@ training_params = {
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
 }
 evaluation_params = {
-    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
-    "balance_factor": 1.0,
+    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
+    "balance_factor": 1.0 ,
     "models": {
                 # "DCDMUSIC": {"tau": 8,
                 #              "diff_method": ("esprit", "music_1D")},
@@ -92,9 +92,9 @@ evaluation_params = {
                 #              "diff_method": ("esprit", "music_1D_noise_ss")},
                 # "DCDMUSIC2Ortho": {"tau": 8,
                 #              "diff_method": ("music_1D_noise_ss", "music_1D_noise_ss")},
-                # "SubspaceNet": {"tau": 8,
-                #                 "diff_method": "music_2D_noise_ss",
-                #                 "field_type": "Near"},
+                "SubspaceNet": {"tau": 8,
+                                "diff_method": "music_2D_noise_ss",
+                                "field_type": "Near"},
                 # "TransMUSIC": {},
             },
     "augmented_methods": [
@@ -110,7 +110,7 @@ evaluation_params = {
         # "Root-MUSIC",
         # "mvdr",
         # "bb-music",
-        # "2D-MUSIC",
+        "2D-MUSIC",
         # "CCRB"
     ]
 }

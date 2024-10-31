@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 from src.system_model import SystemModel
 
-EIGEN_REGULARIZATION_WEIGHT = 100
+EIGEN_REGULARIZATION_WEIGHT = 10
 
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
@@ -54,20 +54,37 @@ class ParentModel(nn.Module):
         self.schedular_step_size = step_size
         self.schedular_gamma = gamma
         self.eigenregularization_weight = init_value
+
         self.schedular_acc_current = 0
-        self.schedular_patience = 10
-        self.schedular_patience_counter = 0
+        self.schedular_patience_ascending = 10
+        self.schedular_patience_descending = 10
+        self.schedular_patience_counter_descending = 0
+        self.schedular_patience_counter_ascending = 0
+
+    def get_eigenregularization_weight(self):
+        return self.eigenregularization_weight
 
     def update_eigenregularization_weight(self, acc):
-        if acc <= self.schedular_acc_current:
-            self.schedular_acc_current = acc
-            self.schedular_patience_counter = 0
-        else:
-            self.schedular_patience_counter += 1
-            if self.schedular_patience_counter >= self.schedular_patience:
-                self.eigenregularization_weight *= self.schedular_gamma
-                self.schedular_patience_counter = 0
+        acc = round(acc, 0)
+        if acc < self.schedular_acc_current or acc <= 50:
+            self.schedular_patience_counter_descending += 1
+            self.schedular_patience_counter_ascending = 0
+            if self.schedular_patience_counter_descending >= self.schedular_patience_descending:
+                self.eigenregularization_weight /= self.schedular_gamma
+                self.schedular_patience_counter_descending = 0
                 print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+        elif acc > self.schedular_acc_current or acc >= 80:
+            self.schedular_patience_counter_ascending += 1
+            self.schedular_patience_counter_descending = 0
+            if self.schedular_patience_counter_ascending >= self.schedular_patience_ascending:
+                self.eigenregularization_weight *= self.schedular_gamma
+                self.schedular_patience_counter_ascending = 0
+                print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+        else:
+            self.schedular_patience_counter_ascending = 0
+            self.schedular_patience_counter_descending = 0
+        self.schedular_acc_current = acc
+
 
         # if self.schedular_counter % self.schedular_step_size == 0 and self.schedular_counter != 0:
         #     self.eigenregularization_weight *= self.schedular_gamma

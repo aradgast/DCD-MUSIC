@@ -218,7 +218,7 @@ def __run_simulation(**kwargs):
         criterion = set_criterions(EVALUATION_PARAMS["criterion"],
                                                        EVALUATION_PARAMS["balance_factor"])
 
-        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=1)
+        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=64)
         generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                            collate_fn=collate_fn,
                                                            batch_sampler=batch_sampler_test,
