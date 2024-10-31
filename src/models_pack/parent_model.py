@@ -46,7 +46,7 @@ class ParentModel(nn.Module):
     def predict_step(self, batch, batch_idx):
         raise NotImplementedError
 
-    def forward(self, batch, batch_idx):
+    def forward(self, x):
         raise NotImplementedError
 
     def set_eigenregularization_schedular(self, init_value=EIGEN_REGULARIZATION_WEIGHT, step_size=10, gamma=0.5):
@@ -72,14 +72,14 @@ class ParentModel(nn.Module):
             if self.schedular_patience_counter_descending >= self.schedular_patience_descending:
                 self.eigenregularization_weight /= self.schedular_gamma
                 self.schedular_patience_counter_descending = 0
-                print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+                # print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
         elif acc > self.schedular_acc_current or acc >= 80:
             self.schedular_patience_counter_ascending += 1
             self.schedular_patience_counter_descending = 0
             if self.schedular_patience_counter_ascending >= self.schedular_patience_ascending:
                 self.eigenregularization_weight *= self.schedular_gamma
                 self.schedular_patience_counter_ascending = 0
-                print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+                # print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
         else:
             self.schedular_patience_counter_ascending = 0
             self.schedular_patience_counter_descending = 0

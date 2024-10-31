@@ -486,6 +486,13 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
             model,
             training_params.valid_dataset,
         )
+        # hard_train_loss = evaluate_dnn_model(
+        #     model,
+        #     training_params.train_dataset,
+        # )
+        # loss_train_list.append(hard_train_loss.get("Overall"))
+
+        # Calculate the average loss
         loss_valid_list.append(valid_loss.get("Overall"))
         acc_train_list.append(epoch_train_acc * 100)
         acc_valid_list.append(valid_loss.get('Accuracy') * 100)
@@ -508,7 +515,7 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         # Report results
         result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}]"
                       f" Train loss = {epoch_train_loss:.6f}, Validation loss = {valid_loss.get('Overall'):.6f}")
-
+        # result_txt += f"\n Hard Train loss = {hard_train_loss.get('Overall'):.6f}"
         if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
             loss_valid_list_angles.append(valid_loss.get("Angle"))
             loss_valid_list_ranges.append(valid_loss.get("Distance"))
@@ -630,6 +637,7 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
         plt.legend(loc="best")
+        plt.grid()
     return fig
 
 

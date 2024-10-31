@@ -37,7 +37,7 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": None,                                     # number of sources
+    "M": 4,                                     # number of sources
     "T": 100,                                   # number of snapshots
     "snr": 0,                                # if defined, values in scenario_dict will be ignored
     "field_type": "Near",                       # Near, Far
@@ -83,7 +83,7 @@ training_params = {
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
 }
 evaluation_params = {
-    "criterion": "cartesian",                       # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0 ,
     "models": {
                 # "DCDMUSIC": {"tau": 8,
