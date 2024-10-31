@@ -37,23 +37,27 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,                                    # number of antennas
-    "M": 2,                                     # number of sources
+    "M": None,                                     # number of sources
     "T": 100,                                   # number of snapshots
-    "snr": 0,                                # if defined, values in scenario_dict will be ignored
-    "field_type": "Far",                       # Near, Far
-    "signal_nature": "coherent",                      # if defined, values in scenario_dict will be ignored
+    "snr": 10,                                # if defined, values in scenario_dict will be ignored
+    "field_type": "Near",                       # Near, Far
+    "signal_nature": "non-coherent",                      # if defined, values in scenario_dict will be ignored
     "eta": 0.0,                                   # steering vector error
     "bias": 0,
-    "sv_noise_var": 0.0
+    "sv_noise_var": 0.0,
+    "doa_range": 60,
+    "doa_resolution": 1,
+    "max_range_ratio_to_limit": 0.4,
+    "range_resolution": 1,
 }
 model_config = {
     "model_type": "SubspaceNet",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_1D_noise_ss"  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
+    model_config["model_params"]["diff_method"] = "music_2D_noise_ss"  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Far"     # Near, Far
+    model_config["model_params"]["field_type"] = "Near"     # Near, Far
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
@@ -63,11 +67,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 16,
-    "train_test_ratio": 1,
-    "training_objective": "angle",       # angle, range, source_estimation
+    "samples_size": 512,
+    "train_test_ratio": .1,
+    "training_objective": "angle, range",       # angle, range, source_estimation
     "batch_size": 32,
-    "epochs": 3,
+    "epochs": 100,
     "optimizer": "Adam",                        # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -77,12 +81,10 @@ training_params = {
     "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
     "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
     "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
-    "criterion": "rmspe",                   # rmse, rmspe, mse, mspe, bce, cartesian
-    "balance_factor": 1.0                # if None, the balance factor will be set to the default value -> 0.6
 }
 evaluation_params = {
     "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
-    "balance_factor": training_params["balance_factor"],
+    "balance_factor": 1.0,
     "models": {
                 # "DCDMUSIC": {"tau": 8,
                 #              "diff_method": ("esprit", "music_1D")},
@@ -103,9 +105,9 @@ evaluation_params = {
         # "2D-MUSIC",
     ],
     "subspace_methods": [
-        "ESPRIT",
+        # "ESPRIT",
         # "1D-MUSIC",
-        "Root-MUSIC",
+        # "Root-MUSIC",
         # "mvdr",
         # "bb-music",
         # "2D-MUSIC",
@@ -116,7 +118,7 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
+    "TRAIN_MODEL": True,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted

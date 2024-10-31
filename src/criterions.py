@@ -565,23 +565,18 @@ def set_criterions(criterion_name: str, balance_factor: float = 0.0):
     """
     if criterion_name.startswith("rmspe"):
         criterion = RMSPELoss(balance_factor)
-        subspace_criterion = RMSPELoss(balance_factor)
     elif criterion_name.startswith("mspe"):
         criterion = MSPELoss()
-        subspace_criterion = MSPE
     elif criterion_name.startswith("mse"):
         criterion = nn.MSELoss()
-        subspace_criterion = MSPE
     elif criterion_name.startswith("rmse"):
-        criterion = RMSPELoss(balance_factor)
-        subspace_criterion = RMSPELoss(balance_factor)
+        criterion = RMSELoss()
     elif criterion_name.startswith("cartesian"):
         criterion = CartesianLoss()
-        subspace_criterion = CartesianLoss()
     else:
         raise Exception(f"criterions.set_criterions: Criterion {criterion_name} is not defined")
-    print(f"Loss measure = {criterion_name}")
-    return criterion, subspace_criterion
+    print(f"set_criterions: Loss measure for evaluation = {criterion._get_name()}")
+    return criterion
 
 
 if __name__ == "__main__":

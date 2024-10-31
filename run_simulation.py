@@ -81,6 +81,10 @@ def __run_simulation(**kwargs):
         .set_parameter("eta", SYSTEM_MODEL_PARAMS["eta"])
         .set_parameter("bias", SYSTEM_MODEL_PARAMS["bias"])
         .set_parameter("sv_noise_var", SYSTEM_MODEL_PARAMS["sv_noise_var"])
+        .set_parameter("doa_range", SYSTEM_MODEL_PARAMS["doa_range"])
+        .set_parameter("doa_resolution", SYSTEM_MODEL_PARAMS["doa_resolution"])
+        .set_parameter("max_range_ratio_to_limit", SYSTEM_MODEL_PARAMS["max_range_ratio_to_limit"])
+        .set_parameter("range_resolution", SYSTEM_MODEL_PARAMS["range_resolution"])
     )
     system_model = SystemModel(system_model_params)
     # Generate model configuration
@@ -176,8 +180,6 @@ def __run_simulation(**kwargs):
             .set_training_dataset(train_dataset)
             .set_schedular(step_size=TRAINING_PARAMS["step_size"],
                            gamma=TRAINING_PARAMS["gamma"])
-            .set_criterion(TRAINING_PARAMS["criterion"], TRAINING_PARAMS["balance_factor"])
-
         )
         if load_model:
             try:
@@ -212,20 +214,9 @@ def __run_simulation(**kwargs):
     if evaluate_mode:
         if not train_model:
             model = None
-        # Initialize figures dict for plotting
-        figures = initialize_figures()
         # Define loss measure for evaluation
-        criterion, subspace_criterion = set_criterions(EVALUATION_PARAMS["criterion"],
+        criterion = set_criterions(EVALUATION_PARAMS["criterion"],
                                                        EVALUATION_PARAMS["balance_factor"])
-        # Load datasets for evaluation
-        # if not create_data or load_data:
-        #     generic_test_dataset, samples_model = load_datasets(
-        #         system_model_params=system_model_params,
-        #         model_type=model_config.model_type,
-        #         samples_size=samples_size,
-        #         datasets_path=datasets_path,
-        #         train_test_ratio=train_test_ratio,
-        #     )
 
         batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=1)
         generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
@@ -238,8 +229,6 @@ def __run_simulation(**kwargs):
             generic_test_dataset=generic_test_dataset,
             criterion=criterion,
             system_model=system_model,
-            figures=figures,
-            plot_spec=False,
             models=EVALUATION_PARAMS["models"],
             augmented_methods=EVALUATION_PARAMS["augmented_methods"],
             subspace_methods=EVALUATION_PARAMS["subspace_methods"],
@@ -267,7 +256,7 @@ def run_simulation(**kwargs):
         loss = __run_simulation(**kwargs)
         return loss
     loss_dict = {}
-    deafule_snr = kwargs["system_model_params"]["snr"]
+    default_snr = kwargs["system_model_params"]["snr"]
     default_T = kwargs["system_model_params"]["T"]
     default_eta = kwargs["system_model_params"]["eta"]
     for key, value in kwargs["scenario_dict"].items():
@@ -278,7 +267,7 @@ def run_simulation(**kwargs):
                 kwargs["system_model_params"]["snr"] = snr
                 loss = __run_simulation(**kwargs)
                 loss_dict["SNR"][snr] = loss
-                kwargs["system_model_params"]["snr"] = deafule_snr
+                kwargs["system_model_params"]["snr"] = default_snr
         if key == "T":
             loss_dict["T"] = {T: None for T in value}
             print(f"Testing T values: {value}")

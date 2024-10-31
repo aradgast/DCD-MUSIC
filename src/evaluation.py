@@ -33,6 +33,7 @@ import time
 import numpy as np
 import torch.linalg
 import torch.nn as nn
+from torch.utils.data.dataloader import DataLoader
 from pathlib import Path
 
 # Internal imports
@@ -99,29 +100,19 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
     return model.to(device)
 
 
-def evaluate_dnn_model(
-        model: nn.Module,
-        dataset: list,
-        criterion: nn.Module,
-        plot_spec: bool = False,
-        figures: dict = None) -> dict:
+def evaluate_dnn_model(model: nn.Module, dataset: DataLoader) -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
     Args:
         model (nn.Module): The trained model to evaluate.
-        dataset (list): The evaluation dataset.
-        criterion (nn.Module): The loss criterion for evaluation.
-        plot_spec (bool, optional): Whether to plot the spectrum for SubspaceNet model. Defaults to False.
-        figures (dict, optional): Dictionary containing figure objects for plotting. Defaults to None.
-
+        dataset (DataLoader): The evaluation dataset.
 
     Returns:
         float: The overall evaluation loss.
 
     Raises:
-        Exception: If the loss criterion is not defined for the specified model type.
-        Exception: If the model type is not defined.
+        Exception: If the evaluation loss is not implemented for the model type.
     """
 
     # Initialize values
@@ -166,17 +157,6 @@ def evaluate_dnn_model(
         overall_loss_distance /= test_length
     if overall_accuracy is not None:
         overall_accuracy /= test_length
-    # Plot spectrum for SubspaceNet model
-    if plot_spec and isinstance(model, SubspaceNet):
-        DOA_all = model_output[1]
-        roots = model_output[2]
-        plot_spectrum(
-            predictions=DOA_all * R2D,
-            true_DOA=angles[0] * R2D,
-            roots=roots,
-            algorithm="SubNet+R-MUSIC",
-            figures=figures,
-        )
     overall_loss = {"Overall": overall_loss,
                     "Angle": overall_loss_angle,
                     "Distance": overall_loss_distance,
@@ -282,23 +262,14 @@ def evaluate_augmented_model(
     return np.mean(hybrid_loss)
 
 
-def evaluate_model_based(
-        dataset: list,
-        system_model,
-        criterion: RMSPE,
-        plot_spec=False,
-        algorithm: str = "music",
-        figures: dict = None):
+def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorithm: str = "music"):
     """
     Evaluate different model-based algorithms on a given dataset.
 
     Args:
-        dataset (list): The evaluation dataset.
+        dataset (DataLoader): The evaluation dataset.
         system_model (SystemModel): The system model for the algorithms.
-        criterion: The loss criterion for evaluation. Defaults to RMSPE.
-        plot_spec (bool): Whether to plot the spectrum for the algorithms. Defaults to False.
         algorithm (str): The algorithm to use (e.g., "music", "mvdr", "esprit", "r-music"). Defaults to "music".
-        figures (dict): Dictionary containing figure objects for plotting. Defaults to None.
 
     Returns:
         float: The average evaluation loss.
@@ -361,7 +332,7 @@ def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):
     return predictions
 
 
-def evaluate_crb(dataset: list,
+def evaluate_crb(dataset: DataLoader,
                  params: SystemModelParams,
                  mode: str="separate"):
     u_snr = 10 ** (params.snr / 10)
@@ -443,11 +414,9 @@ def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
 
 
 def evaluate(
-        generic_test_dataset: list,
+        generic_test_dataset: DataLoader,
         criterion: nn.Module,
         system_model: SystemModel,
-        figures: dict,
-        plot_spec: bool = True,
         models: dict = None,
         augmented_methods: list = None,
         subspace_methods: list = None,
@@ -460,26 +429,20 @@ def evaluate(
         generic_test_dataset (list): Test dataset for generic subspace methods.
         criterion (nn.Module): Loss criterion for (DNN) model evaluation.
         system_model: instance of SystemModel.
-        figures (dict): Dictionary to store figures.
-        plot_spec (bool, optional): Whether to plot spectrums. Defaults to True.
         models (dict): dict that contains the models to evluate and their parameters.
         augmented_methods (list, optional): List of augmented methods for evaluation.
             Defaults to None.
         subspace_methods (list, optional): List of subspace methods for evaluation.
             Defaults to None.
+        model_tmp (nn.Module, optional): Temporary model for evaluation. Defaults to None.
 
     Returns:
-        None
+        dict: Dictionary containing the evaluation results.
     """
     res = {}
     # Evaluate DNN model if given
     if model_tmp is not None:
-        model_test_loss = evaluate_dnn_model(
-            model=model_tmp,
-            dataset=generic_test_dataset,
-            criterion=criterion,
-            plot_spec=plot_spec,
-            figures=figures)
+        model_test_loss = evaluate_dnn_model(model=model_tmp, dataset=generic_test_dataset)
         try:
             model_name = model_tmp._get_name()
         except AttributeError:
@@ -492,12 +455,7 @@ def evaluate(
         # total_size = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
         # print(f"Number of parameters in {model_name}: {num_of_params} with total size: {total_size} bytes")
         start = time.time()
-        model_test_loss = evaluate_dnn_model(
-            model=model,
-            dataset=generic_test_dataset,
-            criterion=criterion,
-            plot_spec=plot_spec,
-            figures=figures)
+        model_test_loss = evaluate_dnn_model(model=model, dataset=generic_test_dataset)
         print(f"{model_name} evaluation time: {time.time() - start}")
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
@@ -508,20 +466,12 @@ def evaluate(
             system_model=system_model,
             criterion=criterion,
             algorithm=algorithm,
-            plot_spec=plot_spec,
-            figures=figures,
         )
         res["augmented" + algorithm] = loss
     # Evaluate classical subspace methods
     for algorithm in subspace_methods:
         start = time.time()
-        loss = evaluate_model_based(
-            generic_test_dataset,
-            system_model,
-            criterion=criterion,
-            plot_spec=plot_spec,
-            algorithm=algorithm,
-            figures=figures)
+        loss = evaluate_model_based(generic_test_dataset, system_model,algorithm=algorithm)
         if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "root-music", "esprit"]:
             algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")

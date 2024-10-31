@@ -67,7 +67,6 @@ class TrainingParams(object):
     - load_model: Loads a pre-trained model.
     - set_optimizer: Sets the optimizer for training.
     - set_schedular: Sets the scheduler for learning rate decay.
-    - set_criterion: Sets the loss criterion for training.
     - set_training_dataset: Sets the training dataset for training.
 
     Raises
@@ -80,7 +79,6 @@ class TrainingParams(object):
         """
         Initializes the TrainingParams object.
         """
-        self.criterion = None
         self.model = None
         self.diff_method = None
         self.tau = None
@@ -237,38 +235,42 @@ class TrainingParams(object):
         # learning rate decay value
         self.gamma = gamma
         # Assign schedular for learning rate decay
-        self.schedular = lr_scheduler.StepLR(
-            self.optimizer, step_size=step_size, gamma=gamma
+        # self.schedular = lr_scheduler.StepLR(
+        #     self.optimizer, step_size=step_size, gamma=gamma
+        # )
+        self.schedular = lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=gamma, patience=10, verbose=True
         )
         return self
 
-    def set_criterion(self, criterion: str, balance_factor: float = None):
-        """
-        Sets the loss criterion for training.
-
-        Returns
-        -------
-        self
-        """
-        criterion = criterion.lower()
-        # Define loss criterion
-        if criterion.startswith("bce"):
-            self.criterion = nn.BCELoss()
-        elif criterion.startswith("mse"):
-            self.criterion = nn.MSELoss()
-        elif criterion.startswith("mspe"):
-            self.criterion = MSPELoss()
-        elif criterion.startswith("rmspe"):
-            self.criterion = RMSPELoss(balance_factor=balance_factor)
-        elif criterion.startswith("cartesian") and self.training_objective == "angle, range":
-            self.criterion = CartesianLoss()
-        elif criterion.startswith("ce") and self.training_objective == "source_estimation":
-            self.criterion = nn.CrossEntropyLoss(reduction="sum")
-        else:
-            raise Exception(
-                f"TrainingParams.set_criterion: criterion {criterion} is not defined"
-            )
-        return self
+    # Legacy code
+    # def set_criterion(self, criterion: str, balance_factor: float = None):
+    #     """
+    #     Sets the loss criterion for training.
+    #
+    #     Returns
+    #     -------
+    #     self
+    #     """
+    #     criterion = criterion.lower()
+    #     # Define loss criterion
+    #     if criterion.startswith("bce"):
+    #         self.criterion = nn.BCELoss()
+    #     elif criterion.startswith("mse"):
+    #         self.criterion = nn.MSELoss()
+    #     elif criterion.startswith("mspe"):
+    #         self.criterion = MSPELoss()
+    #     elif criterion.startswith("rmspe"):
+    #         self.criterion = RMSPELoss(balance_factor=balance_factor)
+    #     elif criterion.startswith("cartesian") and self.training_objective == "angle, range":
+    #         self.criterion = CartesianLoss()
+    #     elif criterion.startswith("ce") and self.training_objective == "source_estimation":
+    #         self.criterion = nn.CrossEntropyLoss(reduction="sum")
+    #     else:
+    #         raise Exception(
+    #             f"TrainingParams.set_criterion: criterion {criterion} is not defined"
+    #         )
+    #     return self
 
     def set_training_dataset(self, train_dataset: list):
         """
@@ -478,20 +480,17 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         if epoch_train_loss_angle != 0.0 and epoch_train_loss_distance != 0.0:
             loss_train_list_angles.append(epoch_train_loss_angle / train_length)
             loss_train_list_ranges.append(epoch_train_loss_distance / train_length)
-        # Update schedular
-        training_params.schedular.step()
-        try:
-            model.update_eigenregularization_weight()
-        except AttributeError:
-            pass
 
         # Calculate evaluation loss
         valid_loss = evaluate_dnn_model(
             model,
             training_params.valid_dataset,
-            training_params.criterion,
         )
         loss_valid_list.append(valid_loss.get("Overall"))
+
+        # Update schedular
+        training_params.schedular.step(loss_valid_list[-1])
+        # training_params.schedular.step()
 
         # Report results
         result_txt = (f"[Epoch : {epoch + 1}/{training_params.epochs}]"
@@ -506,6 +505,11 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                        f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
         result_txt += f"\nlr {training_params.schedular.get_last_lr()[0]}"
+
+        try:
+            model.update_eigenregularization_weight(acc_valid_list[-1])
+        except AttributeError:
+            pass
 
         print(result_txt)
         # Save best model weights

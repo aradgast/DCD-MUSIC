@@ -279,8 +279,8 @@ class MUSIC(SubspaceMethod):
             # convert the peaks to 2d indices
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
             if source_number > 1:
-                # pass
-                original_idx = keep_far_enough_points(original_idx, source_number, 20)
+                pass
+                # original_idx = keep_far_enough_points(original_idx, source_number, 20)
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:
@@ -354,21 +354,26 @@ class MUSIC(SubspaceMethod):
                 self.music_spectrum = torch.zeros(batch_size, len(self.distances))
 
     def __define_grid_params(self):
+        angle_range = np.deg2rad(self.system_model.params.doa_range)
+        angle_resolution = np.deg2rad(self.system_model.params.doa_resolution)
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
-            self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 720, device=device,
+            self.angels = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
                                        dtype=torch.float64).requires_grad_(True).to(torch.float64)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angels = torch.arange(-1 * torch.pi / 3, torch.pi / 3, torch.pi / 360,
-                                           device=device).to(torch.float64)
-                # self.angels = torch.from_numpy(np.arange(-np.pi / 2, np.pi / 2, np.pi / 90)).requires_grad_(True)
+                self.angels = torch.arange(-angle_range, angle_range, angle_resolution,
+                                           device=device, dtype=torch.float64).requires_grad_(True).to(torch.float64)
             if self.estimation_params.endswith("range"):
-                self.distances = torch.arange(np.floor(fresnel), fraunhofer * 0.5, .5, device=device,
-                                              dtype=torch.float64).requires_grad_(True)
+                fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
+                distance_resolution = self.system_model.params.range_resolution
+                self.distances = torch.arange(np.floor(fresnel),
+                                              np.ceil(fraunhofer * fraunhofer_ratio) + 1,
+                                              distance_resolution,
+                                              device=device, dtype=torch.float64).requires_grad_(True)
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")

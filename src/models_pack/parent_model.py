@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 from src.system_model import SystemModel
 
-EIGEN_REGULARIZATION_WEIGHT = 10
+EIGEN_REGULARIZATION_WEIGHT = 100
 
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
@@ -54,12 +54,25 @@ class ParentModel(nn.Module):
         self.schedular_step_size = step_size
         self.schedular_gamma = gamma
         self.eigenregularization_weight = init_value
+        self.schedular_acc_current = 0
+        self.schedular_patience = 10
+        self.schedular_patience_counter = 0
 
-    def update_eigenregularization_weight(self):
-        if self.schedular_counter % self.schedular_step_size == 0 and self.schedular_counter != 0:
-            self.eigenregularization_weight *= self.schedular_gamma
-            print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
-        self.schedular_counter += 1
+    def update_eigenregularization_weight(self, acc):
+        if acc <= self.schedular_acc_current:
+            self.schedular_acc_current = acc
+            self.schedular_patience_counter = 0
+        else:
+            self.schedular_patience_counter += 1
+            if self.schedular_patience_counter >= self.schedular_patience:
+                self.eigenregularization_weight *= self.schedular_gamma
+                self.schedular_patience_counter = 0
+                print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+
+        # if self.schedular_counter % self.schedular_step_size == 0 and self.schedular_counter != 0:
+        #     self.eigenregularization_weight *= self.schedular_gamma
+        #     print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
+        # self.schedular_counter += 1
 
     def source_estimation_accuracy(self, sources_num, source_estimation):
         return torch.sum(source_estimation == sources_num * torch.ones_like(source_estimation).float()).item()

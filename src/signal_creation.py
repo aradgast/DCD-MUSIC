@@ -14,6 +14,7 @@ This class is used for defining the samples model.
 
 # Imports
 import numpy as np
+from random import sample
 from src.system_model import SystemModel, SystemModelParams
 from src.utils import D2R
 
@@ -71,17 +72,29 @@ class Samples(SystemModel):
                 np.ndarray: DOA array.
 
             """
-            while True:
-                # DOA = np.round(np.random.rand(M) * 180, decimals=2) - 90
-                DOA = np.random.randint(-55, 55, M)
-                DOA.sort()
-                diff_angles = np.array(
-                    [np.abs(DOA[i + 1] - DOA[i]) for i in range(M - 1)]
-                )
-                if (np.sum(diff_angles > gap) == M - 1) and (
-                    np.sum(diff_angles < (180 - gap)) == M - 1
-                ):
-                    break
+            # LEGACY CODE
+            # while True:
+            #     # DOA = np.round(np.random.rand(M) * 180, decimals=2) - 90
+            #     DOA = np.random.randint(-55, 55, M)
+            #     DOA.sort()
+            #     diff_angles = np.array(
+            #         [np.abs(DOA[i + 1] - DOA[i]) for i in range(M - 1)]
+            #     )
+            #     if (np.sum(diff_angles > gap) == M - 1) and (
+            #         np.sum(diff_angles < (180 - gap)) == M - 1
+            #     ):
+            #         break
+
+            # based on https://stackoverflow.com/questions/51918580/python-random-list-of-numbers-in-a-range-keeping-with-a-minimum-distance
+            range_size = 2 * self.params.doa_range - (gap - 1) * (M - 1)
+            # assert(range_size<0) , Warning(range_size<10)
+            doa_resolution = self.params.doa_resolution
+            if self.params.doa_resolution >= 1:
+                DOA = [(gap - 1) * i + x - self.params.doa_range for i, x in
+                       enumerate(sorted(sample(range(0, range_size, doa_resolution), M)))]
+            else:
+                DOA = [((gap - 1) * i + x - self.params.doa_range)*doa_resolution for i, x in enumerate(sorted(sample(range(int(range_size//doa_resolution)), M)))]
+                DOA = np.round(DOA, 3)
             return DOA
 
         if doa == None:
@@ -101,29 +114,25 @@ class Samples(SystemModel):
 
         """
 
-        def choose_distances(M, distance_min_gap: float = 0.5, distance_max_gap: int = 10,
-                             min_val: float = 2, max_val: int = 7) -> np.ndarray:
+        def choose_distances(M, min_val: float, max_val: int, distance_resolution: float = 1.0) -> np.ndarray:
+            """
+            Choose distances for the sources.
 
-            distances = np.round(np.random.uniform(min_val, max_val, M), decimals=0)  # TODO
-            if np.unique(distances).shape[0] != M:
-                distances = np.round(np.random.uniform(min_val, max_val, M), decimals=0)
-            # distances = np.zeros(M)
-            # idx = 0
-            # while idx < M:
-            #     distance = np.round(np.random.uniform(min_val, max_val), decimals=0)
-            #     if len(distances) == 0:
-            #         distances[idx] = distance
-            #         idx += 1
-            #     else:
-            #         if np.min(np.abs(np.array(distances) - distance)) >= distance_min_gap and \
-            #                 np.max(np.abs(np.array(distances) - distance)) <= distance_max_gap:
-            #             distances[idx] = distance
-            #             idx += 1
-            return distances
+            Args:
+                M (int): Number of sources.
+                min_val (float): Minimal value of the distances.
+                max_val (int): Maximal value of the distances.
+                distance_resolution (float, optional): Resolution of the distances. Defaults to 1.0.
+
+            """
+            distances_options = np.arange(min_val, max_val, distance_resolution)
+            distances = np.random.choice(distances_options, M, replace=True)
+            return np.round(distances, 3)
 
         if distance is None:
-            self.distances = choose_distances(M, min_val=self.fresnel, max_val=self.fraunhofer * 0.4,
-                                              distance_min_gap=0.5, distance_max_gap=self.fraunhofer)
+            self.distances = choose_distances(M, min_val=np.ceil(self.fresnel),
+                                              max_val=np.floor(self.fraunhofer * self.params.max_range_ratio_to_limit),
+                                              distance_resolution=self.params.range_resolution)
         else:
             self.distances = distance
 

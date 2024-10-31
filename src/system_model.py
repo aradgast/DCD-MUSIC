@@ -52,6 +52,10 @@ class SystemModelParams:
     eta = 0
     bias = 0
     sv_noise_var = 0
+    doa_range = 60
+    doa_resolution = 1
+    max_range_ratio_to_limit = 0.5
+    range_resolution = 1
 
     def set_parameter(self, name: str, value):
         """

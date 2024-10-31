@@ -18,7 +18,6 @@ from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
 from src.models_pack.deep_cnn import DeepCNN
 from src.models_pack.deep_root_music import DeepRootMUSIC
 
-# warnings.simplefilter("ignore")
 
 
 class ModelGenerator(object):
@@ -151,8 +150,9 @@ class ModelGenerator(object):
 
         """
         tau = self.model_params.get("tau")
+        diff_method = self.model_params.get("diff_method")
         self.model = DCDMUSIC(tau=tau,
-                              diff_method=self.model_params.get("diff_method"),
+                              diff_method=diff_method,
                               system_model=self.system_model)
 
     def __set_transmusic(self):
@@ -225,11 +225,11 @@ class ModelGenerator(object):
         diff_method = model_params.get("diff_method")
         if isinstance(diff_method, str):
             if field_type.lower() == "far":
-                if not (diff_method.lower() in ["root_music", "esprit", "music_1d"]):
+                if not (diff_method.lower() in ["root_music", "esprit", "music_1d", "music_1d_noise_ss"]):
                     raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                                      f"for Far field possible diff methods are: root_music, esprit or music_1d")
             else:  # field_type.lower() == "near":
-                if not (diff_method.lower() in ["music_1d", "music_2d"]):
+                if not (diff_method.lower() in ["music_1d", "music_2d", "music_1d_noise_ss", "music_2d_noise_ss"]):
                     raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                                      f"for Near field possible diff methods are: music_2d or music_1d")
         else:
@@ -239,11 +239,22 @@ class ModelGenerator(object):
     def __verify_dcdmuisc_params(self, model_params):
         """
         tau: int
+        diff_method: tuple
         """
         tau = model_params.get("tau")
         if not isinstance(tau, int) or not (tau < self.system_model.params.T):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" Tau has to be an int and smaller than T")
+        diff_method = model_params.get("diff_method")
+        if not isinstance(diff_method, tuple) or not (len(diff_method) == 2):
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
+                             f" diff_method has to be a tuple of two elements.")
+        if not (diff_method[0].lower() in ["music_1D_noise_ss", "esprit", "music_1d"]):
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
+                             f" first element of diff_method has to be music_1D_noise_ss, esprit or music_1d")
+        if not (diff_method[1].lower() in ["music_1D_noise_ss", "esprit", "music_1d"]):
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
+                             f" second element of diff_method has to be music_1D_noise_ss, esprit or music_1d")
 
     def __str__(self):
         return f"{self.model.get_model_name()}"
