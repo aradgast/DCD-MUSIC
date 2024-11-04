@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sympy.physics.vector.printing import params
 
-from src.criterions import CartesianLoss, RMSPELoss, NoiseOrthogonalLoss
+from src.criterions import CartesianLoss, RMSPELoss, MusicSpectrumLoss
 from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
 from src.utils import *
@@ -17,10 +17,13 @@ class DCDMUSIC(SubspaceNet):
     The second, uses the first to extract the angles, and then uses the angles to get the distance.
     """
 
-    def __init__(self, tau: int, system_model: SystemModel,diff_method: tuple = ("esprit", "music_1d"), state_path: str = None):
-        super(DCDMUSIC, self).__init__(tau, diff_method[1], system_model, "Near")
+    def __init__(self, tau: int, system_model: SystemModel,diff_method: tuple = ("esprit", "music_1d"),
+                 train_loss_type: str=("rmspe", "rmspe"),
+                 state_path: str = None):
+        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "Near")
         self.angle_extractor = None
         self.angle_extractor_diff_method = diff_method[0]
+        self.angle_extractor_train_loss_type = train_loss_type[0]
         self.state_path = state_path
         self.__init_angle_extractor(path=self.state_path)
         self.train_angle_extractor = False
@@ -45,7 +48,7 @@ class DCDMUSIC(SubspaceNet):
         else: # in this case, when using orthogonality loss, the angle extractor doesn't extract angles. TODO
             raise NotImplementedError
 
-        if self.loss_type == "orthogonality" and self.training:
+        if self.train_loss_type == "music_spectrum" and self.training:
             Rz = self.get_surrogate_covariance(x)
             _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz,
                                                                                                               number_of_sources)
@@ -57,6 +60,7 @@ class DCDMUSIC(SubspaceNet):
     def __init_angle_extractor(self, path: str = None):
         self.angle_extractor = SubspaceNet(tau=self.tau,
                                            diff_method=self.angle_extractor_diff_method,
+                                           train_loss_type=self.angle_extractor_train_loss_type,
                                            system_model=self.system_model,
                                            field_type="Far")
         if path is None:
@@ -103,11 +107,11 @@ class DCDMUSIC(SubspaceNet):
 
     def get_model_params(self):
         if str(self.angle_extractor.diff_method).startswith("music"):
-            angle_extractor_diff_method = str(self.angle_extractor.diff_method) + "_" + self.angle_extractor.loss_type
+            angle_extractor_diff_method = str(self.angle_extractor.diff_method) + "_" + self.angle_extractor.train_loss_type
         else:
             angle_extractor_diff_method = str(self.angle_extractor.diff_method)
         if str(self.diff_method).startswith("music"):
-            diff_method = str(self.diff_method) + "_" + self.loss_type
+            diff_method = str(self.diff_method) + "_" + self.train_loss_type
         else:
             diff_method = str(self.diff_method)
         return {"tau": self.tau, "diff_methods": (angle_extractor_diff_method ,diff_method)}
@@ -125,7 +129,7 @@ class DCDMUSIC(SubspaceNet):
         x = x.requires_grad_(True).to(device)
         angles = angles.requires_grad_(True).to(device)
         ranges = ranges.requires_grad_(True).to(device)
-        if self.loss_type == "orthogonality":
+        if self.train_loss_type == "music_spectrum":
             if self.diff_method.estimation_params == "angle, range":
                 noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
                 loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
@@ -144,7 +148,7 @@ class DCDMUSIC(SubspaceNet):
             return loss + eigen_regularization * self.eigenregularization_weight, acc
 
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, is_test: bool=False):
         x, sources_num, labels, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -161,10 +165,15 @@ class DCDMUSIC(SubspaceNet):
         angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
         loss = self.validation_loss(angles_pred, angles, ranges_pred, ranges)
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
+
+        if is_test:
+            _, loss_angle, loss_range = self.test_loss_separated(angles_pred, angles, ranges_pred, ranges)
+            return (loss, loss_angle, loss_range), acc
+
         return loss, acc
 
     def test_step(self, batch, batch_idx):
-        return self.validation_step(batch, batch_idx)
+        return self.validation_step(batch, batch_idx, is_test=True)
 
     def predict_step(self, batch, batch_idx):
         x = batch
@@ -174,8 +183,8 @@ class DCDMUSIC(SubspaceNet):
         return angles, distances, sources_estimation
 
     def __set_criterion(self):
-        if self.loss_type == "orthogonality":
-            self.train_loss = NoiseOrthogonalLoss(
+        if self.train_loss_type == "music_spectrum":
+            self.train_loss = MusicSpectrumLoss(
                 array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
                 sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
         else:
@@ -185,6 +194,7 @@ class DCDMUSIC(SubspaceNet):
                 self.train_loss = RMSPELoss(balance_factor=0.0)
         self.validation_loss = CartesianLoss()
         self.test_loss = CartesianLoss()
+        self.test_loss_separated = RMSPELoss(1.0)
 
     def update_criterion(self):
         self.__set_criterion()

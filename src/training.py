@@ -235,12 +235,12 @@ class TrainingParams(object):
         # learning rate decay value
         self.gamma = gamma
         # Assign schedular for learning rate decay
-        # self.schedular = lr_scheduler.StepLR(
-        #     self.optimizer, step_size=step_size, gamma=gamma
-        # )
-        self.schedular = lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=gamma, patience=10, verbose=True
+        self.schedular = lr_scheduler.StepLR(
+            self.optimizer, step_size=step_size, gamma=gamma
         )
+        # self.schedular = lr_scheduler.ReduceLROnPlateau(
+        #     self.optimizer, mode="min", factor=gamma, patience=20, verbose=True
+        # )
         return self
 
     # Legacy code
@@ -498,8 +498,8 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         acc_valid_list.append(valid_loss.get('Accuracy') * 100)
 
         # Update schedular
-        training_params.schedular.step(loss_valid_list[-1])
-        # training_params.schedular.step()
+        # training_params.schedular.step(loss_valid_list[-1])
+        training_params.schedular.step()
 
         # Update eigenregularization weight
         try:
@@ -563,6 +563,11 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
     if len(acc_train_list) > 0 and len(acc_valid_list) > 0:
         res["acc_train_list"] = acc_train_list
         res["acc_valid_list"] = acc_valid_list
+    try:
+        print("over estimation = ", model.over_estimation_counter)
+        print("under estimation = ", model.under_estimation_counter)
+    except Exception as e:
+        pass
     return res
 
 

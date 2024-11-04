@@ -30,19 +30,19 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    # "SNR": [-10, -5, 0, 5, 10],
+    "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
-    #"eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
-    "N": 15,                                    # number of antennas
-    "M": 4,                                     # number of sources
-    "T": 100,                                   # number of snapshots
-    "snr": 0,                                # if defined, values in scenario_dict will be ignored
-    "field_type": "Near",                       # Near, Far
-    "signal_nature": "coherent",                      # if defined, values in scenario_dict will be ignored
-    "eta": 0.0,                                   # steering vector error
+    "N": 15,  # number of antennas
+    "M": None,  # number of sources
+    "T": 100,  # number of snapshots
+    "snr": 0,  # if defined, values in scenario_dict will be ignored
+    "field_type": "Near",  # Near, Far
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
+    "eta": 0.0,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
     "doa_range": 55,
@@ -51,17 +51,20 @@ system_model_params = {
     "range_resolution": 1,
 }
 model_config = {
-    "model_type": "SubspaceNet",                # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "SubspaceNet",  # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_2D_noise_ss"  # esprit, music_1D, music_2D, music_1D_noise_ss, music_2D_noise_ss
+    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
+    model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Near"     # Near, Far
+    model_config["model_params"]["field_type"] = "Near"  # Near, Far
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["diff_method"] = ("esprit", "music_1D_noise_ss")  # esprit, music_1D, music_1D_noise_ss
+    model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # ("esprit", "music_1D")
+    model_config["model_params"]["train_loss_type"] = ("rmspe", "music_spectrum")  # ("rmspe", "rmspe"), ("rmspe",
+    # "music_spectrum"), ("music_spectrum", "rmspe")
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
@@ -69,34 +72,38 @@ elif model_config.get("model_type") == "DeepCNN":
 training_params = {
     "samples_size": 4096,
     "train_test_ratio": .1,
-    "training_objective": "angle, range",       # angle, range, source_estimation
+    "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
     "epochs": 100,
-    "optimizer": "Adam",                        # Adam, SGD
+    "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
     "step_size": 50,
     "gamma": 0.5,
-    "true_doa_train": None,                 # if set, this doa will be set to all samples in the train dataset
-    "true_range_train": None,                 # if set, this range will be set to all samples in the train dataset
-    "true_doa_test": None,                  # if set, this doa will be set to all samples in the test dataset
-    "true_range_test": None,                   # if set, this range will be set to all samples in the train dataset
+    "true_doa_train": None,  # if set, this doa will be set to all samples in the train dataset
+    "true_range_train": None,  # if set, this range will be set to all samples in the train dataset
+    "true_doa_test": None,  # if set, this doa will be set to all samples in the test dataset
+    "true_range_test": None,  # if set, this range will be set to all samples in the train dataset
 }
 evaluation_params = {
-    "criterion": "rmspe",                       # rmse, rmspe, mse, mspe, cartesian
-    "balance_factor": 1.0 ,
+    "criterion": "rmspe",  # rmse, rmspe, mse, mspe, cartesian
+    "balance_factor": 1.0,
     "models": {
-                # "DCDMUSIC": {"tau": 8,
-                #              "diff_method": ("esprit", "music_1D")},
-                # "DCDMUSIC1Ortho": {"tau": 8,
-                #              "diff_method": ("esprit", "music_1D_noise_ss")},
-                # "DCDMUSIC2Ortho": {"tau": 8,
-                #              "diff_method": ("music_1D_noise_ss", "music_1D_noise_ss")},
-                "SubspaceNet": {"tau": 8,
-                                "diff_method": "music_2D_noise_ss",
-                                "field_type": "Near"},
-                # "TransMUSIC": {},
-            },
+        # "DCDMUSIC": {"tau": 8,
+        #              "diff_method": ("esprit", "music_1D"),
+        #              "train_loss_type": ("rmspe", "rmspe")},
+        # "DCDMUSIC1Ortho": {"tau": 8,
+        #                    "diff_method": ("esprit", "music_1D"),
+        #                    "train_loss_type": ("music_spectrum", "rmspe")},
+        # "DCDMUSIC2Ortho": {"tau": 8,
+        #                    "diff_method": ("music_1D", "music_1D"),
+        #                    "train_loss_type": ("rmspe", "music_spectrum")},
+        # "SubspaceNet": {"tau": 8,
+        #                 "diff_method": "music_2D_noise_ss",
+        #                 "train_loss_type": "music_spectrum",
+        #                 "field_type": "Near"},
+        # "TransMUSIC": {},
+    },
     "augmented_methods": [
         # "mvdr",
         # "r-music",
@@ -110,7 +117,7 @@ evaluation_params = {
         # "Root-MUSIC",
         # "mvdr",
         # "bb-music",
-        "2D-MUSIC",
+        # "2D-MUSIC",
         # "CCRB"
     ]
 }
@@ -119,13 +126,14 @@ simulation_commands = {
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": False,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
-    "PLOT_RESULTS": True,                       # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": True,                  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": False,                  # if True, the accuracy results of evaluation will be plotted
-    "SAVE_PLOTS": False,                         # if True, the plots will be saved to the results folder
+    "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
+    "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
+    "SAVE_PLOTS": False,  # if True, the plots will be saved to the results folder
 }
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run simulation with optional parameters.")
@@ -142,6 +150,7 @@ def parse_arguments():
     parser.add_argument('--samples_size', type=int, help='Samples size', default=None)
     parser.add_argument('--train_test_ratio', type=int, help='Train test ratio', default=None)
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     # torch.set_printoptions(precision=12)
@@ -180,4 +189,3 @@ if __name__ == "__main__":
                           evaluation_params=evaluation_params,
                           scenario_dict=scenario_dict)
     print("Total time: ", time.time() - start)
-

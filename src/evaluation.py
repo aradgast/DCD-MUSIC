@@ -100,7 +100,7 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
     return model.to(device)
 
 
-def evaluate_dnn_model(model: nn.Module, dataset: DataLoader) -> dict:
+def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid") -> dict:
     """
     Evaluate the DNN model on a given dataset.
 
@@ -130,7 +130,10 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader) -> dict:
     with (torch.no_grad()):
         for idx, data in enumerate(dataset):
             if isinstance(model, (SubspaceNet, TransMUSIC)):
-                eval_loss, acc = model.validation_step(data, idx)
+                if mode == "valid":
+                    eval_loss, acc = model.validation_step(data, idx)
+                else:
+                    eval_loss, acc = model.test_step(data, idx)
                 if isinstance(eval_loss, tuple):
                     eval_loss, eval_loss_angle, eval_loss_distance = eval_loss
                     if overall_loss_angle is None:
@@ -278,7 +281,8 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
         Exception: If the algorithm is not supported.
     """
     # Initialize parameters for evaluation
-    over_all_loss, angle_loss, distance_loss, acc = 0.0, 0.0, 0.0, 0.0
+    over_all_loss = 0.0
+    angle_loss, distance_loss, acc = None, None, None
     test_length = 0
     if algorithm.lower() == "ccrb":
         if system_model.params.signal_nature.lower() == "non-coherent":
@@ -295,15 +299,17 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
             if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music"]:
                 tmp_rmspe, tmp_acc, tmp_length = model_based.test_step(data, i)
                 over_all_loss += tmp_rmspe
+                if acc is None:
+                    acc = 0.0
                 acc += tmp_acc
                 test_length += tmp_length
             else:
                 raise NotImplementedError(f"evaluate_model_based: Algorithm {algorithm} is not supported.")
         result = {"Overall": over_all_loss / test_length}
-        if distance_loss != 0 and angle_loss != 0:
+        if distance_loss is not None and angle_loss is not None:
             result["Angle"] = angle_loss / test_length
             result["Distance"] = distance_loss / test_length
-        if acc != 0:
+        if acc is not None:
             result["Accuracy"] = acc / test_length
     return result
 
@@ -455,7 +461,7 @@ def evaluate(
         # total_size = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
         # print(f"Number of parameters in {model_name}: {num_of_params} with total size: {total_size} bytes")
         start = time.time()
-        model_test_loss = evaluate_dnn_model(model=model, dataset=generic_test_dataset)
+        model_test_loss = evaluate_dnn_model(model=model, dataset=generic_test_dataset, mode="test")
         print(f"{model_name} evaluation time: {time.time() - start}")
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods

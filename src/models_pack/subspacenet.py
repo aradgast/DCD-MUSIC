@@ -8,7 +8,7 @@ from torch.optim import lr_scheduler
 from torch.autograd import Variable
 from sympy.unify.core import Variable
 
-from src.criterions import RMSPELoss, CartesianLoss, NoiseOrthogonalLoss
+from src.criterions import RMSPELoss, CartesianLoss, MusicSpectrumLoss
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
 from src.utils import *
@@ -46,7 +46,7 @@ class SubspaceNet(ParentModel):
 
     """
 
-    def __init__(self, tau: int, diff_method: str = "root_music",
+    def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
                  system_model: SystemModel = None, field_type: str = "Far"):
         """Initializes the SubspaceNet model.
 
@@ -60,7 +60,7 @@ class SubspaceNet(ParentModel):
         self.tau = tau
         self.N = self.system_model.params.N
         self.diff_method = None
-        self.loss_type = None
+        self.train_loss_type = train_loss_type
         self.field_type = field_type
         self.p = 0.1
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
@@ -137,7 +137,7 @@ class SubspaceNet(ParentModel):
         Rz = self.get_surrogate_covariance(x)
 
         if self.field_type == "Far":
-            if self.loss_type == "orthogonality" and self.training:
+            if self.train_loss_type == "music_spectrum" and self.training:
                     _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
                     return noise_subspace, source_estimation, eigen_regularization
             else:
@@ -157,7 +157,7 @@ class SubspaceNet(ParentModel):
                     raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
         elif self.field_type == "Near":
-            if self.training and self.loss_type == "orthogonality":
+            if self.training and self.train_loss_type == "music_spectrum":
                 _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
                 return noise_subspace, source_estimation, eigen_regularization
             if known_angles is None:
@@ -208,7 +208,7 @@ class SubspaceNet(ParentModel):
         return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
 
     def adjust_diff_method_temperature(self, epoch):
-        if isinstance(self.diff_method, MUSIC) and self.loss_type == "rmspe":
+        if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
             if epoch % 10 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
@@ -225,12 +225,12 @@ class SubspaceNet(ParentModel):
         tau = self.tau
         diff_method = self.diff_method
         field_type = self.field_type.lower()
-        loss_type = self.loss_type
-        return f"tau={tau}_diff_method={diff_method}_field_type={field_type}_loss_type={loss_type}"
+        train_loss_type = self.train_loss_type
+        return f"tau={tau}_diff_method={diff_method}_field_type={field_type}_train_loss_type={train_loss_type}"
 
     def get_model_params(self):
         return {"tau": self.tau, "diff_method": self.diff_method, "field_type": self.field_type,
-                "loss_type": self.loss_type}
+                "train_loss_type": self.train_loss_type}
 
     def training_step(self, batch, batch_idx):
         if self.field_type == "Far":
@@ -272,7 +272,7 @@ class SubspaceNet(ParentModel):
         sources_num = sources_num[0]
         if self.field_type != self.system_model.params.field_type:
             angles, _ = torch.split(angles, sources_num, dim=1)
-        if self.loss_type == "orthogonality":
+        if self.train_loss_type == "music_spectrum":
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles)
         else:
@@ -323,7 +323,7 @@ class SubspaceNet(ParentModel):
         x = x.requires_grad_(True).to(device)
         angles = angles.requires_grad_(True).to(device)
         ranges = ranges.requires_grad_(True).to(device)
-        if self.loss_type == "orthogonality":
+        if self.train_loss_type == "music_spectrum":
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num, angles)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
         else:
@@ -332,7 +332,7 @@ class SubspaceNet(ParentModel):
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
         return loss + eigen_regularization * self.eigenregularization_weight, acc
 
-    def __validation_step_near_field(self, batch, batch_idx):
+    def __validation_step_near_field(self, batch, batch_idx, is_test :bool=False):
         x, sources_num, labels, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -350,10 +350,14 @@ class SubspaceNet(ParentModel):
         angles_pred, distance_pred, source_estimation, eigen_regularization = self(x, sources_num)
         loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
+
+        if is_test:
+            _, loss_angle, loss_range = self.test_loss_separated(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
+            return (loss, loss_angle, loss_range), acc
         return loss, acc
 
     def __test_step_near_field(self, batch, batch_idx):
-        return self.__validation_step_near_field(batch, batch_idx)
+        return self.__validation_step_near_field(batch, batch_idx, is_test=True)
 
     def __prediction_step_near_field(self, batch, batch_idx):
         x = batch
@@ -363,7 +367,7 @@ class SubspaceNet(ParentModel):
         angles_pred, distance_pred, _, _ = self(x)
         return angles_pred, distance_pred
 
-    def __set_diff_method(self, diff_method: str, system_model):
+    def __set_diff_method(self, diff_method: str, system_model: SystemModel):
         """Sets the differentiable subspace method for training subspaceNet.
             Options: "root_music", "esprit"
 
@@ -378,16 +382,10 @@ class SubspaceNet(ParentModel):
         if self.field_type == "Far":
             if diff_method.startswith("root_music"):
                 self.diff_method = root_music
-                self.loss_type = "rmspe"
             elif diff_method.startswith("esprit"):
                 self.diff_method = ESPRIT(system_model=system_model)
-                self.loss_type = "rmspe"
             elif diff_method.endswith("music_1D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle")
-                self.loss_type = "rmspe"
-            elif diff_method.startswith("music_1D_noise_ss"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle")
-                self.loss_type = "orthogonality"
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
@@ -395,16 +393,8 @@ class SubspaceNet(ParentModel):
         elif self.field_type == "Near":
             if diff_method.endswith("music_2D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
-                self.loss_type = "rmspe"
-            elif diff_method.startswith("music_2D_noise_ss"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
-                self.loss_type = "orthogonality"
             elif diff_method.endswith("music_1D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
-                self.loss_type = "rmspe"
-            elif diff_method.startswith("music_1D_noise_ss"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
-                self.loss_type = "orthogonality"
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
@@ -412,26 +402,27 @@ class SubspaceNet(ParentModel):
 
     def __set_criterion(self):
         if self.field_type == "Far":
-            if self.loss_type == "rmspe":
+            if self.train_loss_type == "rmspe":
                 self.train_loss = RMSPELoss()
-            elif self.loss_type == "orthogonality":
-                self.train_loss = NoiseOrthogonalLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                        sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
+            elif self.train_loss_type == "music_spectrum":
+                self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
+                                                    sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
             else:
                 raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.loss_type}")
             self.validation_loss = RMSPELoss()
             self.test_loss = RMSPELoss()
 
         elif self.field_type == "Near":
-            if self.loss_type == "rmspe":
+            if self.train_loss_type == "rmspe":
                 self.train_loss = CartesianLoss()
-            elif self.loss_type == "orthogonality":
-                self.train_loss = NoiseOrthogonalLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                      sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
+            elif self.train_loss_type == "music_spectrum":
+                self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
+                                                    sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
             else:
-                raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.loss_type}")
+                raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.train_loss_type}")
             self.validation_loss = CartesianLoss()
             self.test_loss = CartesianLoss()
+            self.test_loss_separated = RMSPELoss(1.0)
 
 
 

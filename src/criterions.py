@@ -169,7 +169,8 @@ class RMSPELoss(nn.Module):
         if ranges is None:
             rmspe, min_idx = torch.min(rmspe_angle, dim=-1)
         else:
-            err_distance = (ranges_pred[:, perm].to(device) - torch.tile(ranges[:, None, :], (1, num_of_perm, 1)).to(device))
+            err_distance = (ranges_pred[:, perm].to(device) - torch.tile(ranges[:, None, :], (1, num_of_perm, 1)).to(
+                device))
             rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
             rmspe_angle, min_idx = torch.min(rmspe_angle, dim=-1)
             # always consider the permutation which yields the minimal RMSPE over the angles.
@@ -183,87 +184,11 @@ class RMSPELoss(nn.Module):
             result_distance = torch.sum(rmspe_distance)
             return result, result_angle, result_distance
 
-            # rmspe = []
-            # for iter in range(doa_predictions.shape[0]):
-            #     rmspe_list = []
-            #     batch_predictions_doa = doa_predictions[iter].to(device)
-            #     targets_doa = doa[iter].to(device).to(torch.float32)
-            #     prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
-            #     for prediction_doa in prediction_perm_doa:
-            #         # Calculate error with modulo pi
-            #         error = (((prediction_doa - targets_doa) + (np.pi / 2)) % np.pi) - np.pi / 2
-            #         # Calculate RMSE over all permutations
-            #         rmspe_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(error)
-            #         rmspe_list.append(rmspe_val)
-            #     rmspe_tensor = torch.stack(rmspe_list, dim=0)
-            #     rmspe_min = torch.min(rmspe_tensor)
-            #     rmspe.append(rmspe_min)
-            # result = torch.mean(torch.stack(rmspe, dim=0))
-            # if (result_ != result):
-            #     raise ValueError("ERROR in RMSPE loss")
-        # Calculate RMSPE loss for both DOA and distance
-            # rmspe = []
-            # rmspe_angle = []
-            # rmspe_distance = []
-            # for iter in range(doa_predictions.shape[0]):
-            #     rmspe_list = []
-            #     rmspe_angle_list = []
-            #     rmspe_distance_list = []
-            #
-            #     batch_predictions_doa = doa_predictions[iter].to(device)
-            #     targets_doa = doa[iter].to(device)
-            #     prediction_perm_doa = permute_prediction(batch_predictions_doa).to(device)
-            #
-            #     batch_predictions_distance = distance_predictions[iter].to(device)
-            #     targets_distance = distance[iter].to(device)
-            #     prediction_perm_distance = permute_prediction(batch_predictions_distance).to(device)
-            #
-            #     for prediction_doa, prediction_distance in zip(prediction_perm_doa, prediction_perm_distance):
-            #         # Calculate error with modulo pi
-            #         angle_err = ((((prediction_doa - targets_doa) + (torch.pi / 2)) % torch.pi) - (torch.pi / 2))
-            #         # Calculate error for distance
-            #         distance_err = (prediction_distance - targets_distance)
-            #         # Calculate RMSE over all permutations for each element
-            #         rmspe_angle_val = (1 / np.sqrt(len(targets_doa))) * torch.linalg.norm(angle_err)
-            #         rmspe_distance_val = (1 / np.sqrt(len(targets_distance))) * torch.linalg.norm(distance_err)
-            #         # Sum the rmpse with a balance factor
-            #         rmspe_val = self.balance_factor * rmspe_angle_val + (1 - self.balance_factor) * rmspe_distance_val
-            #         rmspe_list.append(rmspe_val)
-            #         rmspe_angle_list.append(rmspe_angle_val)
-            #         rmspe_distance_list.append(rmspe_distance_val)
-            #     rmspe_tensor = torch.stack(rmspe_list, dim=0)
-            #     rmspe_angle_tensor = torch.stack(rmspe_angle_list, dim=0)
-            #     rmspe_distnace_tensor = torch.stack(rmspe_distance_list, dim=0)
-            #     # Choose minimal error from all permutations
-            #     if rmspe_tensor.shape[0] == 1:
-            #         rmspe_min = torch.min(rmspe_tensor)
-            #         rmspe_angle.append(rmspe_angle_tensor.item())
-            #         rmspe_distance.append(rmspe_distnace_tensor.item())
-            #     else:
-            #         rmspe_min, min_idx = torch.min(rmspe_tensor, dim=0)
-            #         rmspe_angle.append(rmspe_angle_tensor[min_idx])
-            #         rmspe_distance.append(rmspe_distnace_tensor[min_idx])
-            #     rmspe.append(rmspe_min)
-            # result = torch.mean(torch.stack(rmspe, dim=0))
-            # if is_separted:
-            #     result_angle = torch.mean(torch.Tensor(rmspe_angle), dim=0)
-            #     result_distance = torch.mean(torch.Tensor(rmspe_distance), dim=0)
-            #     return result, result_angle, result_distance
-            # else:
-            #     return result
-
     def adjust_balance_factor(self, loss=None):
-        # if self.balance_factor > 0.4:
-        #     if loss < 0.1 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]):
-        #         self.balance_factor *= 0.95
-        #         print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
-        #     if loss < 0.01 and self.balance_factor == torch.Tensor([BALANCE_FACTOR]) * 0.95:
-        #         self.balance_factor *= 0.9
-        #         print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
-        #     if loss < 0.001:
-        #         self.balance_factor *= 0.85
-        #         print(f"Balance factor for RMSPE updated --> {self.balance_factor.item()}")
+
         self.balance_factor = 0.1
+
+
 class MSPELoss(nn.Module):
     """Mean Square Periodic Error (MSPE) loss function.
     This loss function calculates the MSPE between the predicted values and the target values.
@@ -398,7 +323,6 @@ def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
         # Choose minimal error from all permutations
         res = np.min(rmspe_list)
 
-
     return res
 
 
@@ -443,6 +367,7 @@ def MSPE(doa_predictions: np.ndarray, doa: np.ndarray,
         res = np.min(mspe_list)
     return res
 
+
 class CartesianLoss(nn.Module):
     def __init__(self):
         super(CartesianLoss, self).__init__()
@@ -461,8 +386,11 @@ class CartesianLoss(nn.Module):
 
         elif angles_pred.shape[1] < angles.shape[1]:
             # add a random angle to the predictions
-            random_angles = torch.distributions.uniform.Uniform(-torch.pi / 3, torch.pi / 3).sample([angles_pred.shape[0], M - angles_pred.shape[1]])
-            random_ranges = torch.distributions.uniform.Uniform(torch.min(ranges).item(), torch.max(ranges).item()).sample([angles_pred.shape[0], M - angles_pred.shape[1]])
+            random_angles = torch.distributions.uniform.Uniform(-torch.pi / 3, torch.pi / 3).sample(
+                [angles_pred.shape[0], M - angles_pred.shape[1]])
+            random_ranges = torch.distributions.uniform.Uniform(torch.min(ranges).item(),
+                                                                torch.max(ranges).item()).sample(
+                [angles_pred.shape[0], M - angles_pred.shape[1]])
             angles_pred = torch.cat((angles_pred, random_angles.to(device)), dim=1)
             ranges_pred = torch.cat((ranges_pred, random_ranges.to(device)), dim=1)
 
@@ -483,18 +411,11 @@ class CartesianLoss(nn.Module):
         loss = torch.mean(loss, dim=-1)
         loss = torch.min(loss, dim=-1)
         return torch.sum(loss[0])
-        # loss = []
-        # for batch in range(number_of_samples):
-        #     loss_per_sample = []
-        #     for p in perm:
-        #         loss_per_sample.append(torch.sqrt(torch.sum((coords_true[batch] - coords_pred[batch, p, :]) ** 2, dim=1)).mean())
-        #     loss.append(torch.min(torch.stack(loss_per_sample, dim=0)))
-        # if (loss_[0] != torch.stack(loss, dim=0)).all():
-        #     raise ValueError("Error in Cartesian Loss")
 
-class NoiseOrthogonalLoss(nn.Module):
+
+class MusicSpectrumLoss(nn.Module):
     def __init__(self, array, sensors_distance):
-        super(NoiseOrthogonalLoss, self).__init__()
+        super(MusicSpectrumLoss, self).__init__()
         self.array = array
         self.sensors_distance = sensors_distance
         self.number_sensors = array.shape[1]
@@ -526,9 +447,11 @@ class NoiseOrthogonalLoss(nn.Module):
 
         first_order = torch.einsum("nm, bna -> bna",
                                    self.array,
-                                   torch.sin(theta).repeat(1, 1, self.number_sensors).transpose(1, 2) * self.sensors_distance)
+                                   torch.sin(theta).repeat(1, 1, self.number_sensors).transpose(1,
+                                                                                                2) * self.sensors_distance)
 
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * self.sensors_distance, 2), distances.transpose(1, 2))
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * self.sensors_distance, 2),
+                                        distances.transpose(1, 2))
         second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.number_sensors)
         second_order = torch.einsum("nm, bnda -> bnda",
                                     array_square,
