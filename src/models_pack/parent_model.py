@@ -91,6 +91,8 @@ class ParentModel(nn.Module):
 
         elif rounded_acc <= self.schedular_acc_current or rounded_acc <= self.schedular_low_threshold:
             self.schedular_patience_counter_descending += 1
+            if acc > 95:
+                self.schedular_patience_counter_descending += 1
             self.schedular_patience_counter_ascending = 0
             if self.schedular_patience_counter_descending >= self.schedular_patience_descending:
                 self.eigenregularization_weight = min(self.schedular_max_weight,
