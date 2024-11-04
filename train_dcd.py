@@ -9,7 +9,7 @@ import argparse
 # default values for the argparse
 number_sensors = 15
 number_sources = 2
-number_snapshots = 50
+number_snapshots = 100
 snr = 0
 field_type = "Near"
 signal_nature = "coherent"
@@ -18,12 +18,14 @@ tau = 8
 sample_size = 4096
 train_test_ratio = 0.1
 batch_size = 128
-epochs = 50
+epochs = 100
 optimizer = "Adam"
 learning_rate = 0.001
 weight_decay = 1e-9
-step_size = 20
+step_size = 50
 gamma = 0.5
+diff_method = ("esprit", "music_1D")
+train_loss_type = ("rmspe", "rmspe")
 
 
 def train_dcd_music(*args, **kwargs):
@@ -134,7 +136,8 @@ def train_dcd_music(*args, **kwargs):
         ModelGenerator()
         .set_model_type("SubspaceNet")
         .set_system_model(system_model)
-        .set_model_params({"diff_method": "esprit", "tau": MODEL_PARAMS.get("tau"), "field_type": "Far"})
+        .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
+                           "tau": MODEL_PARAMS.get("tau"), "field_type": "Far"})
         .set_model()
     )
     # Assign the training parameters object
@@ -150,8 +153,6 @@ def train_dcd_music(*args, **kwargs):
         .set_training_dataset(train_dataset)
         .set_schedular(step_size=TRAINING_PARAMS["step_size"],
                        gamma=TRAINING_PARAMS["gamma"])
-        .set_criterion("rmspe", 1.0)
-
     )
     if load_model:
         try:
@@ -182,7 +183,9 @@ def train_dcd_music(*args, **kwargs):
 
     # Update model configuration
     model_config.set_model_type("DCDMUSIC")
-    model_config.set_model_params({"tau": MODEL_PARAMS.get("tau")})
+    model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
+                                   "diff_method": diff_method,
+                                   "train_loss_type": train_loss_type})
     model_config.set_model()
     # Assign the training parameters object
     simulation_parameters.set_training_objective("range")
@@ -192,7 +195,6 @@ def train_dcd_music(*args, **kwargs):
                                         weight_decay=TRAINING_PARAMS["weight_decay"])
     simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
                        gamma=TRAINING_PARAMS["gamma"])
-    simulation_parameters.set_criterion("rmspe", 0.0)
 
     if load_model:
         try:
@@ -222,7 +224,6 @@ def train_dcd_music(*args, **kwargs):
                                         weight_decay=TRAINING_PARAMS["weight_decay"])
     simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
                                         gamma=TRAINING_PARAMS["gamma"])
-    simulation_parameters.set_criterion("cartesian")
 
     if load_model:
         try:
