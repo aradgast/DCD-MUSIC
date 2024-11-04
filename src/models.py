@@ -152,6 +152,7 @@ class ModelGenerator(object):
         """
         tau = self.model_params.get("tau")
         diff_method = self.model_params.get("diff_method")
+        train_loss_type = self.model_params.get("train_loss_type")
         self.model = DCDMUSIC(tau=tau,
                               diff_method=diff_method, train_loss_type=train_loss_type,
                               system_model=self.system_model)

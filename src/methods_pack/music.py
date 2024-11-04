@@ -96,7 +96,7 @@ class MUSIC(SubspaceMethod):
 
     def adjust_cell_size(self):
         if self.estimation_params == "range":
-            if self.cell_size > 1 or self.cell_size > int(self.distances.shape[0] * 0.02):
+            if self.cell_size > 1 and self.cell_size > int(self.distances.shape[0] * 0.02):
                 self.cell_size = int(0.95 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
@@ -354,8 +354,8 @@ class MUSIC(SubspaceMethod):
                 self.music_spectrum = torch.zeros(batch_size, len(self.distances))
 
     def __define_grid_params(self):
-        angle_range = np.deg2rad(self.system_model.params.doa_range)
-        angle_resolution = np.deg2rad(self.system_model.params.doa_resolution)
+        angle_range = np.deg2rad(self.system_model.params.doa_range + 5)
+        angle_resolution = np.deg2rad(self.system_model.params.doa_resolution / 4)
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
             self.angels = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
@@ -368,8 +368,8 @@ class MUSIC(SubspaceMethod):
                 self.angels = torch.arange(-angle_range, angle_range, angle_resolution,
                                            device=device, dtype=torch.float64).requires_grad_(True).to(torch.float64)
             if self.estimation_params.endswith("range"):
-                fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
-                distance_resolution = self.system_model.params.range_resolution
+                fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit + 0.1
+                distance_resolution = self.system_model.params.range_resolution / 2
                 self.distances = torch.arange(np.floor(fresnel),
                                               np.ceil(fraunhofer * fraunhofer_ratio) + 1,
                                               distance_resolution,
@@ -381,7 +381,7 @@ class MUSIC(SubspaceMethod):
     def __init_cells(self):
 
         if self.estimation_params == "range":
-            self.cell_size = int(self.distances.shape[0] * 0.3)
+            self.cell_size = int(self.distances.shape[0] * 0.2)
         elif self.estimation_params == "angle":
             self.cell_size = int(self.angels.shape[0] * 0.2)
         elif self.estimation_params == "angle, range":
@@ -397,6 +397,9 @@ class MUSIC(SubspaceMethod):
         if self.cell_size_distance is not None:
             if self.cell_size_distance % 2 == 0:
                 self.cell_size_distance += 1
+
+    def init_cells(self):
+        self.__init_cells()
 
     def _plot_1d_spectrum(self, highlight_corrdinates, batch):
         if self.estimation_params == "angle":

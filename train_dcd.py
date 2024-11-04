@@ -220,10 +220,11 @@ def train_dcd_music(*args, **kwargs):
     # Assign the training parameters object
     simulation_parameters.set_training_objective("angle, range")
     simulation_parameters.set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
-                                        learning_rate=TRAINING_PARAMS["learning_rate"],
+                                        learning_rate=TRAINING_PARAMS["learning_rate"] / 2,
                                         weight_decay=TRAINING_PARAMS["weight_decay"])
     simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
                                         gamma=TRAINING_PARAMS["gamma"])
+    simulation_parameters.model.init_model_train_params()
 
     if load_model:
         try:

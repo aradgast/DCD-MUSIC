@@ -31,13 +31,13 @@ plt.close("all")
 
 scenario_dict = {
     "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 50, 70, 100],
-    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    "T": [10, 20, 50, 70],
+    "eta": [0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": None,  # number of sources
+    "M": 2,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far

@@ -232,6 +232,12 @@ class SubspaceNet(ParentModel):
         return {"tau": self.tau, "diff_method": self.diff_method, "field_type": self.field_type,
                 "train_loss_type": self.train_loss_type}
 
+    def init_model_train_params(self):
+        self.__set_criterion()
+        self.set_eigenregularization_schedular()
+        if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
+            self.diff_method.init_cells()
+
     def training_step(self, batch, batch_idx):
         if self.field_type == "Far":
             return self.__training_step_far_field(batch, batch_idx)

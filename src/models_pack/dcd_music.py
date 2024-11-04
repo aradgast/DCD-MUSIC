@@ -28,7 +28,8 @@ class DCDMUSIC(SubspaceNet):
         self.__init_angle_extractor(path=self.state_path)
         self.train_angle_extractor = False
         self.__set_criterion()
-        self.set_eigenregularization_schedular()
+        self.set_eigenregularization_schedular(init_value=0.0, step_size=10000, gamma=1.0)
+        self.schedular_min_weight = 0.0
 
     def forward(self, x: torch.Tensor, number_of_sources: int = None):
         """
@@ -142,10 +143,13 @@ class DCDMUSIC(SubspaceNet):
         if isinstance(loss, tuple):
             loss = loss[0]
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
-        if eigen_regularization is None:
-            return loss, acc
-        else:
-            return loss + eigen_regularization * self.eigenregularization_weight, acc
+        return loss, acc
+        # if eigen_regularization is None:
+        #     return loss, acc
+        # else:
+        #     if self.diff_method.estimation_params == "range":
+        #         eigen_regularization = 0
+        #     return loss + eigen_regularization * self.eigenregularization_weight, acc
 
 
     def validation_step(self, batch, batch_idx, is_test: bool=False):
