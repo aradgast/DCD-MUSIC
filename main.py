@@ -30,14 +30,14 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "SNR": [-10, -5, 0, 5, 10],
-    "T": [10, 20, 50, 70],
-    "eta": [0.01, 0.02, 0.03, 0.04],
+    # "SNR": [-10, -5, 0, 5, 10],
+    # "T": [10, 20, 50, 70],
+    # "eta": [0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 2,  # number of sources
+    "M": 4,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
@@ -86,7 +86,7 @@ training_params = {
     "true_range_test": None,  # if set, this range will be set to all samples in the train dataset
 }
 evaluation_params = {
-    "criterion": "rmspe",  # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
         # "DCDMUSIC": {"tau": 8,
@@ -98,10 +98,10 @@ evaluation_params = {
         # "DCDMUSIC2Ortho": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        # "SubspaceNet": {"tau": 8,
-        #                 "diff_method": "music_2D_noise_ss",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "Near"},
+        "SubspaceNet": {"tau": 8,
+                        "diff_method": "music_2D",
+                        "train_loss_type": "music_spectrum",
+                        "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [

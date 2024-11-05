@@ -117,10 +117,10 @@ class SubspaceMethod(nn.Module):
             elif level == "low":
                 return self.eigen_threshold - 0.0
         else:
-            if self.system_model.params.signal_nature == "coherent":
-                return self.eigen_threshold - 0.15
+            if self.system_model.params.M is not None:
+                return self.eigen_threshold - self.system_model.params.M / self.system_model.params.N
             else:
-                return self.eigen_threshold - 0.2
+                return self.eigen_threshold - 0.1
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":

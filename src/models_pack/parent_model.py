@@ -60,6 +60,8 @@ class ParentModel(nn.Module):
         if self.field_type == "Far":
             self.eigenregularization_weight /= 50
             self.schedular_gamma = 0.1
+        if self.system_model.params.M is not None:
+            self.eigenregularization_weight /= 2
 
         self.schedular_acc_current = 0
         self.schedular_patience_ascending = 10
@@ -83,6 +85,8 @@ class ParentModel(nn.Module):
 
         if rounded_acc > self.schedular_acc_current or rounded_acc >= self.schedular_high_threshold:
             self.schedular_patience_counter_ascending += 1
+            if acc > 95:
+                self.schedular_patience_counter_ascending += 1
             self.schedular_patience_counter_descending = 0
             if self.schedular_patience_counter_ascending >= self.schedular_patience_ascending:
                 self.eigenregularization_weight = max(self.schedular_min_weight,
@@ -91,8 +95,6 @@ class ParentModel(nn.Module):
 
         elif rounded_acc <= self.schedular_acc_current or rounded_acc <= self.schedular_low_threshold:
             self.schedular_patience_counter_descending += 1
-            if acc > 95:
-                self.schedular_patience_counter_descending += 1
             self.schedular_patience_counter_ascending = 0
             if self.schedular_patience_counter_descending >= self.schedular_patience_descending:
                 self.eigenregularization_weight = min(self.schedular_max_weight,

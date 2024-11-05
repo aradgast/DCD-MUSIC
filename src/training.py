@@ -239,7 +239,7 @@ class TrainingParams(object):
             self.optimizer, step_size=step_size, gamma=gamma
         )
         # self.schedular = lr_scheduler.ReduceLROnPlateau(
-        #     self.optimizer, mode="min", factor=gamma, patience=20, verbose=True
+        #     self.optimizer, mode="min", factor=gamma, patience=10, verbose=True
         # )
         return self
 
@@ -498,8 +498,8 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         acc_valid_list.append(valid_loss.get('Accuracy') * 100)
 
         # Update schedular
-        # training_params.schedular.step(loss_valid_list[-1])
-        training_params.schedular.step()
+        training_params.schedular.step(loss_valid_list[-1])
+        # training_params.schedular.step()
 
         # Update eigenregularization weight
         try:
