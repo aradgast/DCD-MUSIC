@@ -44,6 +44,7 @@ from src.methods_pack.music import MUSIC
 from src.methods_pack.root_music import RootMusic, root_music
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
+from src.methods_pack.beamformer import Beamformer
 from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
 from src.plotting import plot_spectrum
@@ -70,6 +71,8 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
         return RootMusic(system_model)
     if method_name.lower().endswith("esprit"):
         return ESPRIT(system_model)
+    if method_name.lower().endswith("beamformer"):
+        return Beamformer(system_model)
 
 
 def get_model(model_name: str, params: dict, system_model: SystemModel):
@@ -296,7 +299,7 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for i, data in enumerate(dataset):
-            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music"]:
+            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music", "beamformer"]:
                 tmp_rmspe, tmp_acc, tmp_length = model_based.test_step(data, i)
                 over_all_loss += tmp_rmspe
                 if acc is None:
