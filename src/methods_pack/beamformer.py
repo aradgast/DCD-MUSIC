@@ -97,6 +97,8 @@ class Beamformer(Module):
         if isinstance(predictions, tuple):
             angles_prediction, ranges_prediction = predictions
             rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
+            _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
+            rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
         else:
             rmspe = self.criterion(predictions, angles).item()
 
@@ -185,10 +187,11 @@ class Beamformer(Module):
         """
         if self.ranges_dict is None:
             steering_dict = self.system_model.steering_vec(self.angles_dict)
-            self.steering_dict = torch.from_numpy(steering_dict)
+            self.steering_dict = torch.from_numpy(steering_dict).to(device)
         else:
             steering_dict = self.system_model.steering_vec(self.angles_dict, self.ranges_dict, generate_search_grid=True)
-            self.steering_dict = torch.from_numpy(steering_dict)
+            self.steering_dict = torch.from_numpy(steering_dict).to(device)
 
     def __init_criteria(self):
         self.criterion = CartesianLoss()
+        self.separated_criterion = RMSPELoss(0)

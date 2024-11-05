@@ -30,7 +30,7 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    # "SNR": [-10, -5, 0, 5, 10],
+    "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70],
     # "eta": [0.01, 0.02, 0.03, 0.04],
 }
@@ -86,22 +86,22 @@ training_params = {
     "true_range_test": None,  # if set, this range will be set to all samples in the train dataset
 }
 evaluation_params = {
-    "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
+    "criterion": "rmspe",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
-        # "DCDMUSIC": {"tau": 8,
-        #              "diff_method": ("esprit", "music_1D"),
-        #              "train_loss_type": ("rmspe", "rmspe")},
+        "DCDMUSIC": {"tau": 8,
+                     "diff_method": ("esprit", "music_1D"),
+                     "train_loss_type": ("rmspe", "rmspe")},
         # "DCDMUSIC1Ortho": {"tau": 8,
         #                    "diff_method": ("esprit", "music_1D"),
         #                    "train_loss_type": ("music_spectrum", "rmspe")},
         # "DCDMUSIC2Ortho": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        # "SubspaceNet": {"tau": 8,
-        #                 "diff_method": "music_2D",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "Near"},
+        "SubspaceNet": {"tau": 8,
+                        "diff_method": "music_2D",
+                        "train_loss_type": "music_spectrum",
+                        "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [

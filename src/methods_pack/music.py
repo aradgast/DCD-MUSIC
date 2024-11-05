@@ -219,13 +219,15 @@ class MUSIC(SubspaceMethod):
         predictions, sources_num_estimation, _ = self(Rx, number_of_sources=sources_num)
         if self.estimation_params == "angle, range":
             angles_prediction, ranges_prediction = predictions
-            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges)
+            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
+            _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
+            rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
         else:
             rmspe = self.criterion(predictions, angles)
 
         acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
 
-        return rmspe.item(), acc, test_length
+        return rmspe, acc, test_length
 
     def _peak_finder_1d(self, search_space, source_number: int = None):
         if source_number is None:
@@ -564,6 +566,7 @@ class MUSIC(SubspaceMethod):
             self.criterion = RMSPELoss(balance_factor=0.0)
         elif self.estimation_params == "angle, range":
             self.criterion = CartesianLoss()
+            self.separated_criterion = RMSPELoss(0)
         else:
             raise ValueError(f"MUSIC.__init_criteria: Unrecognized estimation param {self.estimation_params}")
 

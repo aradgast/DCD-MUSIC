@@ -15,6 +15,8 @@ This script defines the SystemModel class for defining the settings of the DoA e
 import numpy as np
 from dataclasses import dataclass
 
+import torch
+
 
 @dataclass
 class SystemModelParams:
@@ -267,7 +269,9 @@ class SystemModel(object):
         """
         f_sv = {"NarrowBand": 1, "Broadband": f}
         # define uniform deviation in spacing (for each sensor)
-
+        if isinstance(theta, torch.Tensor):
+            theta = theta.cpu().numpy()
+            distance = distance.cpu().numpy()
         theta = np.atleast_1d(theta)[:, np.newaxis]
         distance = np.atleast_1d(distance)[:, np.newaxis]
         array = self.array[:, np.newaxis]
