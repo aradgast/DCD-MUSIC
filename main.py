@@ -37,9 +37,9 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 4,  # number of sources
+    "M": 2,  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 0,  # if defined, values in scenario_dict will be ignored
+    "snr": 10,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
     "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector error
@@ -70,8 +70,8 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 4096,
-    "train_test_ratio": .1,
+    "samples_size": 100,
+    "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
     "epochs": 100,
@@ -98,10 +98,10 @@ evaluation_params = {
         # "DCDMUSIC2Ortho": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        "SubspaceNet": {"tau": 8,
-                        "diff_method": "music_2D",
-                        "train_loss_type": "music_spectrum",
-                        "field_type": "Near"},
+        # "SubspaceNet": {"tau": 8,
+        #                 "diff_method": "music_2D",
+        #                 "train_loss_type": "music_spectrum",
+        #                 "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [
@@ -115,9 +115,8 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        # "mvdr",
-        # "bb-music",
-        # "2D-MUSIC",
+        "Beamformer",
+        "2D-MUSIC",
         # "CCRB"
     ]
 }
@@ -125,7 +124,7 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
+    "TRAIN_MODEL": False,
     "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
