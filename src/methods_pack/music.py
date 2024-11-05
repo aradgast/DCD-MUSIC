@@ -568,40 +568,7 @@ class MUSIC(SubspaceMethod):
             raise ValueError(f"MUSIC.__init_criteria: Unrecognized estimation param {self.estimation_params}")
 
 
-def keep_far_enough_points(tensor, M, D):
-    # # Calculate pairwise distances between columns
-    # distances = cdist(tensor.T, tensor.T, metric="euclidean")
-    #
-    # # Keep the first M columns as far enough points
-    # selected_cols = []
-    # for i in range(tensor.shape[1]):
-    #     if len(selected_cols) >= M:
-    #         break
-    #     if all(distances[i, col] >= D for col in selected_cols):
-    #         selected_cols.append(i)
-    #
-    # # Remove columns that are less than distance D from each other
-    # filtered_tensor = tensor[:, selected_cols]
-    # retrun filtered_tensor
-    ##############################################
-    # Extract x_coords (first dimension)
-    x_coords = tensor[0, :]
 
-    # Keep the first M columns that are far enough apart in x_coords
-    selected_cols = []
-    for i in range(tensor.shape[1]):
-        if len(selected_cols) >= M:
-            break
-        if i == 0:
-            selected_cols.append(i)
-            continue
-        if all(abs(x_coords[i] - x_coords[col]) >= D for col in selected_cols):
-            selected_cols.append(i)
-
-    # Select the columns that meet the distance criterion
-    filtered_tensor = tensor[:, selected_cols]
-
-    return filtered_tensor
 
 
 class Filter(nn.Module):

@@ -124,65 +124,15 @@ class SubspaceMethod(nn.Module):
 
     def pre_processing(self, x: torch.Tensor, mode: str = "sample"):
         if mode == "sample":
-            Rx = self.__sample_covariance(x)
+            Rx = sample_covariance(x)
         elif mode == "sps":
-            Rx = self.__spatial_smoothing_covariance(x)
+            Rx = spatial_smoothing_covariance(x)
         else:
             raise ValueError(
                 f"SubspaceMethod.pre_processing: method {mode} is not recognized for covariance calculation.")
 
         return Rx
 
-    def __sample_covariance(self, x: torch.Tensor):
-        """
-        Calculates the sample covariance matrix.
-
-        Args:
-        -----
-            X (np.ndarray): Input samples matrix.
-
-        Returns:
-        --------
-            covariance_mat (np.ndarray): Covariance matrix.
-        """
-        if x.dim() == 2:
-            x = x[None, :, :]
-        batch_size, sensor_number, samples_number = x.shape
-        Rx = torch.einsum("bmt, btl -> bml", x, torch.conj(x).transpose(1, 2)) / samples_number
-        return Rx
-
-    def __spatial_smoothing_covariance(self, x: torch.Tensor):
-        """
-        Calculates the covariance matrix using spatial smoothing technique.
-
-        Args:
-        -----
-            X (np.ndarray): Input samples matrix.
-
-        Returns:
-        --------
-            covariance_mat (np.ndarray): Covariance matrix.
-        """
-
-        if x.dim() == 2:
-            x = x[None, :, :]
-        batch_size, sensor_number, samples_number = x.shape
-        # Define the sub-arrays size
-        sub_array_size = sensor_number // 2 + 1
-        # Define the number of sub-arrays
-        number_of_sub_arrays = sensor_number - sub_array_size + 1
-        # Initialize covariance matrix
-        Rx_smoothed = torch.zeros(batch_size, sub_array_size, sub_array_size, dtype=torch.complex128, device=device)
-
-        for j in range(number_of_sub_arrays):
-            # Run over all sub-arrays
-            x_sub = x[:, j:j + sub_array_size, :]
-            # Calculate sample covariance matrix for each sub-array
-            sub_covariance = torch.einsum("bmt, btl -> bml", x_sub, torch.conj(x_sub).transpose(1, 2)) / (samples_number-1)
-            # Aggregate sub-arrays covariances
-            Rx_smoothed += sub_covariance.to(device) / number_of_sub_arrays
-        # Divide overall matrix by the number of sources
-        return Rx_smoothed
 
     def plot_eigen_spectrum(self, batch_idx: int=0):
         """

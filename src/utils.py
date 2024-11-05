@@ -51,6 +51,92 @@ plot_styles = {
 print("Running on device: ", device)
 
 
+def sample_covariance(x: torch.Tensor) -> torch.Tensor:
+    """
+    Calculates the sample covariance matrix for each element in the batch.
+
+    Args:
+    -----
+        X (np.ndarray): Input samples matrix.
+
+    Returns:
+    --------
+        covariance_mat (np.ndarray): Covariance matrix.
+    """
+    if x.dim() == 2:
+        x = x[None, :, :]
+    batch_size, sensor_number, samples_number = x.shape
+    Rx = torch.einsum("bmt, btl -> bml", x, torch.conj(x).transpose(1, 2)) / samples_number
+    return Rx
+
+def spatial_smoothing_covariance(x: torch.Tensor):
+    """
+    Calculates the covariance matrix using spatial smoothing technique for each element in the batch.
+
+    Args:
+    -----
+        X (np.ndarray): Input samples matrix.
+
+    Returns:
+    --------
+        covariance_mat (np.ndarray): Covariance matrix.
+    """
+
+    if x.dim() == 2:
+        x = x[None, :, :]
+    batch_size, sensor_number, samples_number = x.shape
+    # Define the sub-arrays size
+    sub_array_size = sensor_number // 2 + 1
+    # Define the number of sub-arrays
+    number_of_sub_arrays = sensor_number - sub_array_size + 1
+    # Initialize covariance matrix
+    Rx_smoothed = torch.zeros(batch_size, sub_array_size, sub_array_size, dtype=torch.complex128, device=device)
+
+    for j in range(number_of_sub_arrays):
+        # Run over all sub-arrays
+        x_sub = x[:, j:j + sub_array_size, :]
+        # Calculate sample covariance matrix for each sub-array
+        sub_covariance = torch.einsum("bmt, btl -> bml", x_sub, torch.conj(x_sub).transpose(1, 2)) / (samples_number-1)
+        # Aggregate sub-arrays covariances
+        Rx_smoothed += sub_covariance.to(device) / number_of_sub_arrays
+    # Divide overall matrix by the number of sources
+    return Rx_smoothed
+
+def keep_far_enough_points(tensor, M, D):
+    # # Calculate pairwise distances between columns
+    # distances = cdist(tensor.T, tensor.T, metric="euclidean")
+    #
+    # # Keep the first M columns as far enough points
+    # selected_cols = []
+    # for i in range(tensor.shape[1]):
+    #     if len(selected_cols) >= M:
+    #         break
+    #     if all(distances[i, col] >= D for col in selected_cols):
+    #         selected_cols.append(i)
+    #
+    # # Remove columns that are less than distance D from each other
+    # filtered_tensor = tensor[:, selected_cols]
+    # retrun filtered_tensor
+    ##############################################
+    # Extract x_coords (first dimension)
+    x_coords = tensor[0, :]
+
+    # Keep the first M columns that are far enough apart in x_coords
+    selected_cols = []
+    for i in range(tensor.shape[1]):
+        if len(selected_cols) >= M:
+            break
+        if i == 0:
+            selected_cols.append(i)
+            continue
+        if all(abs(x_coords[i] - x_coords[col]) >= D for col in selected_cols):
+            selected_cols.append(i)
+
+    # Select the columns that meet the distance criterion
+    filtered_tensor = tensor[:, selected_cols]
+
+    return filtered_tensor
+
 # Functions
 # def sum_of_diag(matrix: np.ndarray) -> list:
 def sum_of_diag(matrix: np.ndarray):
