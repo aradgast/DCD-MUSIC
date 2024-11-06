@@ -84,12 +84,9 @@ def create_dataset(
             if system_model_params.field_type.lower().endswith("near"):
                 samples_model.set_range(true_range, M)
             # Observations matrix creation
-            X = torch.tensor(
-                samples_model.samples_creation(
+            X = samples_model.samples_creation(
                     noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1, source_number=M
-                )[0],
-                dtype=torch.complex128,
-            )
+                )[0]
             # Ground-truth creation
             Y = torch.tensor(samples_model.doa, dtype=torch.float32)
             if system_model_params.field_type.endswith("Near"):

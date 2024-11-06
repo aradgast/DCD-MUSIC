@@ -51,30 +51,30 @@ system_model_params = {
     "range_resolution": 1,
 }
 model_config = {
-    "model_type": "SubspaceNet",  # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "DCDMUSIC",  # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
-    model_config["model_params"]["train_loss_type"] = "rmspe"  # music_spectrum, rmspe
+    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
+    model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Far"  # Near, Far
+    model_config["model_params"]["field_type"] = "Near"  # Near, Far
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # ("esprit", "music_1D")
-    model_config["model_params"]["train_loss_type"] = ("rmspe", "music_spectrum")  # ("rmspe", "rmspe"), ("rmspe",
+    model_config["model_params"]["diff_method"] = ("music_1D", "music_1D")  # ("esprit", "music_1D")
+    model_config["model_params"]["train_loss_type"] = ("music_spectrum", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
     # "music_spectrum"), ("music_spectrum", "rmspe")
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
-    "train_test_ratio": 1,
-    "training_objective": "angle",  # angle, range, source_estimation
+    "samples_size": 512,
+    "train_test_ratio": .1,
+    "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 100,
+    "epochs": 2,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -124,8 +124,8 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
-    "SAVE_MODEL": True,
+    "TRAIN_MODEL": True,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted

@@ -66,6 +66,7 @@ class TransMUSIC(ParentModel):
         elif self.params.field_type == "Near":
             self.estimation_params = "angle, range"
             self.rmspe_loss = CartesianLoss()
+            self.separated_test_loss = RMSPELoss(1.0)
         self.music = MUSIC(system_model=self.system_model, estimation_parameter=self.estimation_params)
         self.ce_loss = nn.CrossEntropyLoss(reduction="sum")
 
@@ -216,14 +217,14 @@ class TransMUSIC(ParentModel):
         elif self.params.field_type == "Near":
             return self.__training_step_near_field(batch, batch_idx)
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, is_test: bool=False):
         if self.params.field_type == "Far":
             return self.__valid_step_far_field(batch, batch_idx)
         elif self.params.field_type == "Near":
-            return self.__valid_step_near_field(batch, batch_idx)
+            return self.__valid_step_near_field(batch, batch_idx, is_test)
 
     def test_step(self, batch, batch_idx):
-        raise NotImplementedError
+        return self.validation_step(batch, batch_idx, is_test=True)
 
     def predict_step(self, batch, batch_idx):
         raise NotImplementedError
@@ -307,7 +308,7 @@ class TransMUSIC(ParentModel):
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
         return loss, acc
 
-    def __valid_step_near_field(self, batch, batch_idx):
+    def __valid_step_near_field(self, batch, batch_idx, is_test: bool=False):
         x, sources_num, labels, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -330,6 +331,9 @@ class TransMUSIC(ParentModel):
         else:
             angles_pred, ranges_pred = torch.split(model_output, model_output.shape[1] // 2, dim=1)
             loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+        if is_test:
+            _, angle_loss, range_loss = self.separated_test_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+            loss = (loss, angle_loss, range_loss)
         source_estimation = torch.argmax(prob_source_number, dim=1)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
         return loss, acc
