@@ -97,13 +97,13 @@ class TransMUSIC(ParentModel):
 
         self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
         if self.estimation_params == "angle":
-            self.input_dim = self.music.angels.shape[0]
+            self.input_dim = self.music.angles_dict.shape[0]
             if self.music.system_model.params.M is not None:
                 output_dim = self.music.system_model.params.M
             else:
                 output_dim = self.music.system_model.params.N - 1
         elif self.estimation_params == "angle, range":
-            self.input_dim = self.music.angels.shape[0] * self.music.distances.shape[0]
+            self.input_dim = self.music.angles_dict.shape[0] * self.music.ranges_dict.shape[0]
             if self.music.system_model.params.M is not None:
                 output_dim = self.music.system_model.params.M * 2
             else:

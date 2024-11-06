@@ -10,6 +10,7 @@ from src.system_model import SystemModel
 from src.utils import *
 from src.criterions import CartesianLoss, RMSPELoss
 
+
 class Beamformer(Module):
     def __init__(self, system_model: SystemModel):
         super(Beamformer, self).__init__()
@@ -20,7 +21,7 @@ class Beamformer(Module):
         self.__init_grid_params()
         self.__init_steering_dict()
         self.__init_criteria()
-        self.eval() # This a torch based model without any trainable parameters.
+        self.eval()  # This a torch based model without any trainable parameters.
 
     def forward(self, x: torch.Tensor, sources_num: int):
         samp_cov = self.pre_processing(x)
@@ -78,7 +79,7 @@ class Beamformer(Module):
             labels = self.angles_dict[peaks]
         else:
             # in this case, peaks is of size Bx2M.
-            peaks_angle_axis, peaks_range_axis = torch.split(peaks, peaks.shape[1] //2, dim=1)
+            peaks_angle_axis, peaks_range_axis = torch.split(peaks, peaks.shape[1] // 2, dim=1)
             angles = self.angles_dict[peaks_angle_axis]
             ranges = self.ranges_dict[peaks_range_axis]
             labels = angles, ranges
@@ -193,7 +194,7 @@ class Beamformer(Module):
         angle_resolution = np.deg2rad(self.system_model.params.doa_resolution / 2)
         # if it's the Far field case, need to init angles range.
         self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
-                                   dtype=torch.float64).requires_grad_(False).to(torch.float64)
+                                        dtype=torch.float64).requires_grad_(False).to(torch.float64)
         if self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
@@ -201,9 +202,9 @@ class Beamformer(Module):
             fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
             distance_resolution = self.system_model.params.range_resolution / 2
             self.ranges_dict = torch.arange(np.floor(fresnel),
-                                          fraunhofer * fraunhofer_ratio,
-                                          distance_resolution,
-                                          device=device, dtype=torch.float64).requires_grad_(False)
+                                            fraunhofer * fraunhofer_ratio,
+                                            distance_resolution,
+                                            device=device, dtype=torch.float64).requires_grad_(False)
         else:
             raise ValueError(f"Beamformer.__init_grid_params: Unrecognized field type for Beamformer class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
@@ -219,7 +220,8 @@ class Beamformer(Module):
             self.steering_dict = self.system_model.steering_vec(self.angles_dict, nominal=True)
         else:
             self.steering_dict = self.system_model.steering_vec(self.angles_dict, self.ranges_dict,
-                                                           nominal=True, generate_search_grid=True)
+                                                                nominal=True, generate_search_grid=True)
+
     def __init_criteria(self):
         self.criterion = CartesianLoss()
         self.separated_criterion = RMSPELoss(1.0)

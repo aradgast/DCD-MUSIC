@@ -219,7 +219,7 @@ class SubspaceNet(ParentModel):
                 return self.diff_method.cell_size
             elif self.diff_method.estimation_params == "angle, range":
                 return {"angle_cell_size": self.diff_method.cell_size_angle,
-                        "distance_cell_size": self.diff_method.cell_size_distance}
+                        "distance_cell_size": self.diff_method.cell_size_range}
 
     def print_model_params(self):
         tau = self.tau

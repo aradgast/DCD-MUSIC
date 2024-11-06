@@ -8,7 +8,7 @@ import argparse
 
 # default values for the argparse
 number_sensors = 15
-number_sources = 2
+number_sources = None
 number_snapshots = 100
 snr = 0
 field_type = "Near"

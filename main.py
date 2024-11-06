@@ -37,7 +37,7 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": None,  # number of sources
+    "M": 2,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
@@ -62,19 +62,19 @@ if model_config.get("model_type") == "SubspaceNet":
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["diff_method"] = ("music_1D", "music_1D")  # ("esprit", "music_1D")
-    model_config["model_params"]["train_loss_type"] = ("music_spectrum", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
+    model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # ("esprit", "music_1D")
+    model_config["model_params"]["train_loss_type"] = ("rmspe", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
     # "music_spectrum"), ("music_spectrum", "rmspe")
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 512,
-    "train_test_ratio": 1,
-    "training_objective": "angle, range",  # angle, range, source_estimation
+    "samples_size": 1024,
+    "train_test_ratio": .1,
+    "training_objective": "range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 2,
+    "epochs": 50,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -87,7 +87,7 @@ training_params = {
 }
 evaluation_params = {
     "criterion": "rmspe",  # rmse, rmspe, mse, mspe, cartesian
-    "balance_factor": 1.0,
+    "balance_factor": 0.0,
     "models": {
         # "DCDMUSIC": {"tau": 8,
         #              "diff_method": ("esprit", "music_1D"),
@@ -115,7 +115,7 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        "Beamformer",
+        # "Beamformer",
         # "2D-MUSIC",
         # "CCRB"
     ]
@@ -124,7 +124,7 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
+    "TRAIN_MODEL": True,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
