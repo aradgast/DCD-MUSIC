@@ -22,31 +22,57 @@ class Beamformer(Module):
         self.__init_criteria()
         self.eval() # This a torch based model without any trainable parameters.
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor, sources_num: int):
         samp_cov = self.pre_processing(x)
         spectrum = self.get_spectrum(samp_cov)
-        peaks = self.find_peaks(spectrum)
+        peaks = self.find_peaks(spectrum, sources_num)
         labels = self.get_labels(peaks)
         return labels
 
-    def get_spectrum(self, cov):
+    def get_spectrum(self, cov: torch.Tensor):
+        """
+
+        Args:
+            cov: the covariance matrix to use for spectrum calculation.
+
+        Returns:
+            torch.Tensor: the outcome of the beamformer for Far or Near field cases.
+        """
         if self.system_model.params.field_type == "Far":
             # in this case, the steering search space is 2D -> NxA, whereas A is the size of the search grid.
             v1 = torch.einsum("an, bnm -> bam", self.steering_dict.conj().transpose(0, 1), cov)
             spectrum = torch.einsum("ban, na -> ba", v1, self.steering_dict)
         else:
-            # in this case, the steering search space is 3D -> NxAxR, whereas R is the size of the ranges search dictionary.
+            # in this case, the steering search space is 3D -> NxAxR, whereas R is the size of the ranges search
+            # dictionary.
             v1 = torch.einsum("arn, bnm -> barm", self.steering_dict.conj().transpose(0, 2).transpose(0, 1), cov)
             spectrum = torch.einsum("barn, nar -> bar", v1, self.steering_dict)
         return spectrum
 
-    def find_peaks(self, spectrum):
-        if self.system_model.params.field_type == "Far":
-            return self.__find_peaks_far_field(spectrum)
-        else:
-            return self.__find_peaks_near_field(spectrum)
+    def find_peaks(self, spectrum: torch.Tensor, sources_num: int):
+        """
 
-    def get_labels(self, peaks):
+        Args: spectrum: the outcome of the beamformer formula. sources_num: the number of sources to expect,
+        relevant on the dataset is comprised with mix number of sources for each sample.
+
+        Returns:
+            torch.Tensor: the peaks in the spectrum to use to extract the predicted labels from the dictionary.
+
+        """
+        if self.system_model.params.field_type == "Far":
+            return self.__find_peaks_far_field(spectrum, sources_num)
+        else:
+            return self.__find_peaks_near_field(spectrum, sources_num)
+
+    def get_labels(self, peaks: torch.Tensor):
+        """
+
+        Args:
+            peaks: the indices which got peaks in the beamformer spectrum.
+
+        Returns:
+            torch.Tensor: the predicted labels for Far or Near field case.
+        """
         if self.ranges_dict is None:
             # in this case, peaks is of size BxM, whereas M is the number of sources.
             labels = self.angles_dict[peaks]
@@ -59,7 +85,7 @@ class Beamformer(Module):
         return labels
 
     @staticmethod
-    def pre_processing(x):
+    def pre_processing(x: torch.Tensor):
         """
         The pre-processing stage of the beamformer is the calculation of the sample covariance.
 
@@ -72,7 +98,7 @@ class Beamformer(Module):
         """
         return sample_covariance(x)
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx: int):
         x, sources_num, label, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -93,7 +119,7 @@ class Beamformer(Module):
         else:
             sources_num = sources_num[0]
 
-        predictions = self(x)
+        predictions = self(x, sources_num)
         if isinstance(predictions, tuple):
             angles_prediction, ranges_prediction = predictions
             rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
@@ -104,8 +130,10 @@ class Beamformer(Module):
 
         return rmspe, 0, test_length
 
-    def __find_peaks_far_field(self, spectrum):
+    def __find_peaks_far_field(self, spectrum: torch.Tensor, known_number_of_sources):
         source_number = self.system_model.params.M
+        if source_number is None:
+            source_number = known_number_of_sources
         batch_size = spectrum.shape[0]
 
         peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=device)
@@ -125,8 +153,10 @@ class Beamformer(Module):
         # if the model is not in training mode, return the peaks
         return peaks
 
-    def __find_peaks_near_field(self, spectrum):
+    def __find_peaks_near_field(self, spectrum: torch.Tensor, known_number_of_sources: int):
         source_number = self.system_model.params.M
+        if source_number is None:
+            source_number = known_number_of_sources
         batch_size = spectrum.shape[0]
 
         max_row = torch.zeros((batch_size, source_number)
@@ -192,4 +222,4 @@ class Beamformer(Module):
                                                            nominal=True, generate_search_grid=True)
     def __init_criteria(self):
         self.criterion = CartesianLoss()
-        self.separated_criterion = RMSPELoss(0)
+        self.separated_criterion = RMSPELoss(1.0)

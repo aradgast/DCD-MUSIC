@@ -37,11 +37,11 @@ scenario_dict = {
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 2,  # number of sources
+    "M": None,  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 10,  # if defined, values in scenario_dict will be ignored
+    "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
-    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
@@ -71,7 +71,7 @@ elif model_config.get("model_type") == "DeepCNN":
 
 training_params = {
     "samples_size": 512,
-    "train_test_ratio": .1,
+    "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
     "epochs": 2,
@@ -116,7 +116,7 @@ evaluation_params = {
         # "1D-MUSIC",
         # "Root-MUSIC",
         "Beamformer",
-        "2D-MUSIC",
+        # "2D-MUSIC",
         # "CCRB"
     ]
 }
@@ -124,7 +124,7 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
+    "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
