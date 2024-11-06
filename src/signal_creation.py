@@ -19,7 +19,7 @@ from random import sample
 import torch
 
 from src.system_model import SystemModel, SystemModelParams
-from src.utils import D2R
+from src.utils import *
 
 class Samples(SystemModel):
     """
@@ -167,10 +167,10 @@ class Samples(SystemModel):
         """
         # Generate signal matrix
         signal = self.signal_creation(signal_mean, signal_variance, source_number=source_number)
-        signal = torch.from_numpy(signal)
+        signal = torch.from_numpy(signal).to(device)
         # Generate noise matrix
         noise = self.noise_creation(noise_mean, noise_variance)
-        noise = torch.from_numpy(noise)
+        noise = torch.from_numpy(noise).to(device)
         # Generate Narrowband samples
         if self.params.signal_type.startswith("NarrowBand"):
             if self.params.field_type.startswith("Far"):

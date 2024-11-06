@@ -273,7 +273,7 @@ class SystemModel(object):
                 np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)).to(device)
             dist_array_elems = dist_array_elems.unsqueeze(-1)
         if isinstance(dist_array_elems, float):
-            dist_array_elems = dist_array_elems * torch.ones(self.params.N, 1)
+            dist_array_elems = dist_array_elems * torch.ones(self.params.N, 1, device=device, dtype=torch.float64)
 
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles)
@@ -305,6 +305,7 @@ class SystemModel(object):
             # Calculate additional steering vector noise
             mis_geometry_noise = ((np.sqrt(2) / 2) * np.sqrt(self.params.sv_noise_var)
                                   * (np.random.randn(*time_delay.shape) + 1j * np.random.randn(*time_delay.shape)))
+            mis_geometry_noise = torch.from_numpy(mis_geometry_noise).to(device)
         else:
             mis_geometry_noise = 0.0
 
