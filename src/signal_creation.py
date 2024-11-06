@@ -15,6 +15,9 @@ This class is used for defining the samples model.
 # Imports
 import numpy as np
 from random import sample
+
+import torch
+
 from src.system_model import SystemModel, SystemModelParams
 from src.utils import D2R
 
@@ -164,15 +167,17 @@ class Samples(SystemModel):
         """
         # Generate signal matrix
         signal = self.signal_creation(signal_mean, signal_variance, source_number=source_number)
+        signal = torch.from_numpy(signal)
         # Generate noise matrix
         noise = self.noise_creation(noise_mean, noise_variance)
+        noise = torch.from_numpy(noise)
         # Generate Narrowband samples
         if self.params.signal_type.startswith("NarrowBand"):
             if self.params.field_type.startswith("Far"):
-                A = np.array([self.steering_vec(theta) for theta in self.doa]).T
+                A = self.steering_vec(self.doa)
                 samples = (A @ signal) + noise
             elif self.params.field_type.startswith("Near"):
-                A = self.steering_vec(theta=self.doa, distance=self.distances, nominal=False, generate_search_grid=False)
+                A = self.steering_vec(angles=self.doa, ranges=self.distances, nominal=False, generate_search_grid=False)
                 samples = (A @ signal) + noise
             else:
                 raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")

@@ -186,12 +186,10 @@ class Beamformer(Module):
             None.
         """
         if self.ranges_dict is None:
-            steering_dict = self.system_model.steering_vec(self.angles_dict)
-            self.steering_dict = torch.from_numpy(steering_dict).to(device)
+            self.steering_dict = self.system_model.steering_vec(self.angles_dict, nominal=True)
         else:
-            steering_dict = self.system_model.steering_vec(self.angles_dict, self.ranges_dict, generate_search_grid=True)
-            self.steering_dict = torch.from_numpy(steering_dict).to(device)
-
+            self.steering_dict = self.system_model.steering_vec(self.angles_dict, self.ranges_dict,
+                                                           nominal=True, generate_search_grid=True)
     def __init_criteria(self):
         self.criterion = CartesianLoss()
         self.separated_criterion = RMSPELoss(0)

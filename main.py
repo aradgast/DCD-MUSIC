@@ -30,7 +30,7 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "SNR": [-10, -5, 0, 5, 10],
+    # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70],
     # "eta": [0.01, 0.02, 0.03, 0.04],
 }
@@ -55,10 +55,10 @@ model_config = {
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
-    model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe
+    model_config["model_params"]["diff_method"] = "esprit"  # esprit, music_1D, music_2D
+    model_config["model_params"]["train_loss_type"] = "rmspe"  # music_spectrum, rmspe
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["field_type"] = "Near"  # Near, Far
+    model_config["model_params"]["field_type"] = "Far"  # Near, Far
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
@@ -72,7 +72,7 @@ elif model_config.get("model_type") == "DeepCNN":
 training_params = {
     "samples_size": 100,
     "train_test_ratio": 1,
-    "training_objective": "angle, range",  # angle, range, source_estimation
+    "training_objective": "angle",  # angle, range, source_estimation
     "batch_size": 128,
     "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
@@ -89,19 +89,19 @@ evaluation_params = {
     "criterion": "rmspe",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
-        "DCDMUSIC": {"tau": 8,
-                     "diff_method": ("esprit", "music_1D"),
-                     "train_loss_type": ("rmspe", "rmspe")},
+        # "DCDMUSIC": {"tau": 8,
+        #              "diff_method": ("esprit", "music_1D"),
+        #              "train_loss_type": ("rmspe", "rmspe")},
         # "DCDMUSIC1Ortho": {"tau": 8,
         #                    "diff_method": ("esprit", "music_1D"),
         #                    "train_loss_type": ("music_spectrum", "rmspe")},
         # "DCDMUSIC2Ortho": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        "SubspaceNet": {"tau": 8,
-                        "diff_method": "music_2D",
-                        "train_loss_type": "music_spectrum",
-                        "field_type": "Near"},
+        # "SubspaceNet": {"tau": 8,
+        #                 "diff_method": "music_2D",
+        #                 "train_loss_type": "music_spectrum",
+        #                 "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [

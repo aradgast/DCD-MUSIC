@@ -16,6 +16,8 @@ import numpy as np
 from dataclasses import dataclass
 
 import torch
+from torch.cuda import device
+from src.utils import *
 
 
 @dataclass
@@ -177,27 +179,28 @@ class SystemModel(object):
         return fraunhofer, fresnel
 
     def steering_vec(
-            self, theta: np.ndarray, distance: np.ndarray = None, f: float = 1, array_form="ULA",
-            nominal=False, generate_search_grid: bool = False) -> np.ndarray:
+            self, angles: np.ndarray, ranges: np.ndarray = None, f_c: float = 1, array_form: str="ULA",
+            nominal: bool=False, generate_search_grid: bool = False) -> torch.Tensor:
         """
         Computes the steering vector based on the specified parameters.
         Args:
-            theta:
-            distance:
-            f:
-            array_form:
-            nominal:
+            angles: the angles of the sources from origin.
+            ranges: the ranges of the sources from origin. In case of Far field, the value is None.
+            f_c: the carrier frequency, in case of narrowband, the value is always 1.
+            nominal: a flag that suggest if there is any kind of calibration errors.
+            array_form: The type of array used.
+            generate_search_grid (bool): wether to generate a grid to search on,
+             create all combination of angles and ranges, or just create the steering matrix of sources.
 
         Returns:
 
         """
         if array_form.startswith("ULA"):
             if self.params.field_type.startswith("Far"):
-                return self.steering_vec_far_field(theta, f=f, array_form=array_form, nominal=nominal)
+                return self.steering_vec_far_field(angles, f_c=f_c, nominal=nominal)
             elif self.params.field_type.startswith("Near"):
-                return self.steering_vec_near_field(theta, distance=distance, f=f,
-                                                    array_form=array_form, nominal=nominal,
-                                                    generate_search_grid=generate_search_grid)
+                return self.steering_vec_near_field(angles, ranges=ranges, f_c=f_c,
+                                                    nominal=nominal, generate_search_grid=generate_search_grid)
             else:
                 raise Exception(f"SystemModel.field_type:"
                                 f" field type of approximation {self.params.field_type} is not defined")
@@ -205,15 +208,15 @@ class SystemModel(object):
             raise Exception(f"SystemModel.steering_vec: array form {array_form} is not defined")
 
     def steering_vec_far_field(
-            self, theta: np.ndarray, f: float = 1, array_form="ULA", nominal=False
+            self, angles: [np.ndarray, torch.Tensor], f_c: float = 1, nominal: bool=False
     ):
-        """Computes the steering vector based on the specified parameters.
+        """
+        Computes the steering vector based on the specified parameters.
 
         Args:
         -----
-            theta (np.ndarray): Array of angles.
+            angles (np.ndarray): Array of angles.
             f (float, optional): Frequency. Defaults to 1.
-            array_form (str, optional): Array form. Defaults to "ULA".
             nominal (bool): flag for creating sv without array mismatches.
 
         Returns:
@@ -221,97 +224,90 @@ class SystemModel(object):
             np.ndarray: Computed steering vector.
 
         """
-        f_sv = {"NarrowBand": 1, "Broadband": f}
-        # define uniform deviation in spacing (for each sensor)
+        array = torch.Tensor(self.array[:, None]).to(torch.float64).to(device)
+        if isinstance(angles, np.ndarray):
+            angles = torch.from_numpy(angles)
+        theta = torch.from_numpy(angles[:, None]).to(torch.float64).to(device)
+        dist_array_elems = self.dist_array_elems["NarrowBand"]
+
         if not nominal:
-            # Calculate uniform bias for sensors locations
-            uniform_bias = np.random.uniform(
-                low=-1 * self.params.bias, high=self.params.bias, size=1
-            )
-            # Calculate non-uniform bias for each pair of sensors
-            mis_distance = np.random.uniform(
-                low=-1 * self.params.eta, high=self.params.eta, size=self.params.N
-            )
-            # Calculate additional steering vector noise
-            mis_geometry_noise = np.sqrt(self.params.sv_noise_var) * (
-                np.random.randn(self.params.N)
-            )
-        # If calculation is applied through method (array mismatches are not known).
-        else:
-            mis_distance, mis_geometry_noise, uniform_bias = 0, 0, 0
+            dist_array_elems += torch.from_numpy(np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N))
+            dist_array_elems = dist_array_elems.unsqueeze(-1)
 
-        return (
-                np.exp(
-                    -2
-                    * 1j
-                    * np.pi
-                    * f_sv[self.params.signal_type]
-                    * (uniform_bias + mis_distance + self.dist_array_elems[self.params.signal_type])
-                    * self.array
-                    * np.sin(theta)
-                )
-                + mis_geometry_noise
-        )
+        time_delay = torch.einsum("nm, na -> na",
+                                  array,
+                                  torch.sin(theta).repeat(1, self.params.N).T
+                                  * dist_array_elems)
 
-    def steering_vec_near_field(self, theta: np.ndarray, distance: np.ndarray,f: float = 1, array_form="ULA",
-                                nominal=False, generate_search_grid: bool = False, known_angles: bool = False) -> np.ndarray:
-        """
-
-        Args:
-            theta:
-            distance:
-            f:
-            array_form:
-            nominal:
-
-        Returns:
-
-        """
-        f_sv = {"NarrowBand": 1, "Broadband": f}
-        # define uniform deviation in spacing (for each sensor)
-        if isinstance(theta, torch.Tensor):
-            theta = theta.cpu().numpy()
-            distance = distance.cpu().numpy()
-        theta = np.atleast_1d(theta)[:, np.newaxis]
-        distance = np.atleast_1d(distance)[:, np.newaxis]
-        array = self.array[:, np.newaxis]
-        array_square = np.power(array, 2)
-        dist_array_elems = self.dist_array_elems[self.params.signal_type]
-        if not nominal:
-            dist_array_elems += np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)
-            dist_array_elems = dist_array_elems[:, np.newaxis]
-
-        first_order = np.einsum("nm, na -> na",
-                                array,
-                                np.tile(np.sin(theta), (1, self.params.N)).T * dist_array_elems)
-        first_order = np.tile(first_order[:, :, np.newaxis], (1, 1, len(distance)))
-
-        second_order = -0.5 * np.divide(np.power(np.outer(np.cos(theta), dist_array_elems), 2)[:, None, :], distance.T[:, :, None])
-        second_order = np.einsum("nm, nkl -> nkl",
-                                 array_square,
-                                 np.transpose(second_order, (2, 0, 1)))
-
-        time_delay = first_order + second_order
-
-        if not generate_search_grid:
-            time_delay = np.diagonal(time_delay, axis1=1, axis2=2)
-
-        # need to divide here by the wavelength, seems that for the narrowband scenario,
-        # wavelength = 1.
         if not nominal:
             # Calculate additional steering vector noise
             mis_geometry_noise = ((np.sqrt(2) / 2) * np.sqrt(self.params.sv_noise_var)
                                   * (np.random.randn(*time_delay.shape) + 1j * np.random.randn(*time_delay.shape)))
-            return np.exp(2 * -1j * np.pi * time_delay) + mis_geometry_noise
-        return np.exp(2 * -1j * np.pi * time_delay)
+            mis_geometry_noise = torch.from_numpy(mis_geometry_noise)
+        else:
+            mis_geometry_noise = 0.0
 
+        steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay) + mis_geometry_noise
 
-    # def __str__(self):
-    #     """Returns a string representation of the SystemModel object.
-    #     ...
-    #
-    #     """
-    #     print("System Model Summery:")
-    #     for key, value in self.__dict__.items():
-    #         print(key, " = ", value)
-    #     return "End of Model"
+        return steering_matrix
+
+    def steering_vec_near_field(self, angles: [np.ndarray, torch.Tensor], ranges: [np.ndarray, torch.Tensor], f_c: float = 1,
+                                nominal: bool=True, generate_search_grid: bool = False) -> torch.Tensor:
+        """
+
+        Args:
+            angles: the angles of the sources from origin.
+            ranges: the ranges of the sources from origin.
+            f_c: the carrier frequency, in case of narrowband, the value is always 1.
+            nominal: a flag that suggest if there is any kind of calibration errors.
+            generate_search_grid (bool): weather to generate a grid to search on,
+             create all combination of angles and ranges, or just create the steering matrix of sources.
+
+        Returns:
+            np.ndarray: the steering matrix.
+        """
+
+        dist_array_elems = self.dist_array_elems["NarrowBand"]
+        if not nominal:
+            dist_array_elems += torch.from_numpy(
+                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)).to(device)
+            dist_array_elems = dist_array_elems.unsqueeze(-1)
+        if isinstance(dist_array_elems, float):
+            dist_array_elems = dist_array_elems * torch.ones(self.params.N, 1)
+
+        if isinstance(angles, np.ndarray):
+            angles = torch.from_numpy(angles)
+        theta = (angles[:, None]).to(torch.float64).to(device)
+        if isinstance(ranges, np.ndarray):
+            ranges = torch.from_numpy(ranges)
+        distances = ranges.to(torch.float64).to(device)
+
+        array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(device)
+        array_square = torch.pow(array, 2)
+
+        first_order = torch.einsum("nm, na -> na",
+                                   array,
+                                   torch.sin(theta).repeat(1, self.params.N).T * dist_array_elems)
+
+        second_order = -0.5 * torch.div(torch.pow(torch.outer(torch.cos(theta).squeeze(), dist_array_elems.squeeze()), 2).unsqueeze(1), distances.T.unsqueeze(-1))
+        second_order = torch.einsum("nm, nar -> nar",
+                                    array_square,
+                                    torch.transpose(second_order, 2, 0)).transpose(1, 2)
+
+        first_order = first_order[:, :, None].repeat(1, 1, second_order.shape[-1])
+
+        time_delay = first_order + second_order
+
+        if not generate_search_grid:
+            time_delay = torch.diagonal(time_delay, dim1=1, dim2=2)
+
+        if not nominal:
+            # Calculate additional steering vector noise
+            mis_geometry_noise = ((np.sqrt(2) / 2) * np.sqrt(self.params.sv_noise_var)
+                                  * (np.random.randn(*time_delay.shape) + 1j * np.random.randn(*time_delay.shape)))
+        else:
+            mis_geometry_noise = 0.0
+
+        steering_matrix = torch.exp(2 * -1j * torch.pi * time_delay) + mis_geometry_noise
+        return steering_matrix
+

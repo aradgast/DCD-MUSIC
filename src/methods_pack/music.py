@@ -504,13 +504,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
     def __set_search_grid_far_field(self):
-        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-        theta = self.angels[:, None]
-        time_delay = torch.einsum("nm, na -> na",
-                                  array,
-                                  torch.sin(theta).repeat(1, self.system_model.params.N).T
-                                  * self.system_model.dist_array_elems["NarrowBand"])
-        self.search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
+        self.search_grid = self.system_model.steering_vec_far_field(self.angels)
 
     def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         """
@@ -518,38 +512,12 @@ class MUSIC(SubspaceMethod):
         Returns:
 
         """
-        dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
         if known_angles is None:
-            theta = self.angels[:, None]
-        else:
-            theta = known_angles.float()
-            if len(theta.shape) == 1:
-                theta = torch.atleast_1d(theta)[:, None].to(torch.float64)
-
+            known_angles = self.angels
         if known_distances is None:
-            distances = self.distances[:, None].to(torch.float64)
-        else:
-            distances = known_distances.float()
-            if len(distances.shape) == 1:
-                distances = torch.atleast_1d(distances)[:, None]
-        array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-        array_square = torch.pow(array, 2).to(torch.float64)
-
-        first_order = torch.einsum("nm, na -> na",
-                                   array,
-                                   torch.sin(theta).repeat(1, self.system_model.params.N).T * dist_array_elems)
-
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.T)
-        second_order = second_order[:, :, None].repeat(1, 1, self.system_model.params.N)
-        second_order = torch.einsum("nm, nda -> nda",
-                                    array_square,
-                                    torch.transpose(second_order, 2, 0)).transpose(1, 2)
-
-        first_order = first_order[:, :, None].repeat(1, 1, second_order.shape[-1])
-
-        time_delay = first_order + second_order
-
-        self.search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
+            known_distances = self.distances
+        self.search_grid = self.system_model.steering_vec_near_field(angles=known_angles, ranges=known_distances,
+                                                                     generate_search_grid=True, nominal=True)
 
     def __str__(self):
         if self.estimation_params == "angle":
