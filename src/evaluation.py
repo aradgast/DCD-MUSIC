@@ -460,7 +460,7 @@ def evaluate(
     res = {}
     # Evaluate DNN model if given
     if model_tmp is not None:
-        model_test_loss = evaluate_dnn_model(model=model_tmp, dataset=generic_test_dataset)
+        model_test_loss = evaluate_dnn_model(model=model_tmp, dataset=generic_test_dataset, mode="test")
         try:
             model_name = model_tmp._get_name()
         except AttributeError:

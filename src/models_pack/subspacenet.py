@@ -359,7 +359,7 @@ class SubspaceNet(ParentModel):
 
         if is_test:
             _, loss_angle, loss_range = self.test_loss_separated(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
-            return (loss, loss_angle, loss_range), acc
+            loss = (loss, loss_angle, loss_range)
         return loss, acc
 
     def __test_step_near_field(self, batch, batch_idx):

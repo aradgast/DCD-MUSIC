@@ -149,7 +149,7 @@ class Beamformer(Module):
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
         # if the model is not in training mode, return the peaks.
-        peaks = torch.concatenate((max_row, max_col), dim=1)
+        peaks = torch.cat((max_row, max_col), dim=1)
         return peaks
 
     def __init_grid_params(self):
