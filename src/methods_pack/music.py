@@ -219,7 +219,7 @@ class MUSIC(SubspaceMethod):
             _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
             rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
         else:
-            rmspe = self.criterion(predictions, angles)
+            rmspe = self.criterion(predictions, angles).item()
 
         acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
 

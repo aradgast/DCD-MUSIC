@@ -205,9 +205,6 @@ class Beamformer(Module):
                                             fraunhofer * fraunhofer_ratio,
                                             distance_resolution,
                                             device=device, dtype=torch.float64).requires_grad_(False)
-        else:
-            raise ValueError(f"Beamformer.__init_grid_params: Unrecognized field type for Beamformer class init stage,"
-                             f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
 
     def __init_steering_dict(self):
         """
@@ -223,5 +220,8 @@ class Beamformer(Module):
                                                                 nominal=True, generate_search_grid=True)
 
     def __init_criteria(self):
-        self.criterion = CartesianLoss()
-        self.separated_criterion = RMSPELoss(1.0)
+        if self.system_model.params.field_type == "Far":
+            self.criterion = RMSPELoss(1.0)
+        else:
+            self.criterion = CartesianLoss()
+            self.separated_criterion = RMSPELoss(1.0)

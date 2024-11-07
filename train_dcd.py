@@ -24,8 +24,8 @@ learning_rate = 0.001
 weight_decay = 1e-9
 step_size = 50
 gamma = 0.5
-diff_method = ("esprit", "music_1D")
-train_loss_type = ("rmspe", "rmspe")
+diff_method = ("music_1D", "music_1D")
+train_loss_type = ("music_spectrum", "rmspe")
 
 
 def train_dcd_music(*args, **kwargs):
