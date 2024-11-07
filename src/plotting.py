@@ -313,7 +313,8 @@ def plot_overall_rmse(test: str, res: dict, simulations_path: str,
             label = method
         if not np.isnan((loss_.get("Overall"))).any():
             ax.plot(test_values, loss_["Overall"], **plot_styles[method.split("_")[0]], label=label)
-    ax.legend()
+    # decrease the size of the legend
+    ax.legend(fontsize='x-small', loc="best")
     ax.grid()
     if test == "SNR":
         ax.set_xlabel("SNR [dB]")

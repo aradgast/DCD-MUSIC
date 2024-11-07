@@ -31,8 +31,8 @@ plt.close("all")
 
 scenario_dict = {
     "SNR": [-10, -5, 0, 5, 10],
-    "T": [10, 20, 50, 70, 100],
-    "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    # "T": [10, 20, 50, 70, 100],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
@@ -51,7 +51,7 @@ system_model_params = {
     "range_resolution": 1,
 }
 model_config = {
-    "model_type": "DCDMUSIC",  # SubspaceNet, DCDMUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "DCD-MUSIC",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -60,7 +60,7 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Near"  # Near, Far
 
-elif model_config.get("model_type") == "DCDMUSIC":
+elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["diff_method"] = ("music_1D", "music_1D")  # ("esprit", "music_1D")
     model_config["model_params"]["train_loss_type"] = ("music_spectrum", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
@@ -89,19 +89,19 @@ evaluation_params = {
     "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
-        "DCDMUSIC": {"tau": 8,
+        "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
                      "diff_method": ("esprit", "music_1D"),
                      "train_loss_type": ("rmspe", "rmspe")},
-        # "DCDMUSIC1Ortho": {"tau": 8,
-        #                    "diff_method": ("esprit", "music_1D"),
-        #                    "train_loss_type": ("music_spectrum", "rmspe")},
+        "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
+                           "diff_method": ("music_1D", "music_1D"),
+                           "train_loss_type": ("music_spectrum", "rmspe")},
         # "DCDMUSIC2Ortho": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        "SubspaceNet": {"tau": 8,
-                        "diff_method": "music_2D",
-                        "train_loss_type": "music_spectrum",
-                        "field_type": "Near"},
+        # "SubspaceNet": {"tau": 8,
+        #                 "diff_method": "music_2D",
+        #                 "train_loss_type": "music_spectrum",
+        #                 "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [
@@ -115,8 +115,8 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        "Beamformer",
-        "2D-MUSIC",
+        # "Beamformer",
+        # "2D-MUSIC",
         # "CCRB"
     ]
 }

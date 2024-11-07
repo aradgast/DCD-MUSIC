@@ -17,7 +17,7 @@ from src.models_pack.dcd_music import DCDMUSIC
 from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
 from src.models_pack.deep_cnn import DeepCNN
 from src.models_pack.deep_root_music import DeepRootMUSIC
-
+from train_dcd import train_loss_type
 
 
 class ModelGenerator(object):
@@ -124,7 +124,7 @@ class ModelGenerator(object):
             self.__set_deepcnn()
         elif self.model_type.startswith("SubspaceNet"):
             self.__set_subspacenet()
-        elif self.model_type.startswith("DCDMUSIC"):
+        elif self.model_type.startswith("DCD-MUSIC"):
             self.__set_dcd_music()
         elif self.model_type.startswith("TransMUSIC"):
             self.__set_transmusic()
@@ -196,7 +196,7 @@ class ModelGenerator(object):
 
         if self.model_type.lower() == "subspacenet":
             self.__verify_subspacenet_params(model_params)
-        elif self.model_type.lower() == "dcdmusic":
+        elif self.model_type.lower().startswith("dcd-music"):
             self.__verify_dcdmuisc_params(model_params)
         elif self.model_type.lower() == "transmusic":
             self.__verify_transmusic_params(model_params)
@@ -227,16 +227,22 @@ class ModelGenerator(object):
         diff_method = model_params.get("diff_method")
         if isinstance(diff_method, str):
             if field_type.lower() == "far":
-                if not (diff_method.lower() in ["root_music", "esprit", "music_1d", "music_1d_noise_ss"]):
+                if not (diff_method.lower() in ["root_music", "esprit", "music_1d"]):
                     raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                                      f"for Far field possible diff methods are: root_music, esprit or music_1d")
             else:  # field_type.lower() == "near":
-                if not (diff_method.lower() in ["music_1d", "music_2d", "music_1d_noise_ss", "music_2d_noise_ss"]):
+                if not (diff_method.lower() in ["music_1d", "music_2d"]):
                     raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                                      f"for Near field possible diff methods are: music_2d or music_1d")
         else:
             raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                              f"field type was not given as a model param.")
+
+        train_loss_type = model_params.get("train_loss_type")
+        if not isinstance(train_loss_type, str) or not (train_loss_type.lower() in ["rmspe", "music_spectrum"]):
+            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                             f"train_loss_type has to be a str and the possible values are rmspe or music_spectrum.")
+
 
     def __verify_dcdmuisc_params(self, model_params):
         """
@@ -251,12 +257,20 @@ class ModelGenerator(object):
         if not isinstance(diff_method, tuple) or not (len(diff_method) == 2):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" diff_method has to be a tuple of two elements.")
-        if not (diff_method[0].lower() in ["music_1D_noise_ss", "esprit", "music_1d"]):
+        if not (diff_method[0].lower() in ["esprit", "music_1d"]):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" first element of diff_method has to be music_1D_noise_ss, esprit or music_1d")
-        if not (diff_method[1].lower() in ["music_1D_noise_ss", "esprit", "music_1d"]):
+        if not (diff_method[1].lower() in ["music_1d"]):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" second element of diff_method has to be music_1D_noise_ss, esprit or music_1d")
+        train_loss_type = model_params.get("train_loss_type")
+        if not isinstance(train_loss_type, tuple) or not (len(train_loss_type) == 2):
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
+                             f" train_loss_type has to be a tuple of two elements.")
+        if not (train_loss_type[0].lower() in ["rmspe", "music_spectrum"]) or not (
+                train_loss_type[1].lower() in ["rmspe", "music_spectrum"]):
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
+                             f" train_loss_type has to be rmspe or music_spectrum")
 
     def __str__(self):
         return f"{self.model.get_model_name()}"

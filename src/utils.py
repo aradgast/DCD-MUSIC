@@ -36,8 +36,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 plot_styles = {
     'CCRB': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 10},
     'Beamformer': {'color': 'r', 'linestyle': '--', 'marker': 's', "markersize": 10},
-    'DCDMUSIC': {'color': 'g', 'linestyle': 'solid', 'marker': 's', "markersize": 10},
-    'DCDMUSIC1Ortho': {'color': 'b', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'DCD-MUSIC(RMSPE, diffMUSIC)': {'color': 'g', 'linestyle': 'solid', 'marker': 's', "markersize": 10},
+    'DCD-MUSIC(MusicSpec, diffMUSIC)': {'color': 'b', 'linestyle': '--', 'marker': 's', "markersize": 10},
     'DCDMUSIC2Ortho': {'color': 'c', 'linestyle': '-.', 'marker': 's', "markersize": 10},
     'TransMUSIC': {'color': 'm', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
     '2D-MUSIC': {'color': 'y', 'linestyle': ':', 'marker': '^', "markersize": 10},
