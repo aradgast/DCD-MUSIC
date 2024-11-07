@@ -304,8 +304,11 @@ class SystemModel(object):
         if generate_search_grid:
             first_order = torch.tile(first_order[:, :, None], (1, 1, distances.shape[0]))
 
+        dist_array_elems = dist_array_elems.squeeze(-1)
+        if theta.dim() == 2:
+            theta = theta.squeeze(-1)
         second_order = -0.5 * torch.div(
-            torch.pow(torch.outer(torch.cos(theta).squeeze(), dist_array_elems.squeeze()), 2).unsqueeze(1), distances)
+            torch.pow(torch.outer(torch.cos(theta), dist_array_elems), 2).unsqueeze(1), distances)
         second_order = torch.einsum("nm, nar -> nar",
                                     array_square,
                                     torch.transpose(second_order, 2, 0)).transpose(1, 2)

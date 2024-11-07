@@ -30,9 +30,9 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    # "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 50, 70],
-    # "eta": [0.01, 0.02, 0.03, 0.04],
+    "SNR": [-10, -5, 0, 5, 10],
+    "T": [10, 20, 50, 70, 100],
+    "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
@@ -62,19 +62,19 @@ if model_config.get("model_type") == "SubspaceNet":
 
 elif model_config.get("model_type") == "DCDMUSIC":
     model_config["model_params"]["tau"] = 8
-    model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # ("esprit", "music_1D")
-    model_config["model_params"]["train_loss_type"] = ("rmspe", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
+    model_config["model_params"]["diff_method"] = ("music_1D", "music_1D")  # ("esprit", "music_1D")
+    model_config["model_params"]["train_loss_type"] = ("music_spectrum", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
     # "music_spectrum"), ("music_spectrum", "rmspe")
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
-    "train_test_ratio": .1,
-    "training_objective": "range",  # angle, range, source_estimation
+    "samples_size": 100,
+    "train_test_ratio": 1,
+    "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 50,
+    "epochs": 2,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -86,22 +86,22 @@ training_params = {
     "true_range_test": None,  # if set, this range will be set to all samples in the train dataset
 }
 evaluation_params = {
-    "criterion": "rmspe",  # rmse, rmspe, mse, mspe, cartesian
-    "balance_factor": 0.0,
+    "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
+    "balance_factor": 1.0,
     "models": {
-        # "DCDMUSIC": {"tau": 8,
-        #              "diff_method": ("esprit", "music_1D"),
-        #              "train_loss_type": ("rmspe", "rmspe")},
+        "DCDMUSIC": {"tau": 8,
+                     "diff_method": ("esprit", "music_1D"),
+                     "train_loss_type": ("rmspe", "rmspe")},
         # "DCDMUSIC1Ortho": {"tau": 8,
         #                    "diff_method": ("esprit", "music_1D"),
         #                    "train_loss_type": ("music_spectrum", "rmspe")},
         # "DCDMUSIC2Ortho": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        # "SubspaceNet": {"tau": 8,
-        #                 "diff_method": "music_2D",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "Near"},
+        "SubspaceNet": {"tau": 8,
+                        "diff_method": "music_2D",
+                        "train_loss_type": "music_spectrum",
+                        "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [
@@ -115,8 +115,8 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        # "Beamformer",
-        # "2D-MUSIC",
+        "Beamformer",
+        "2D-MUSIC",
         # "CCRB"
     ]
 }
@@ -124,7 +124,7 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
+    "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted

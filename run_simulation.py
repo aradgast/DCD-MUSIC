@@ -38,7 +38,7 @@ def __run_simulation(**kwargs):
     # torch.set_printoptions(precision=12)
 
     # Initialize seed
-    set_unified_seed()
+    # set_unified_seed()
 
     # Initialize paths
     external_data_path = Path(__file__).parent / "data"
@@ -218,7 +218,7 @@ def __run_simulation(**kwargs):
         criterion = set_criterions(EVALUATION_PARAMS["criterion"],
                                                        EVALUATION_PARAMS["balance_factor"])
 
-        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=64)
+        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=8)
         generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                            collate_fn=collate_fn,
                                                            batch_sampler=batch_sampler_test,
