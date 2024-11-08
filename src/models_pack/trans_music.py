@@ -330,6 +330,8 @@ class TransMUSIC(ParentModel):
                 prob_source_number.shape[0], 1)) * x.shape[0]
         else:
             angles_pred, ranges_pred = torch.split(model_output, model_output.shape[1] // 2, dim=1)
+            angles_pred = angles_pred[:, :angles.shape[1]]
+            ranges_pred = ranges_pred[:, :ranges.shape[1]]
             loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
         if is_test:
             _, angle_loss, range_loss = self.separated_test_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
