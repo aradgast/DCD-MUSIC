@@ -167,10 +167,10 @@ class Samples(SystemModel):
         """
         # Generate signal matrix
         signal = self.signal_creation(signal_mean, signal_variance, source_number=source_number)
-        signal = torch.from_numpy(signal).to(device)
+        signal = torch.from_numpy(signal)
         # Generate noise matrix
         noise = self.noise_creation(noise_mean, noise_variance)
-        noise = torch.from_numpy(noise).to(device)
+        noise = torch.from_numpy(noise)
         # Generate Narrowband samples
         if self.params.signal_type.startswith("NarrowBand"):
             if self.params.field_type.startswith("Far"):

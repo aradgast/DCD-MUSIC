@@ -30,18 +30,18 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 50, 70, 100],
+    # "SNR": [-10, -5, 0, 5, 10],
+    # "T": [20, 70],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 2,  # number of sources
+    "M": None,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
-    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
@@ -51,7 +51,7 @@ system_model_params = {
     "range_resolution": 1,
 }
 model_config = {
-    "model_type": "DCD-MUSIC",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "TransMUSIC",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -70,11 +70,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
+    "samples_size": 8192,
     "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 2,
+    "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -89,14 +89,14 @@ evaluation_params = {
     "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
-        "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
-                     "diff_method": ("esprit", "music_1D"),
-                     "train_loss_type": ("rmspe", "rmspe")},
-        "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
-                           "diff_method": ("music_1D", "music_1D"),
-                           "train_loss_type": ("music_spectrum", "rmspe")},
-        # "DCDMUSIC2Ortho": {"tau": 8,
+        # "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
+        #              "diff_method": ("esprit", "music_1D"),
+        #              "train_loss_type": ("rmspe", "rmspe")},
+        # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
+        #                    "train_loss_type": ("music_spectrum", "rmspe")},
+        # "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
+        #                    "diff_method": ("esprit", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
         # "SubspaceNet": {"tau": 8,
         #                 "diff_method": "music_2D",

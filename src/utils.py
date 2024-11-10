@@ -38,6 +38,7 @@ plot_styles = {
     'Beamformer': {'color': 'r', 'linestyle': '--', 'marker': 's', "markersize": 10},
     'DCD-MUSIC(RMSPE, diffMUSIC)': {'color': 'g', 'linestyle': 'solid', 'marker': 's', "markersize": 10},
     'DCD-MUSIC(MusicSpec, diffMUSIC)': {'color': 'b', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'DCD-MUSIC(RMSPE, MusicSpec)': {'color': 'k', 'linestyle': ':', 'marker': '^', "markersize": 10},
     'DCDMUSIC2Ortho': {'color': 'c', 'linestyle': '-.', 'marker': 's', "markersize": 10},
     'TransMUSIC': {'color': 'm', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
     '2D-MUSIC': {'color': 'y', 'linestyle': ':', 'marker': '^', "markersize": 10},
@@ -441,14 +442,14 @@ def _spatial_smoothing_covariance(sampels: torch.Tensor):
     return covariance_mat
 
 
-def parse_loss_results_for_plotting(loss_results: dict):
+def parse_loss_results_for_plotting(loss_results: dict, tested_param: str):
     plt_res = {}
     plt_acc = False
     for test, results in loss_results.items():
         for method, loss_ in results.items():
             if plt_res.get(method) is None:
-                plt_res[method] = {"Overall": []}
-            plt_res[method]["Overall"].append(loss_["Overall"])
+                plt_res[method] = {tested_param: []}
+            plt_res[method][tested_param].append(loss_[tested_param])
             if loss_.get("Accuracy") is not None:
                 if "Accuracy" not in plt_res[method].keys():
                     plt_res[method]["Accuracy"] = []
