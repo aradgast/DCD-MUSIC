@@ -440,6 +440,7 @@ class MusicSpectrumLoss(nn.Module):
         return loss
 
     def __forward_with_ranges(self, **kwargs):
+        # TODO: change the implementation to calculate only the diagonal elements of the matrix to save computation.
         theta = kwargs["angles"][:, :, None]
         distances = kwargs["ranges"][:, :, None].to(torch.float64)
         array_square = torch.pow(self.array, 2).to(torch.float64)

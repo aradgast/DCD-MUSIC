@@ -273,6 +273,8 @@ class SystemModel(object):
         Returns:
             np.ndarray: the steering matrix.
         """
+        # TODO: change the implementation to calculate only the diagonal elements of the matrix to save computation
+        #  when generate_search_grid is False.
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles[:, None])
             local_device = "cpu" # when creating the data, it's done element-wise, better not to use GPU
