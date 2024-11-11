@@ -203,7 +203,6 @@ def plot_results(loss_dict: dict, plot_acc: bool = False, save_to_file: bool = F
 
     Parameters
     ----------
-    criterion
     loss_dict
 
     Returns
@@ -226,12 +225,22 @@ def plot_results(loss_dict: dict, plot_acc: bool = False, save_to_file: bool = F
         if scenrio == "SNR":
             plot_path = os.path.join(snr_plot_path, dt_string_for_save)
             plot_test_results(scenrio, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenrio, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenrio, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=plot_acc)
         elif scenrio == "T":
             plot_path = os.path.join(snapshots_plot_path, dt_string_for_save)
             plot_test_results(scenrio, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenrio, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file,
+                              plot_acc=plot_acc)
+            plot_test_results(scenrio, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file,
+                              plot_acc=plot_acc)
         elif scenrio == "eta":
             plot_path = os.path.join(steering_noise_plot_path, dt_string_for_save)
             plot_test_results(scenrio, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenrio, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file,
+                              plot_acc=plot_acc)
+            plot_test_results(scenrio, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file,
+                              plot_acc=plot_acc)
         else:
             raise ValueError(f"Unknown scenario: {scenrio}")
 
@@ -285,8 +294,12 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         ax.set_xlabel("$\eta[{\lambda}/{2}]$")
     ax.set_ylabel(f"RMSPE [{units}]")
     # ax.set_title("Overall RMSPE loss")
-    ax.set_yscale("log")
+    if tested_param == "Angle":
+        ax.set_yscale("log")
+    else:
+        ax.set_yscale("linear")
     ax.set_xticks(list(test_values))
+    fig.tight_layout()
     if save_to_file:
         fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
     fig.show()
