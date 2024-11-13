@@ -49,20 +49,7 @@ def train_dcd_music(*args, **kwargs):
     set_unified_seed()
 
     # Initialize paths
-    external_data_path = Path(__file__).parent / "data"
-    scenario_data_path = "uniform_bias_spacing"
-    datasets_path = external_data_path / "datasets" / scenario_data_path
-    simulations_path = external_data_path / "simulations"
-    saving_path = external_data_path / "weights"
-
-    # create folders if not exists
-    datasets_path.mkdir(parents=True, exist_ok=True)
-    (datasets_path / "train").mkdir(parents=True, exist_ok=True)
-    (datasets_path / "test").mkdir(parents=True, exist_ok=True)
-    datasets_path.mkdir(parents=True, exist_ok=True)
-    simulations_path.mkdir(parents=True, exist_ok=True)
-    saving_path.mkdir(parents=True, exist_ok=True)
-    (saving_path / "final_models").mkdir(parents=True, exist_ok=True)
+    datasets_path, simulations_path, saving_path = initialize_data_paths(Path(__file__).parent / "data")
 
     # Saving simulation scores to external file
     suffix = ""

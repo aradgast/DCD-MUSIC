@@ -31,8 +31,21 @@ plt.close("all")
 
 scenario_dict = {
     "SNR": [-10, -5, 0, 5, 10],
-    "T": [10, 20, 50, 70, 100],
-    "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    # "T": [10, 20, 50, 70, 100],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+}
+
+simulation_commands = {
+    "SAVE_TO_FILE": False,
+    "CREATE_DATA": False,
+    "LOAD_MODEL": False,
+    "TRAIN_MODEL": False,
+    "SAVE_MODEL": False,
+    "EVALUATE_MODE": True,
+    "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
+    "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
+    "SAVE_PLOTS": False,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
@@ -51,7 +64,7 @@ system_model_params = {
     "range_resolution": 1,
 }
 model_config = {
-    "model_type": "TransMUSIC",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "SubspaceNet",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -74,7 +87,7 @@ training_params = {
     "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 100,
+    "epochs": 2,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -89,20 +102,20 @@ evaluation_params = {
     "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
-        "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
-                     "diff_method": ("esprit", "music_1D"),
-                     "train_loss_type": ("rmspe", "rmspe")},
-        "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
-                           "diff_method": ("music_1D", "music_1D"),
-                           "train_loss_type": ("music_spectrum", "rmspe")},
-        "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
-                           "diff_method": ("esprit", "music_1D"),
-                           "train_loss_type": ("rmspe", "music_spectrum")},
+        # "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
+        #              "diff_method": ("esprit", "music_1D"),
+        #              "train_loss_type": ("rmspe", "rmspe")},
+        # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
+        #                    "diff_method": ("music_1D", "music_1D"),
+        #                    "train_loss_type": ("music_spectrum", "rmspe")},
+        # "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
+        #                    "diff_method": ("esprit", "music_1D"),
+        #                    "train_loss_type": ("rmspe", "music_spectrum")},
         "SubspaceNet": {"tau": 8,
                         "diff_method": "music_2D",
                         "train_loss_type": "music_spectrum",
                         "field_type": "Near"},
-        "TransMUSIC": {},
+        # "TransMUSIC": {},
     },
     "augmented_methods": [
         # "mvdr",
@@ -120,18 +133,7 @@ evaluation_params = {
         # "CCRB"
     ]
 }
-simulation_commands = {
-    "SAVE_TO_FILE": False,
-    "CREATE_DATA": True,
-    "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
-    "SAVE_MODEL": False,
-    "EVALUATE_MODE": True,
-    "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
-    "SAVE_PLOTS": False,  # if True, the plots will be saved to the results folder
-}
+
 
 
 def parse_arguments():

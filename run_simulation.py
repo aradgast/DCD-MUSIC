@@ -16,7 +16,6 @@ def __run_simulation(**kwargs):
     MODEL_CONFIG = kwargs["model_config"]
     TRAINING_PARAMS = kwargs["training_params"]
     EVALUATION_PARAMS = kwargs["evaluation_params"]
-    scenario_dict = kwargs["scenario_dict"]
     save_to_file = SIMULATION_COMMANDS["SAVE_TO_FILE"]  # Saving results to file or present them over CMD
     create_data = SIMULATION_COMMANDS["CREATE_DATA"]  # Creating new dataset
     load_model = SIMULATION_COMMANDS["LOAD_MODEL"]  # Load specific model for training
@@ -41,20 +40,7 @@ def __run_simulation(**kwargs):
     set_unified_seed()
 
     # Initialize paths
-    external_data_path = Path(__file__).parent / "data"
-    scenario_data_path = "uniform_bias_spacing"
-    datasets_path = external_data_path / "datasets" / scenario_data_path
-    simulations_path = external_data_path / "simulations"
-    saving_path = external_data_path / "weights"
-
-    # create folders if not exists
-    datasets_path.mkdir(parents=True, exist_ok=True)
-    (datasets_path / "train").mkdir(parents=True, exist_ok=True)
-    (datasets_path / "test").mkdir(parents=True, exist_ok=True)
-    datasets_path.mkdir(parents=True, exist_ok=True)
-    simulations_path.mkdir(parents=True, exist_ok=True)
-    saving_path.mkdir(parents=True, exist_ok=True)
-    (saving_path / "final_models").mkdir(parents=True, exist_ok=True)
+    datasets_path, simulations_path, saving_path = initialize_data_paths(Path(__file__).parent / "data")
 
     # Saving simulation scores to external file
     suffix = ""
@@ -87,20 +73,13 @@ def __run_simulation(**kwargs):
         .set_parameter("range_resolution", SYSTEM_MODEL_PARAMS["range_resolution"])
     )
     system_model = SystemModel(system_model_params)
-    # Generate model configuration
-    model_config = (
-        ModelGenerator()
-        .set_model_type(MODEL_CONFIG.get("model_type"))
-        .set_system_model(system_model)
-        .set_model_params(MODEL_CONFIG.get("model_params"))
-        .set_model()
-    )
+
     # Define samples size
     samples_size = TRAINING_PARAMS["samples_size"]  # Overall dateset size
     train_test_ratio = TRAINING_PARAMS["train_test_ratio"]  # training and testing datasets ratio
     # Sets simulation filename
-    simulation_filename = get_simulation_filename(system_model_params=system_model_params,
-                                                  model_config=model_config)
+    # simulation_filename = get_simulation_filename(system_model_params=system_model_params,
+    #                                               model_config=model_config)
     # Print new simulation intro
     print("------------------------------------")
     print("---------- New Simulation ----------")
@@ -127,7 +106,7 @@ def __run_simulation(**kwargs):
             try:
                 generic_test_dataset, _ = load_datasets(
                     system_model_params=system_model_params,
-                    samples_size=int(train_test_ratio * samples_size),
+                    samples_size=samples_size,
                     datasets_path=datasets_path,
                     train_test_ratio=train_test_ratio,
                     is_training=False,
@@ -158,7 +137,6 @@ def __run_simulation(**kwargs):
             generic_test_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=int(train_test_ratio * samples_size),
-                model_type=model_config.model_type,
                 save_datasets=True,
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_test"],
@@ -167,6 +145,14 @@ def __run_simulation(**kwargs):
             )
 
     if train_model:
+        # Generate model configuration
+        model_config = (
+            ModelGenerator()
+            .set_model_type(MODEL_CONFIG.get("model_type"))
+            .set_system_model(system_model)
+            .set_model_params(MODEL_CONFIG.get("model_params"))
+            .set_model()
+        )
         # Assign the training parameters object
         simulation_parameters = (
             TrainingParams()

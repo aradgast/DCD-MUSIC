@@ -41,8 +41,7 @@ from src.utils import *
 
 def create_dataset(
         system_model_params: SystemModelParams,
-        samples_size: float,
-        model_type: str = None,
+        samples_size: int,
         save_datasets: bool = False,
         datasets_path: Path = None,
         true_doa: list = None,
@@ -73,52 +72,28 @@ def create_dataset(
     sources_num = []
     samples_model = Samples(system_model_params)
 
-    if model_type is None or not model_type.startswith("DeepCNN"):
-        for i in tqdm(range(samples_size)):
-            if system_model_params.M is None:
-                M = np.random.randint(2, np.min((6, system_model_params.N-1)))
-            else:
-                M = system_model_params.M
-            # Samples model creation
-            samples_model.set_doa(true_doa, M)
-            if system_model_params.field_type.lower().endswith("near"):
-                samples_model.set_range(true_range, M)
-            # Observations matrix creation
-            X = samples_model.samples_creation(
-                    noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1, source_number=M
-                )[0]
-            # Ground-truth creation
-            Y = torch.tensor(samples_model.doa, dtype=torch.float32)
-            if system_model_params.field_type.endswith("Near"):
-                Y1 = torch.tensor(samples_model.distances, dtype=torch.float32)
-                Y = torch.cat((Y, Y1), dim=0)
-            time_series.append(X)
-            labels.append(Y)
-            sources_num.append(M)
-    # Generate permutations for CNN model training dataset
-    elif model_type.startswith("DeepCNN") and phase.startswith("train"):
-        doa_permutations = []
-        angles_grid = np.linspace(start=-90, stop=90, num=361)
-        for comb in itertools.combinations(angles_grid, system_model_params.M):
-            doa_permutations.append(list(comb))
+    for i in tqdm(range(samples_size)):
+        if system_model_params.M is None:
+            M = np.random.randint(2, np.min((6, system_model_params.N-1)))
+        else:
+            M = system_model_params.M
+        # Samples model creation
+        samples_model.set_doa(true_doa, M)
+        if system_model_params.field_type.lower().endswith("near"):
+            samples_model.set_range(true_range, M)
+        # Observations matrix creation
+        X = samples_model.samples_creation(
+                noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1, source_number=M
+            )[0]
+        # Ground-truth creation
+        Y = torch.tensor(samples_model.doa, dtype=torch.float32)
+        if system_model_params.field_type.endswith("Near"):
+            Y1 = torch.tensor(samples_model.distances, dtype=torch.float32)
+            Y = torch.cat((Y, Y1), dim=0)
+        time_series.append(X)
+        labels.append(Y)
+        sources_num.append(M)
 
-    elif model_type.startswith("DeepCNN") and phase.startswith("train"):
-        for i, doa in tqdm(enumerate(doa_permutations)):
-            # Samples model creation
-            samples_model.set_doa(doa)
-            # Observations matrix creation
-            X = torch.tensor(
-                samples_model.samples_creation(
-                    noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1
-                )[0],
-                dtype=torch.complex64,
-            )
-            # Ground-truth creation
-            Y = torch.zeros_like(torch.tensor(angles_grid))
-            for angle in doa:
-                Y[list(angles_grid).index(angle)] = 1
-            time_series.append(X)
-            labels.append(Y)
 
     generic_dataset = TimeSeriesDataset(time_series, labels, sources_num)
     if save_datasets:
@@ -262,7 +237,6 @@ def load_datasets(
         List: A list containing the loaded datasets.
 
     """
-    datasets = []
     # Define test set size
     test_samples_size = int(train_test_ratio * samples_size)
     # Generate datasets filenames
@@ -286,7 +260,7 @@ def load_datasets(
             train_dataset = read_data(
                 datasets_path / "train" / model_trainingset_filename
             )
-            datasets.append(train_dataset)
+            return train_dataset
         except Exception as e:
             print(e)
             Exception(f"load_datasets: Training dataset doesn't exist")
@@ -302,18 +276,16 @@ def load_datasets(
             generic_test_dataset = read_data(
                 datasets_path / "test" / generic_dataset_filename
             )
-            datasets.append(generic_test_dataset)
         except Exception as e:
             print(e)
             Exception(f"load_datasets: Generic test dataset doesn't exist")
         # Load samples models
         try:
             samples_model = read_data(datasets_path / "test" / samples_model_filename)
-            datasets.append(samples_model)
         except Exception as e:
             print(e)
             Exception(f"load_datasets: Samples model dataset doesn't exist")
-    return datasets
+        return generic_test_dataset, samples_model
 
 
 def set_dataset_filename(system_model_params: SystemModelParams, samples_size: float):
@@ -395,7 +367,10 @@ def collate_fn(batch):
 
 class SameLengthBatchSampler(Sampler):
     def __init__(self, data_source, batch_size, shuffle=True):
-        super().__init__(data_source)
+        try:
+            super().__init__()
+        except Exception:
+            super().__init__(data_source)
         self.data_source = data_source
         self.batch_size = batch_size
         self.shuffle = shuffle

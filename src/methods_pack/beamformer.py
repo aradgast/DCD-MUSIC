@@ -48,7 +48,9 @@ class Beamformer(Module):
             # dictionary.
             v1 = torch.einsum("arn, bnm -> barm", self.steering_dict.conj().transpose(0, 2).transpose(0, 1), cov)
             spectrum = torch.einsum("barn, nar -> bar", v1, self.steering_dict)
-        return spectrum
+        if torch.imag(spectrum).abs().max() > 1e-6:
+            warnings.warn(f"Beamformer.get_spectrum: Imaginary part in the spectrum is not negligible!.")
+        return torch.real(spectrum)
 
     def find_peaks(self, spectrum: torch.Tensor, sources_num: int):
         """

@@ -498,8 +498,10 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         acc_valid_list.append(valid_loss.get('Accuracy') * 100)
 
         # Update schedular
-        training_params.schedular.step(loss_valid_list[-1])
-        # training_params.schedular.step()
+        if isinstance(training_params.schedular, lr_scheduler.ReduceLROnPlateau):
+            training_params.schedular.step(loss_valid_list[-1])
+        else:
+            training_params.schedular.step()
 
         # Update eigenregularization weight
         try:

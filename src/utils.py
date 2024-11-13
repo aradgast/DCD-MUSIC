@@ -29,6 +29,8 @@ import random
 import scipy
 import warnings
 
+from pathlib import Path
+
 # Constants
 R2D = 180 / np.pi
 D2R = 1 / R2D
@@ -52,6 +54,21 @@ plot_styles = {
 # device = "cpu"
 print("Running on device: ", device)
 
+
+def initialize_data_paths(path: Path):
+    datasets_path = path / "datasets"
+    simulations_path = path / "simulations"
+    saving_path = path / "weights"
+
+    # create folders if not exists
+    datasets_path.mkdir(parents=True, exist_ok=True)
+    (datasets_path / "train").mkdir(parents=True, exist_ok=True)
+    (datasets_path / "test").mkdir(parents=True, exist_ok=True)
+    simulations_path.mkdir(parents=True, exist_ok=True)
+    saving_path.mkdir(parents=True, exist_ok=True)
+    (saving_path / "final_models").mkdir(parents=True, exist_ok=True)
+
+    return datasets_path, simulations_path, saving_path
 
 def sample_covariance(x: torch.Tensor) -> torch.Tensor:
     """
