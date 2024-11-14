@@ -7,7 +7,7 @@ from src.data_handler import *
 import argparse
 
 # default values for the argparse
-number_sensors = 15
+number_sensors = 8
 number_sources = None
 number_snapshots = 100
 snr = 0
@@ -18,14 +18,14 @@ tau = 8
 sample_size = 1024
 train_test_ratio = 0.1
 batch_size = 128
-epochs = 100
+epochs = 2
 optimizer = "Adam"
 learning_rate = 0.001
 weight_decay = 1e-9
 step_size = 50
 gamma = 0.5
 diff_method = ("esprit", "music_1D")
-train_loss_type = ("music_spectrum", "rmspe")
+train_loss_type = ("rmspe", "rmspe")
 
 
 def train_dcd_music(*args, **kwargs):
@@ -96,7 +96,6 @@ def train_dcd_music(*args, **kwargs):
                 train_test_ratio=train_test_ratio,
                 is_training=True,
             )
-            train_dataset = train_dataset[0]
         except Exception as e:
             print(e)
             print("#############################################")
@@ -169,7 +168,7 @@ def train_dcd_music(*args, **kwargs):
     print("END OF TRAINING - Step 1: angle branch training.")
 
     # Update model configuration
-    model_config.set_model_type("DCDMUSIC")
+    model_config.set_model_type("DCD-MUSIC")
     model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
                                    "diff_method": diff_method,
                                    "train_loss_type": train_loss_type})
