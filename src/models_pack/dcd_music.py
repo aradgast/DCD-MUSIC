@@ -78,6 +78,7 @@ class DCDMUSIC(SubspaceNet):
         except FileNotFoundError as e:
             # raise FileNotFoundError(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
             print(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
+        print(f"DCDMUSIC._load_state_for_angle_extractor: Model state loaded from {ref_path}")
 
     def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources: int):
         """

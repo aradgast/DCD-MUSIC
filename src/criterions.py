@@ -156,7 +156,7 @@ class RMSPELoss(nn.Module):
         else:
             rmspe_angle, min_idx = torch.min(rmspe_angle_all_permutations, dim=-1)
             # create the projected permutation using the min_idx
-            projected_permutations = torch.tensor(perm, dtype=torch.long)[min_idx]
+            projected_permutations = torch.tensor(perm, dtype=torch.long, device=device)[min_idx]
             projected_ranges_pred = torch.gather(ranges_pred, 1, projected_permutations)
             projected_err_ranges = projected_ranges_pred - ranges
             projected_rmse_ranges = np.sqrt(1 / num_sources) * torch.linalg.norm(projected_err_ranges, dim=-1)

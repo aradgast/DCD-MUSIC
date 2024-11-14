@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from src.criterions import RMSPE, RMSPELoss
+from src.criterions import RMSPELoss
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
 from src.utils import device

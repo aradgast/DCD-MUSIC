@@ -38,7 +38,7 @@ from pathlib import Path
 
 # Internal imports
 from src.utils import *
-from src.criterions import (RMSPELoss, MSPELoss, RMSELoss, CartesianLoss, RMSPE, MSPE)
+# from src.criterions import (RMSPELoss, RMSELoss, CartesianLoss)
 from src.methods import MVDR
 from src.methods_pack.music import MUSIC
 from src.methods_pack.root_music import RootMusic, root_music
@@ -175,7 +175,7 @@ def evaluate_augmented_model(
         model: SubspaceNet,
         dataset,
         system_model,
-        criterion=RMSPE,
+        criterion=None,
         algorithm: str = "music",
         plot_spec: bool = False,
         figures: dict = None,

@@ -18,13 +18,13 @@ tau = 8
 sample_size = 1024
 train_test_ratio = 0.1
 batch_size = 128
-epochs = 5
+epochs = 100
 optimizer = "Adam"
 learning_rate = 0.001
 weight_decay = 1e-9
 step_size = 50
 gamma = 0.5
-diff_method = ("music_1D", "music_1D")
+diff_method = ("esprit", "music_1D")
 train_loss_type = ("music_spectrum", "rmspe")
 
 
