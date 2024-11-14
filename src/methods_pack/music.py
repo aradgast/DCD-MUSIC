@@ -500,7 +500,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
     def __set_search_grid_far_field(self):
-        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict)
+        self.steering_dict = self.system_model.steering_vec(self.angles_dict)
 
     def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         """
@@ -512,7 +512,7 @@ class MUSIC(SubspaceMethod):
             known_angles = self.angles_dict
         if known_distances is None:
             known_distances = self.ranges_dict
-        self.steering_dict = self.system_model.steering_vec_near_field(angles=known_angles, ranges=known_distances,
+        self.steering_dict = self.system_model.steering_vec(angles=known_angles, ranges=known_distances,
                                                                        generate_search_grid=True, nominal=True)
 
     def __str__(self):

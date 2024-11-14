@@ -160,12 +160,12 @@ class SystemModel(object):
 
     def calc_fresnel_fraunhofer_distance(self) -> tuple:
         """
-        In the Far and Near field scenrios, those distances are relevant for the distance grid creation.
+        In the Far and Near field scenarios, those distances are relevant for the distance grid creation.
         wavelength = 1
         spacing = wavelength / 2
-        diemeter = (N-1) * spacing
-        Fraunhofer  = 2 * diemeter ** 2 / wavelength
-        Fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+        diameter = (N-1) * spacing
+        Fraunhofer  = 2 * diameter ** 2 / wavelength
+        Fresnel = (diameter ** 4 / (8 * wavelength)) ** (1/3)
         Returns:
             tuple: fraunhofer(float), fresnel(float)
         """
@@ -173,8 +173,8 @@ class SystemModel(object):
         spacing = wavelength / 2
         diemeter = (self.params.N - 1) * spacing
         fraunhofer = 2 * diemeter ** 2 / wavelength
-        fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
-        # fresnel = ((diemeter ** 4) / (8 * wavelength)) ** (1 / 3)
+        # fresnel = 0.62 * (diemeter ** 3 / wavelength) ** 0.5
+        fresnel = ((diemeter ** 4) / (8 * wavelength)) ** (1 / 3)
 
         return fraunhofer, fresnel
 
@@ -271,10 +271,8 @@ class SystemModel(object):
              create all combination of angles and ranges, or just create the steering matrix of sources.
 
         Returns:
-            np.ndarray: the steering matrix.
+            torch.Tensor: the steering matrix.
         """
-        # TODO: change the implementation to calculate only the diagonal elements of the matrix to save computation
-        #  when generate_search_grid is False.
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles[:, None])
             local_device = "cpu" # when creating the data, it's done element-wise, better not to use GPU
@@ -282,16 +280,8 @@ class SystemModel(object):
             if angles.dim() == 1:
                 angles = angles[:, None]
             local_device = device
-        dist_array_elems = self.dist_array_elems["NarrowBand"]
-        if not nominal:
-            dist_array_elems += torch.from_numpy(
-                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)).to(local_device)
-            dist_array_elems = dist_array_elems.unsqueeze(-1)
-        if isinstance(dist_array_elems, float):
-            dist_array_elems = dist_array_elems * torch.ones(self.params.N, 1, device=local_device, dtype=torch.float64)
-
-
         theta = angles.to(torch.float64).to(local_device)
+
         if isinstance(ranges, np.ndarray):
             ranges = torch.from_numpy(ranges[:, None])
         else:
@@ -303,6 +293,14 @@ class SystemModel(object):
             distances = distances.unsqueeze(0)
         else:
             distances = distances.unsqueeze(-1)
+
+        dist_array_elems = self.dist_array_elems["NarrowBand"]
+        if not nominal:
+            dist_array_elems += torch.from_numpy(
+                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)).to(local_device)
+            dist_array_elems = dist_array_elems.unsqueeze(-1)
+        if isinstance(dist_array_elems, float):
+            dist_array_elems = dist_array_elems * torch.ones(self.params.N, 1, device=local_device, dtype=torch.float64)
 
         array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(local_device)
         array_square = torch.pow(array, 2)

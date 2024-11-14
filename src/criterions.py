@@ -43,22 +43,6 @@ from train_dcd import number_sensors, number_sources
 BALANCE_FACTOR = 1.0
 
 
-def add_line_to_file(file_name, line_to_add):
-    try:
-        with open(file_name, 'r+') as file:
-            lines = file.readlines()
-            if not lines or lines[-1].strip() != line_to_add:
-                file.write('\n' + line_to_add)
-                # print(f"Added line '{line_to_add}' to the file.")
-            else:
-                pass
-                # print(f"Line '{line_to_add}' already exists in the file.")
-    except FileNotFoundError:
-        with open(file_name, 'w') as file:
-            file.write(line_to_add)
-            # print(f"Created file '{file_name}' with line '{line_to_add}'.")
-
-
 def permute_prediction(prediction: torch.Tensor):
     """
     Generates all the available permutations of the given prediction tensor.
@@ -98,10 +82,12 @@ class RMSELoss(nn.MSELoss):
 
 
 class RMSPELoss(nn.Module):
-    """Root Mean Square Periodic Error (RMSPE) loss function.
+    """
+    Root Mean Square Periodic Error (RMSPE) loss function.
     This loss function calculates the RMSPE between the predicted values and the target values.
     The predicted values and target values are expected to be in radians.
-
+    In case of Near field, the arguments could be the predicted ranges and the target ranges in addition to the angles.
+    The minimal rmse results is used over the angles and projected to the range.
     Args:
         None
 
@@ -148,7 +134,6 @@ class RMSPELoss(nn.Module):
             The default value is None.
             ranges (torch.Tensor): Target values tensor of shape (batch_size, num_targets).The default value is None.
 
-
         Returns:
             torch.Tensor: The computed RMSPE loss.
 
@@ -165,207 +150,29 @@ class RMSPELoss(nn.Module):
         err_angle += torch.pi / 2
         err_angle %= torch.pi
         err_angle -= torch.pi / 2
-        rmspe_angle = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
+        rmspe_angle_all_permutations = np.sqrt(1 / num_sources) * torch.linalg.norm(err_angle, dim=-1)
         if ranges is None:
-            rmspe, min_idx = torch.min(rmspe_angle, dim=-1)
+            rmspe, min_idx = torch.min(rmspe_angle_all_permutations, dim=-1)
         else:
-            err_distance = (ranges_pred[:, perm].to(device) - torch.tile(ranges[:, None, :], (1, num_of_perm, 1)).to(
-                device))
-            rmspe_distance = np.sqrt(1 / num_sources) * torch.linalg.norm(err_distance, dim=-1)
-            rmspe_angle, min_idx = torch.min(rmspe_angle, dim=-1)
-            # always consider the permutation which yields the minimal RMSPE over the angles.
-            rmspe_distance = torch.gather(rmspe_distance, 1, min_idx.unsqueeze(0)).squeeze()
-            rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * rmspe_distance
+            rmspe_angle, min_idx = torch.min(rmspe_angle_all_permutations, dim=-1)
+            # create the projected permutation using the min_idx
+            projected_permutations = torch.tensor(perm, dtype=torch.long)[min_idx]
+            projected_ranges_pred = torch.gather(ranges_pred, 1, projected_permutations)
+            projected_err_ranges = projected_ranges_pred - ranges
+            projected_rmse_ranges = np.sqrt(1 / num_sources) * torch.linalg.norm(projected_err_ranges, dim=-1)
+
+
+            rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * projected_rmse_ranges
         result = torch.sum(rmspe)
         if ranges is None:
             return result
         else:
             result_angle = torch.sum(rmspe_angle)
-            result_distance = torch.sum(rmspe_distance)
+            result_distance = torch.sum(projected_rmse_ranges)
             return result, result_angle, result_distance
 
     def adjust_balance_factor(self, loss=None):
-
         self.balance_factor = 0.1
-
-
-class MSPELoss(nn.Module):
-    """Mean Square Periodic Error (MSPE) loss function.
-    This loss function calculates the MSPE between the predicted values and the target values.
-    The predicted values and target values are expected to be in radians.
-
-    Args:
-        None
-
-    Attributes:
-        None
-
-    Methods:
-        forward(doa_predictions: torch.Tensor, doa: torch.Tensor) -> torch.Tensor:
-            Computes the MSPE loss between the predictions and target values.
-
-    Example:
-        criterion = MSPELoss()
-        predictions = torch.tensor([0.5, 1.2, 2.0])
-        targets = torch.tensor([0.8, 1.5, 1.9])
-        loss = criterion(predictions, targets)
-    """
-
-    def __init__(self):
-        super(MSPELoss, self).__init__()
-
-    def forward(self, doa_predictions: torch.Tensor, doa,
-                distance_predictions: torch.Tensor = None, distance: torch.Tensor = None):
-        """Compute the RMSPE loss between the predictions and target values.
-        The forward method takes two input tensors: doa_predictions and doa.
-        The predicted values and target values are expected to be in radians.
-        The method iterates over the batch dimension and calculates the RMSPE loss for each sample in the batch.
-        It utilizes the permute_prediction function to generate all possible permutations of the predicted values
-        to consider all possible alignments. For each permutation, it calculates the error between the prediction
-        and target values, applies modulo pi to ensure the error is within the range [-pi/2, pi/2], and then calculates the RMSPE.
-        The minimum RMSPE value among all permutations is selected for each sample.
-        Finally, the method sums up the RMSPE values for all samples in the batch and returns the result as the computed loss.
-
-        Args:
-            doa_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
-            doa (torch.Tensor): Target values tensor of shape (batch_size, num_targets).
-            distance_predictions (torch.Tensor): Predicted values tensor of shape (batch_size, num_predictions).
-            The default value is None.
-            distance (torch.Tensor): Target values tensor of shape (batch_size, num_targets).The default value is None.
-
-        Returns:
-            torch.Tensor: The computed MSPE loss.
-
-        Raises:
-            None
-        """
-        rmspe = []
-        for iter in range(doa_predictions.shape[0]):
-            rmspe_list = []
-            batch_predictions = doa_predictions[iter].to(device)
-            targets = doa[iter].to(device)
-            prediction_perm = permute_prediction(batch_predictions).to(device)
-            for prediction in prediction_perm:
-                # Calculate error with modulo pi
-                error = (((prediction - targets) + (np.pi / 2)) % np.pi) - np.pi / 2
-                # Calculate MSE over all permutations
-                rmspe_val = (1 / len(targets)) * (torch.linalg.norm(error) ** 2)
-                rmspe_list.append(rmspe_val)
-            rmspe_tensor = torch.stack(rmspe_list, dim=0)
-            rmspe_min = torch.min(rmspe_tensor)
-            # Choose minimal error from all permutations
-            rmspe.append(rmspe_min)
-        result = torch.sum(torch.stack(rmspe, dim=0))
-
-        if distance_predictions is not None:
-            if distance is None:
-                raise Exception("Target distances values are missing!")
-            mse_loss = nn.MSELoss()
-            distance_loss = mse_loss(distance_predictions, distance)
-            result += distance_loss
-        return result
-
-
-def RMSPE(doa_predictions: np.ndarray, doa: np.ndarray,
-          distance_predictions: np.ndarray = None, distance: np.ndarray = None, is_separted: bool = False):
-    """
-    Calculate the Root Mean Square Periodic Error (RMSPE) between the DOA predictions and target DOA values.
-
-    Args:
-        doa_predictions (np.ndarray): Array of DOA predictions.
-        doa (np.ndarray): Array of target DOA values.
-        distance_predictions (np.ndarray):
-        distance (distance):
-
-    Returns:
-        float: The computed RMSPE value.
-
-    Raises:
-        None
-    """
-    balance_factor = BALANCE_FACTOR
-    rmspe_list = []
-    rmspe_angle_list = []
-    rmspe_distance_list = []
-
-    if distance_predictions is not None:
-        for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))),
-                                     list(permutations(distance_predictions, len(distance_predictions)))):
-            p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
-            doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
-            # Calculate error with modulo pi
-            error_angle = (((p_doa - doa) + np.pi / 2) % np.pi) - (np.pi / 2)
-            error_distance = (p_distance - distance)
-            # Calculate RMSE over all permutations
-            rmspe_angle = (1 / np.sqrt(len(p_doa), dtype=np.float64)) * np.linalg.norm(error_angle)
-            rmspe_distance = (1 / np.sqrt(len(p_distance), dtype=np.float64)) * np.linalg.norm(error_distance)
-            rmspe_val = balance_factor * rmspe_angle + (1 - balance_factor) * rmspe_distance
-            rmspe_list.append(rmspe_val)
-            rmspe_angle_list.append(rmspe_angle)
-            rmspe_distance_list.append(rmspe_distance)
-        # Choose minimal error from all permutations
-        if is_separted:
-            rmspe, min_idx = np.min(rmspe_list), np.argmin(rmspe_list)
-            rmspe_angle = rmspe_angle_list[min_idx]
-            rmspe_distance = rmspe_distance_list[min_idx]
-            res = rmspe, rmspe_angle, rmspe_distance
-        else:
-            res = np.min(rmspe_list)
-    else:
-        for p_doa in list(permutations(doa_predictions, len(doa_predictions))):
-            p_doa = np.array(p_doa, dtype=np.float32)
-            doa = np.array(doa, dtype=np.float64)
-            # Calculate error with modulo pi
-            error = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2)
-            # Calculate RMSE over all permutations
-            rmspe = (1 / np.sqrt(len(p_doa))) * np.linalg.norm(error)
-            rmspe_list.append(rmspe)
-        # Choose minimal error from all permutations
-        res = np.min(rmspe_list)
-
-    return res
-
-
-def MSPE(doa_predictions: np.ndarray, doa: np.ndarray,
-         distance_predictions: np.ndarray = None, distance: np.ndarray = None, is_separted: bool = False):
-    """Calculate the Mean Square Percentage Error (RMSPE) between the DOA predictions and target DOA values.
-
-    Args:
-        doa_predictions (np.ndarray): Array of DOA predictions.
-        doa (np.ndarray): Array of target DOA values.
-
-    Returns:
-        float: The computed RMSPE value.
-
-    Raises:
-        None
-    """
-    balance_factor = BALANCE_FACTOR
-    mspe_list = []
-    mspe_angle_list = []
-    mspe_distance_list = []
-    for p_doa, p_distance in zip(list(permutations(doa_predictions, len(doa_predictions))),
-                                 list(permutations(distance_predictions, len(distance_predictions)))):
-        p_doa, p_distance = np.array(p_doa, dtype=np.float32), np.array(p_distance, dtype=np.float32)
-        doa, distance = np.array(doa, dtype=np.float64), np.array(distance, dtype=np.float64)
-        # Calculate error with modulo pi
-        error_angle = ((p_doa - doa) + np.pi / 2) % np.pi - (np.pi / 2)
-        error_distance = (p_distance - distance)
-        # Calculate MSE over all permutations
-        mspe_angle = (1 / len(p_doa)) * (np.linalg.norm(error_angle) ** 2)
-        mspe_distance = (1 / len(p_distance)) * (np.linalg.norm(error_distance) ** 2)
-        mspe_val = balance_factor * mspe_angle + (1 - balance_factor) * mspe_distance
-        mspe_list.append(mspe_val)
-        mspe_angle_list.append(mspe_angle)
-        mspe_distance_list.append(mspe_distance)
-    if is_separted:
-        mspe, min_idx = np.min(mspe_list), np.argmin(mspe_list)
-        mspe_angle = mspe_angle_list[min_idx]
-        mspe_distance = mspe_distance_list[min_idx]
-        res = mspe, mspe_angle, mspe_distance
-    else:
-        res = np.min(mspe_list)
-    return res
 
 
 class CartesianLoss(nn.Module):
@@ -407,10 +214,10 @@ class CartesianLoss(nn.Module):
         num_of_perm = len(perm)
 
         error = torch.tile(coords_true[:, None, :, :], (1, num_of_perm, 1, 1)) - coords_pred[:, perm]
-        loss = torch.sqrt(torch.sum(error ** 2, dim=-1))
-        loss = torch.mean(loss, dim=-1)
-        loss = torch.min(loss, dim=-1)
-        return torch.sum(loss[0])
+        cartesian_distance_all_permutations = torch.sqrt(torch.sum(error ** 2, dim=-1))
+        mean_cartesian_distance_all_permutations = torch.mean(cartesian_distance_all_permutations, dim=-1)
+        mean_cartesian_distance = torch.min(mean_cartesian_distance_all_permutations, dim=-1)
+        return torch.sum(mean_cartesian_distance[0])
 
 
 class MusicSpectrumLoss(nn.Module):

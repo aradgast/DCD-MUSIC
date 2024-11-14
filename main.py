@@ -30,14 +30,14 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "SNR": [-10, -5, 0, 5, 10],
+    # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
 }
 
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": False,
+    "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
@@ -83,11 +83,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1000,
-    "train_test_ratio": 1,
+    "samples_size": 4096,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 2,
+    "epochs": 50,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -128,7 +128,7 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        "Beamformer",
+        # "Beamformer",
         "2D-MUSIC",
         # "CCRB"
     ]

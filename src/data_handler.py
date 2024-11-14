@@ -47,7 +47,7 @@ def create_dataset(
         true_doa: list = None,
         true_range: list = None,
         phase: str = None,
-):
+        ) -> tuple:
     """
     Generates a synthetic dataset based on the specified parameters and model type.
 
@@ -55,7 +55,6 @@ def create_dataset(
     -----
         system_model_params (SystemModelParams): an instance of SystemModelParams
         samples_size (float): The size of the dataset.
-        model_type (str): The type of the model.
         save_datasets (bool, optional): Specifies whether to save the dataset. Defaults to False.
         datasets_path (Path, optional): The path for saving the dataset. Defaults to None.
         true_doa (list, optional): Predefined angles. Defaults to None.
@@ -64,7 +63,7 @@ def create_dataset(
 
     Returns:
     --------
-        tuple: A tuple containing the desired dataset comprised of (X-samples, Y-labels).
+        tuple: A tuple containing the desired dataset and the samples model.
 
     """
     time_series = []
@@ -112,7 +111,7 @@ def create_dataset(
 
 
 # def read_data(Data_path: str) -> torch.Tensor:
-def read_data(path: str):
+def read_data(path: str or Path) -> torch.Tensor:
     """
     Reads data from a file specified by the given path.
 
@@ -138,81 +137,6 @@ def read_data(path: str):
     data = torch.load(path)
     return data
 
-
-# def autocorrelation_matrix(X: torch.Tensor, lag: int) -> torch.Tensor:
-def autocorrelation_matrix(X: torch.Tensor, lag: int):
-    """
-    Computes the autocorrelation matrix for a given lag of the input samples.
-
-    Args:
-    -----
-        X (torch.Tensor): Samples matrix input with shape [N, T].
-        lag (int): The requested delay of the autocorrelation calculation.
-
-    Returns:
-    --------
-        torch.Tensor: The autocorrelation matrix for the given lag.
-
-    """
-    meu = torch.mean(X, dim=1).reshape(-1, 1).to("cpu")
-    center_x = X.to("cpu") - meu
-    x1 = center_x[:, :center_x.shape[1] - lag].to("cpu").to(torch.complex128)
-    x2 = torch.conj(center_x[:, lag:]).T.to("cpu").to(torch.complex128)
-    Rx_lag = torch.matmul(x1, x2) / (center_x.shape[-1] - lag - 1)
-    Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), 0).to("cpu")
-    return Rx_lag
-
-
-# def create_autocorrelation_tensor(X: torch.Tensor, tau: int) -> torch.Tensor:
-def create_autocorrelation_tensor(X: torch.Tensor, tau: int):
-    """
-    Returns a tensor containing all the autocorrelation matrices for lags 0 to tau.
-
-    Args:
-    -----
-        X (torch.Tensor): Observation matrix input with size (BS, N, T).
-        tau (int): Maximal time difference for the autocorrelation tensor.
-
-    Returns:
-    --------
-        torch.Tensor: Tensor containing all the autocorrelation matrices,
-                    with size (Batch size, tau, 2N, N).
-
-    Raises:
-    -------
-        None
-
-    """
-    Rx_tau = []
-    for i in range(tau):
-        Rx_tau.append(autocorrelation_matrix(X, lag=i))
-    Rx_autocorr = torch.stack(Rx_tau, dim=0)
-    return Rx_autocorr
-
-
-# def create_cov_tensor(X: torch.Tensor) -> torch.Tensor:
-def create_cov_tensor(X: torch.Tensor):
-    """
-    Creates a 3D tensor of size (NxNx3) containing the real part, imaginary part, and phase component of the covariance matrix.
-
-    Args:
-    -----
-        X (torch.Tensor): Observation matrix input with size (N, T).
-
-    Returns:
-    --------
-        Rx_tensor (torch.Tensor): Tensor containing the auto-correlation matrices, with size (Batch size, N, N, 3).
-
-    Raises:
-    -------
-        None
-
-    """
-    Rx = torch.cov(X)
-    Rx_tensor = torch.stack((torch.real(Rx), torch.imag(Rx), torch.angle(Rx)), 2)
-    return Rx_tensor
-
-
 def load_datasets(
         system_model_params: SystemModelParams,
         samples_size: float,
@@ -226,7 +150,6 @@ def load_datasets(
     Args:
     -----
         system_model_params (SystemModelParams): an instance of SystemModelParams.
-        model_type (str): The type of the model.
         samples_size (float): The size of the overall dataset.
         datasets_path (Path): The path to the datasets.
         train_test_ratio (float): The ration between train and test datasets.
@@ -234,15 +157,12 @@ def load_datasets(
 
     Returns:
     --------
-        List: A list containing the loaded datasets.
+        TimeSeriesDataset or Tuple: The desired dataset, if for test, returns the generic test dataset and the samples model.
 
     """
     # Define test set size
     test_samples_size = int(train_test_ratio * samples_size)
     # Generate datasets filenames
-    # model_dataset_filename = f"{model_type}_DataSet" + set_dataset_filename(
-    #     system_model_params, test_samples_size
-    # )
     generic_dataset_filename = f"Generic_DataSet" + set_dataset_filename(
         system_model_params, test_samples_size
     )
@@ -264,12 +184,6 @@ def load_datasets(
         except Exception as e:
             print(e)
             Exception(f"load_datasets: Training dataset doesn't exist")
-    # Load test dataset
-    # try:
-    #     test_dataset = read_data(datasets_path / "test" / model_dataset_filename)
-    #     datasets.append(test_dataset)
-    # except:
-    #     raise Exception("load_datasets: Test dataset doesn't exist")
     else:
         # Load generic test dataset
         try:
@@ -317,6 +231,12 @@ def set_dataset_filename(system_model_params: SystemModelParams, samples_size: f
 
 
 class TimeSeriesDataset(Dataset):
+    """
+    A class for creating a dataset of time series.
+    X is for the signal - a list of B elements, each element is a tensor of shape (N, T)
+    Y is for the labels - a list of B elements, each element is a tensor of shape (M, ) in the far field case or (2M, ) in the near field case.
+    M is for the number of sources - a list of B elements, each element is an integer.
+    """
     def __init__(self, X, Y, M):
         self.X = X
         self.Y = Y
@@ -331,6 +251,15 @@ class TimeSeriesDataset(Dataset):
 
 
 def collate_fn(batch):
+    """
+    Collate function for the dataset loader.
+    Args:
+        batch:  list of tuples, each tuple contains the time series, the number of sources and the labels.
+
+    Returns:
+
+
+    """
     time_series, source_num, labels = zip(*batch)
 
     # Find the maximum length in this batch
@@ -366,6 +295,10 @@ def collate_fn(batch):
 
 
 class SameLengthBatchSampler(Sampler):
+    """
+    A class for creating batches contains samples with the same number of sources to allow batch wise operations.
+
+    """
     def __init__(self, data_source, batch_size, shuffle=True):
         try:
             super().__init__()
