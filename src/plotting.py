@@ -214,36 +214,22 @@ def plot_results(loss_dict: dict, plot_acc: bool = False, save_to_file: bool = F
     snr_plot_path = base_plot_path / "SNR"
     snapshots_plot_path = base_plot_path / "Snapshots"
     steering_noise_plot_path = base_plot_path / "SteeringNoise"
+    number_of_sources_plot_path = base_plot_path / "NumberOfSources"
     base_plot_path.mkdir(parents=True, exist_ok=True)
     snr_plot_path.mkdir(parents=True, exist_ok=True)
     snapshots_plot_path.mkdir(parents=True, exist_ok=True)
     steering_noise_plot_path.mkdir(parents=True, exist_ok=True)
+    number_of_sources_plot_path.mkdir(parents=True, exist_ok=True)
+    plot_paths = {"SNR": snr_plot_path, "T": snapshots_plot_path, "eta": steering_noise_plot_path, "M": number_of_sources_plot_path}
+
 
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
     plt.rcParams.update({'font.size': 18})
-    for scenrio, dict_values in loss_dict.items():
-        if scenrio == "SNR":
-            plot_path = os.path.join(snr_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
-            plot_test_results(scenrio, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc)
-            plot_test_results(scenrio, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=plot_acc)
-        elif scenrio == "T":
-            plot_path = os.path.join(snapshots_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
-            plot_test_results(scenrio, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file,
-                              plot_acc=plot_acc)
-            plot_test_results(scenrio, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file,
-                              plot_acc=plot_acc)
-        elif scenrio == "eta":
-            plot_path = os.path.join(steering_noise_plot_path, dt_string_for_save)
-            plot_test_results(scenrio, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
-            plot_test_results(scenrio, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file,
-                              plot_acc=plot_acc)
-            plot_test_results(scenrio, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file,
-                              plot_acc=plot_acc)
-        else:
-            raise ValueError(f"Unknown scenario: {scenrio}")
-
+    for scenario, dict_values in loss_dict.items():
+        plot_path = os.path.join(plot_paths[scenario], dt_string_for_save)
+        plot_test_results(scenario, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
+        plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=False)
+        plot_test_results(scenario, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=False)
     return
 
 
@@ -277,10 +263,10 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         test_values = np.array(list(res.keys())) * 2
     plt_res, plt_acc = parse_loss_results_for_plotting(res, tested_param)
     for method, loss_ in plt_res.items():
-        if loss_.get("Accuracy") is not None and method != "TransMUSIC" and test == "SNR":
-            label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
-        else:
-            label = method
+        # if loss_.get("Accuracy") is not None and method != "TransMUSIC" and test == "SNR":
+        #     label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
+        # else:
+        label = method
         if not np.isnan((loss_.get(tested_param))).any():
             ax.plot(test_values, loss_[tested_param], **plot_styles[method.split("_")[0]], label=label)
     # decrease the size of the legend
@@ -292,12 +278,17 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         ax.set_xlabel("T")
     elif test == "eta":
         ax.set_xlabel("$\eta[{\lambda}/{2}]$")
+    elif test == "M":
+        ax.set_xlabel("Number Of Sources")
     ax.set_ylabel(f"RMSPE [{units}]")
     # ax.set_title("Overall RMSPE loss")
     if tested_param == "Angle":
         ax.set_yscale("log")
+        ax.set_title("Angle RMSPE loss")
     else:
         ax.set_yscale("linear")
+    if tested_param == "Distance":
+        ax.set_title("Range RMSPE loss")
     ax.set_xticks(list(test_values))
     fig.tight_layout()
     if save_to_file:

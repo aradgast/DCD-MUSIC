@@ -1,22 +1,22 @@
-"""Subspace-Net main script 
-    Details
-    -------
-    Name: main.py
-    Authors: D. H. Shmuel, Arad Gast
-    Created: 01/10/21
-    Edited: 31/05/24
+"""
+This script is used to run the simulation with the given parameters. The parameters can be set in the script or
+by using the command line arguments. The script will run the simulation with the given parameters and save the
+results to the results folder. The results will include the learning curves, RMSE results, and the accuracy results
+of the evaluation. The results will be saved in the results folder in the project directory.
 
-    Purpose
-    --------
-    This script allows the user to apply the proposed algorithms,
-    by wrapping all the required procedures and parameters for the simulation.
-    This scripts calls the following functions:
-        * create_dataset: For creating training and testing datasets 
-        * training: For training DR-MUSIC model
-        * evaluate_dnn_model: For evaluating subspace hybrid models
-
-    This script requires that requirements.txt will be installed within the Python
-    environment you are running this script in.
+The script can be run with the following command line arguments:
+    --snr: SNR value
+    --N: Number of antennas
+    --M: Number of sources
+    --field_type: Field type
+    --signal_nature: Signal nature
+    --model_type: Model type
+    --train: Train model
+    --train_criteria: Training criteria
+    --eval: Evaluate model
+    --eval_criteria: Evaluation criteria
+    --samples_size: Samples size
+    --train_test_ratio: Train test ratio
 
 """
 # Imports
@@ -30,27 +30,28 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    "SNR": [-10, -5, 0, 5, 10],
+    # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    "M": [2, 3, 4, 5, 6, 7],
 }
 
 simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": False,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
+    "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
-    "EVALUATE_MODE": False,
-    "PLOT_RESULTS": False,  # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": False,  # if True, the RMSE results of evaluation will be plotted
+    "EVALUATE_MODE": True,
+    "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
+    "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": False,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": None,  # number of sources
+    "M": 3,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
@@ -58,13 +59,13 @@ system_model_params = {
     "eta": 0.0,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
-    "doa_range": 55,
+    "doa_range": 90,
     "doa_resolution": 1,
     "max_range_ratio_to_limit": 0.4,
     "range_resolution": 1,
 }
 model_config = {
-    "model_type": "TransMUSIC",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
+    "model_type": "SubspaceNet",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
@@ -83,11 +84,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 4096,
-    "train_test_ratio": .1,
+    "samples_size": 100,
+    "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 2,
+    "epochs": 300,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -102,20 +103,20 @@ evaluation_params = {
     "criterion": "cartesian",  # rmse, rmspe, mse, mspe, cartesian
     "balance_factor": 1.0,
     "models": {
-        "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
-                     "diff_method": ("esprit", "music_1D"),
-                     "train_loss_type": ("rmspe", "rmspe")},
-        "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
-                           "diff_method": ("music_1D", "music_1D"),
-                           "train_loss_type": ("music_spectrum", "rmspe")},
-        "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
-                           "diff_method": ("esprit", "music_1D"),
-                           "train_loss_type": ("rmspe", "music_spectrum")},
-        "SubspaceNet": {"tau": 8,
-                        "diff_method": "music_2D",
-                        "train_loss_type": "music_spectrum",
-                        "field_type": "Near"},
-        "TransMUSIC": {},
+        # "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
+        #              "diff_method": ("esprit", "music_1D"),
+        #              "train_loss_type": ("rmspe", "rmspe")},
+        # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
+        #                    "diff_method": ("music_1D", "music_1D"),
+        #                    "train_loss_type": ("music_spectrum", "rmspe")},
+        # "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
+        #                    "diff_method": ("esprit", "music_1D"),
+        #                    "train_loss_type": ("rmspe", "music_spectrum")},
+        # "SubspaceNet": {"tau": 8,
+        #                 "diff_method": "music_2D",
+        #                 "train_loss_type": "music_spectrum",
+        #                 "field_type": "Near"},
+        # "TransMUSIC": {},
     },
     "augmented_methods": [
         # "mvdr",
@@ -128,8 +129,8 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        # "Beamformer",
-        # "2D-MUSIC",
+        "Beamformer",
+        "2D-MUSIC",
         # "CCRB"
     ]
 }

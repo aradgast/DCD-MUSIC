@@ -1,5 +1,8 @@
-# This is a runner script for training the DCD model.
-# It is a simple script that create the data, the model and train it.
+"""
+This is a runner script for training the DCD model.
+It is a simple script that create the data, the model and train it over all 3 steps.
+
+"""
 
 import sys
 from src.training import *

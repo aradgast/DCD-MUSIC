@@ -1,3 +1,14 @@
+"""
+This script is used to run an end to end simulation, including creating or loading data, training or loading
+a NN model and do an evaluation for the algorithms.
+The type of the run is based on the scenrio_dict. the avialble scrorios are:
+- SNR: a list of SNR values to be tested
+- T: a list of number of snapshots to be tested
+- eta: a list of steering vector error values to be tested
+- M: a list of number of sources to be tested
+
+
+"""
 # Imports
 import sys
 import os
@@ -245,6 +256,7 @@ def run_simulation(**kwargs):
     default_snr = kwargs["system_model_params"]["snr"]
     default_T = kwargs["system_model_params"]["T"]
     default_eta = kwargs["system_model_params"]["eta"]
+    default_m = kwargs["system_model_params"]["M"]
     for key, value in kwargs["scenario_dict"].items():
         if key == "SNR":
             loss_dict["SNR"] = {snr: None for snr in value}
@@ -270,6 +282,14 @@ def run_simulation(**kwargs):
                 loss = __run_simulation(**kwargs)
                 loss_dict["eta"][eta] = loss
                 kwargs["system_model_params"]["eta"] = default_eta
+        if key == "M":
+            loss_dict["M"] = {m: None for m in value}
+            print(f"Testing M values: {value}")
+            for m in value:
+                kwargs["system_model_params"]["M"] = m
+                loss = __run_simulation(**kwargs)
+                loss_dict["M"][m] = loss
+                kwargs["system_model_params"]["M"] = default_m
     if None not in list(next(iter(loss_dict.values())).values()):
         print_loss_results_from_simulation(loss_dict)
         if kwargs["simulation_commands"]["PLOT_LOSS_RESULTS"]:

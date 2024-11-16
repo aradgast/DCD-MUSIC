@@ -86,20 +86,20 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
     model = model_config.model
     path = os.path.join(Path(__file__).parent.parent, "data", "weights", "final_models", model.get_model_file_name())
     try:
-        model.load_state_dict(torch.load(path, map_location=device))
+        model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
     except FileNotFoundError as e:
         print("####################################")
-        print(e)
-        print("####################################")
-        try:
-            print(f"Model {model_name}'s weights not found in final_models, trying to load from temp weights.")
-            path = os.path.join(Path(__file__).parent.parent, "data", "weights", model.get_model_file_name())
-            model.load_state_dict(torch.load(path))
-        except FileNotFoundError as e:
-            print("####################################")
-            print(e)
-            print("####################################")
-            warnings.warn(f"get_model: Model {model_name}'s weights not found")
+        raise e
+        # print("####################################")
+        # try:
+        #     print(f"Model {model_name}'s weights not found in final_models, trying to load from temp weights.")
+        #     path = os.path.join(Path(__file__).parent.parent, "data", "weights", model.get_model_file_name())
+        #     model.load_state_dict(torch.load(path))
+        # except FileNotFoundError as e:
+        #     print("####################################")
+        #     print(e)
+        #     print("####################################")
+        #     warnings.warn(f"get_model: Model {model_name}'s weights not found")
     return model.to(device)
 
 

@@ -239,7 +239,7 @@ class TrainingParams(object):
             self.optimizer, step_size=step_size, gamma=gamma
         )
         # self.schedular = lr_scheduler.ReduceLROnPlateau(
-        #     self.optimizer, mode="min", factor=gamma, patience=10, verbose=True
+        #     self.optimizer, mode="min", factor=gamma, patience=20, verbose=True
         # )
         return self
 
