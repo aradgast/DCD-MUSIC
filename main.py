@@ -33,14 +33,14 @@ scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
-    "M": [2, 3, 4, 5, 6, 7],
+    # "M": [2, 3, 4, 5, 6, 7],
 }
 
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": False,
+    "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
+    "TRAIN_MODEL": True,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
@@ -51,7 +51,7 @@ simulation_commands = {
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 3,  # number of sources
+    "M": None,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
@@ -59,7 +59,7 @@ system_model_params = {
     "eta": 0.0,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
-    "doa_range": 90,
+    "doa_range": 55,
     "doa_resolution": 1,
     "max_range_ratio_to_limit": 0.4,
     "range_resolution": 1,
@@ -84,11 +84,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
-    "train_test_ratio": 1,
+    "samples_size": 4096,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 300,
+    "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
@@ -112,10 +112,10 @@ evaluation_params = {
         # "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
         #                    "diff_method": ("esprit", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        # "SubspaceNet": {"tau": 8,
-        #                 "diff_method": "music_2D",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "Near"},
+        "SubspaceNet": {"tau": 8,
+                        "diff_method": "music_2D",
+                        "train_loss_type": "music_spectrum",
+                        "field_type": "Near"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [
@@ -129,8 +129,8 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        "Beamformer",
-        "2D-MUSIC",
+        # "Beamormer",
+        # "2D-MUSIC",
         # "CCRB"
     ]
 }

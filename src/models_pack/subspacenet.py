@@ -62,7 +62,7 @@ class SubspaceNet(ParentModel):
         self.diff_method = None
         self.train_loss_type = train_loss_type
         self.field_type = field_type
-        self.p = 0.1
+        self.p = 0.2
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)

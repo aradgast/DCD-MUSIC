@@ -221,11 +221,15 @@ class CartesianLoss(nn.Module):
 
 
 class MusicSpectrumLoss(nn.Module):
-    def __init__(self, array, sensors_distance):
+    def __init__(self, array: torch.Tensor, sensors_distance: float, mode:str = "inverse_spectrum"):
         super(MusicSpectrumLoss, self).__init__()
         self.array = array
         self.sensors_distance = sensors_distance
         self.number_sensors = array.shape[0]
+        if mode not in ["spectrum", "inverse_spectrum"]:
+            raise Exception(f"MusicSpectrumLoss: mode {mode} is not defined")
+        self.mode = mode
+
 
     def forward(self, **kwargs):
         if "ranges" in kwargs:
@@ -234,35 +238,33 @@ class MusicSpectrumLoss(nn.Module):
             return self.__forward_without_ranges(**kwargs)
 
     def __forward_without_ranges(self, **kwargs):
-        theta = kwargs["angles"].unsqueeze(-1)
+        angles = kwargs["angles"].unsqueeze(-1)
         time_delay = torch.einsum("nm, ban -> ban",
                                   self.array,
-                                  torch.sin(theta).repeat(1, 1, self.number_sensors) * self.sensors_distance)
+                                  torch.sin(angles).repeat(1, 1, self.number_sensors) * self.sensors_distance)
         search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
         var1 = torch.bmm(search_grid.conj(), kwargs["noise_subspace"].to(torch.complex128))
         inverse_spectrum = torch.norm(var1, dim=-1)
-
-        # spectrum = 1 / (inverse_spectrum * self.tolerance)
-        loss = torch.sum(inverse_spectrum, dim=1).sum()
+        if self.mode == "inverse_spectrum":
+            loss = torch.sum(inverse_spectrum, dim=1).sum()
+        elif self.mode == "spectrum":
+            loss = -torch.sum(1 / inverse_spectrum, dim=1).sum()
         return loss
 
     def __forward_with_ranges(self, **kwargs):
-        # TODO: change the implementation to calculate only the diagonal elements of the matrix to save computation.
-        theta = kwargs["angles"][:, :, None]
-        distances = kwargs["ranges"][:, :, None].to(torch.float64)
+        angles = kwargs["angles"][:, :, None]
+        ranges = kwargs["ranges"][:, :, None].to(torch.float64)
         array_square = torch.pow(self.array, 2).to(torch.float64)
         noise_subspace = kwargs["noise_subspace"].to(torch.complex128)
 
         first_order = torch.einsum("nm, bna -> bna",
                                    self.array,
-                                   torch.sin(theta).repeat(1, 1, self.number_sensors).transpose(1, 2) * self.sensors_distance)
+                                   torch.sin(angles).repeat(1, 1, self.number_sensors).transpose(1, 2) * self.sensors_distance)
 
-        second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * self.sensors_distance, 2),
-                                        distances)
+        second_order = -0.5 * torch.div(torch.pow(torch.cos(angles) * self.sensors_distance, 2),
+                                        ranges)
         second_order = second_order.repeat(1, 1, self.number_sensors)
         second_order = torch.einsum("nm, bna -> bna", array_square, second_order.transpose(1, 2))
-
-        # first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
 
         time_delay = first_order + second_order
 
@@ -272,8 +274,10 @@ class MusicSpectrumLoss(nn.Module):
                             noise_subspace)
         # get the norm value for each element in the batch.
         inverse_spectrum = torch.norm(var1, dim=-1) ** 2
-        # spectrum = 1 / inverse_spectrum
-        loss = torch.sum(inverse_spectrum, dim=-1).sum()
+        if self.mode == "inverse_spectrum":
+            loss = torch.sum(inverse_spectrum, dim=-1).sum()
+        elif self.mode == "spectrum":
+            loss = -torch.sum(1 / inverse_spectrum, dim=-1).sum()
         return loss
 
 
@@ -293,8 +297,8 @@ def set_criterions(criterion_name: str, balance_factor: float = 0.0):
     """
     if criterion_name.startswith("rmspe"):
         criterion = RMSPELoss(balance_factor)
-    elif criterion_name.startswith("mspe"):
-        criterion = MSPELoss()
+    # elif criterion_name.startswith("mspe"):
+    #     criterion = MSPELoss()
     elif criterion_name.startswith("mse"):
         criterion = nn.MSELoss()
     elif criterion_name.startswith("rmse"):
