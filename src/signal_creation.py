@@ -105,7 +105,7 @@ class Samples(SystemModel):
             self.doa = np.array(create_doa_with_gap(gap=15, M=M)) * D2R
         else:
             # Generate
-            self.doa = np.array(doa) * D2R
+            self.doa = np.deg2rad(doa)
 
     def set_range(self, distance: list | np.ndarray, M) -> np.ndarray:
         """
@@ -137,7 +137,7 @@ class Samples(SystemModel):
                                               max_val=np.floor(self.fraunhofer * self.params.max_range_ratio_to_limit),
                                               distance_resolution=self.params.range_resolution)
         else:
-            self.distances = distance
+            self.distances = np.array(distance)
 
     def samples_creation(
         self,
