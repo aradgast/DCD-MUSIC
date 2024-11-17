@@ -225,7 +225,7 @@ class MusicSpectrumLoss(nn.Module):
         super(MusicSpectrumLoss, self).__init__()
         self.array = array
         self.sensors_distance = sensors_distance
-        self.number_sensors = array.shape[1]
+        self.number_sensors = array.shape[0]
 
     def forward(self, **kwargs):
         if "ranges" in kwargs:
@@ -255,26 +255,23 @@ class MusicSpectrumLoss(nn.Module):
 
         first_order = torch.einsum("nm, bna -> bna",
                                    self.array,
-                                   torch.sin(theta).repeat(1, 1, self.number_sensors).transpose(1,
-                                                                                                2) * self.sensors_distance)
+                                   torch.sin(theta).repeat(1, 1, self.number_sensors).transpose(1, 2) * self.sensors_distance)
 
         second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * self.sensors_distance, 2),
-                                        distances.transpose(1, 2))
-        second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.number_sensors)
-        second_order = torch.einsum("nm, bnda -> bnda",
-                                    array_square,
-                                    second_order.transpose(3, 1).transpose(2, 3))
+                                        distances)
+        second_order = second_order.repeat(1, 1, self.number_sensors)
+        second_order = torch.einsum("nm, bna -> bna", array_square, second_order.transpose(1, 2))
 
-        first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
+        # first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
 
         time_delay = first_order + second_order
 
         search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
-        var1 = torch.einsum("badk, bkl -> badl",
-                            search_grid.conj().transpose(1, 3).transpose(1, 2)[:, :, :, :noise_subspace.shape[1]],
+        var1 = torch.einsum("bak, bkl -> bal",
+                            search_grid.conj().transpose(1, 2)[:, :, :noise_subspace.shape[1]],
                             noise_subspace)
         # get the norm value for each element in the batch.
-        inverse_spectrum = torch.linalg.diagonal(torch.norm(var1, dim=-1)) ** 2
+        inverse_spectrum = torch.norm(var1, dim=-1) ** 2
         # spectrum = 1 / inverse_spectrum
         loss = torch.sum(inverse_spectrum, dim=-1).sum()
         return loss
