@@ -1,30 +1,8 @@
-"""Subspace-Net 
-Details
-----------
-Name: criterions.py
-Authors: D. H. Shmuel
-Created: 01/10/21
-Edited: 03/06/23
-
-Purpose:
---------
-The purpose of this script is to define and document several loss functions (RMSPELoss and MSPELoss)
-and a helper function (permute_prediction) for calculating the Root Mean Square Periodic Error (RMSPE)
-and Mean Square Periodic Error (MSPE) between predicted values and target values.
-The script also includes a utility function RMSPE and MSPE that calculates the RMSPE and MSPE values
-for numpy arrays.
-
-This script includes the following Classes anf functions:
-
-* permute_prediction: A function that generates all possible permutations of a given prediction tensor.
-* RMSPELoss (class): A custom PyTorch loss function that calculates the RMSPE loss between predicted values
-    and target values. It inherits from the nn.Module class and overrides the forward method to perform
-    the loss computation.
-* MSPELoss (class): A custom PyTorch loss function that calculates the MSPE loss between predicted values
-  and target values. It inherits from the nn.Module class and overrides the forward method to perform the loss computation.
-* RMSPE (function): A function that calculates the RMSPE value between the DOA predictions and target DOA values for numpy arrays.
-* MSPE (function): A function that calculates the MSPE value between the DOA predictions and target DOA values for numpy arrays.
-* set_criterions(function): Set the loss criteria based on the criterion name.
+"""
+Implements the loss functions used for training the model.
+RMSPELoss: Root Mean Square Periodic Error loss function.
+CartesianLoss: Cartesian loss function.
+MusicSpectrumLoss: Music Spectrum loss function.
 
 """
 

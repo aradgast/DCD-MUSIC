@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import scipy as sc
+from numpy import dtype
 
 from src.system_model import SystemModel
 from src.methods_pack.subspace_method import SubspaceMethod
@@ -354,10 +355,13 @@ class MUSIC(SubspaceMethod):
     def __init_grid_params(self):
         angle_range = np.deg2rad(self.system_model.params.doa_range)
         angle_resolution = np.deg2rad(self.system_model.params.doa_resolution / 2)
+        angle_decimals = int(np.ceil(np.log10(1 / angle_resolution)))
+
         if self.system_model.params.field_type.startswith("Far"):
             # if it's the Far field case, need to init angles range.
             self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
                                             dtype=torch.float64).requires_grad_(True).to(torch.float64)
+            self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
         elif self.system_model.params.field_type.startswith("Near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
@@ -365,6 +369,9 @@ class MUSIC(SubspaceMethod):
             if self.estimation_params.startswith("angle"):
                 self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution,
                                                 device=device, dtype=torch.float64).requires_grad_(True).to(torch.float64)
+                self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
+
+
             if self.estimation_params.endswith("range"):
                 fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
                 distance_resolution = self.system_model.params.range_resolution / 2

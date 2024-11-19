@@ -4,6 +4,7 @@ SubspaceNet: model-based deep learning algorithm as described in:
 """
 import torch
 import torch.nn as nn
+from charset_normalizer.utils import range_scan
 from torch.optim import lr_scheduler
 from torch.autograd import Variable
 from sympy.unify.core import Variable
@@ -353,12 +354,12 @@ class SubspaceNet(ParentModel):
         angles = angles.to(device)
         ranges = ranges.to(device)
 
-        angles_pred, distance_pred, source_estimation, eigen_regularization = self(x, sources_num)
-        loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
+        angles_pred, ranges_pred, source_estimation, eigen_regularization = self(x, sources_num)
+        loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
 
         if is_test:
-            _, loss_angle, loss_range = self.test_loss_separated(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
+            _, loss_angle, loss_range = self.test_loss_separated(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
             loss = (loss, loss_angle, loss_range)
         return loss, acc
 
