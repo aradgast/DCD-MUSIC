@@ -48,9 +48,13 @@ class SystemModelParams:
     M = None
     N = None
     T = None
-    field_type = "Far"
-    signal_type = "NarrowBand"
+    field_type = "far"
+    signal_type = "narrowband"
     freq_values = [0, 500]
+    wavelength = 1
+    carrier_frequency = 3e8 / wavelength # 0.3 Ghz
+    signal_bandwidth = 500 # 500 Hz
+    number_subcarriers = 500
     signal_nature = "non-coherent"
     snr = 10
     eta = 0
@@ -72,6 +76,8 @@ class SystemModelParams:
         Returns:
             SystemModelParams: The SystemModelParams object.
         """
+        if isinstance(value, str):
+            value = value.lower()
         self.__setattr__(name, value)
         return self
 
@@ -121,37 +127,41 @@ class SystemModel(object):
     def define_scenario_params(self):
         """Defines the signal type parameters based on the specified frequency values."""
         freq_values = self.params.freq_values
+
+        min_frq = self.params.carrier_frequency - self.params.signal_bandwidth / 2
+        max_frq = self.params.carrier_frequency + self.params.signal_bandwidth / 2
         # Define minimal frequency value
-        self.min_freq = {"NarrowBand": None, "Broadband": freq_values[0]}
+        self.min_freq = {"narrowband": None, "broadband": min_frq}
         # Define maximal frequency value
-        self.max_freq = {"NarrowBand": None, "Broadband": freq_values[1]}
+        self.max_freq = {"narrowband": None, "broadband": max_frq}
         # Frequency range of interest
         self.f_rng = {
-            "NarrowBand": None,
-            "Broadband": np.linspace(
-                start=self.min_freq["Broadband"],
-                stop=self.max_freq["Broadband"],
-                num=self.max_freq["Broadband"] - self.min_freq["Broadband"],
+            "narrowband": 1,
+            "broadband": np.linspace(
+                start=self.min_freq["broadband"],
+                stop=self.max_freq["broadband"],
+                num=self.params.number_subcarriers,
                 endpoint=False,
             ),
         }
         # Define sampling rate as twice the maximal frequency
         self.f_sampling = {
-            "NarrowBand": None,
-            "Broadband": 2 * (self.max_freq["Broadband"] - self.min_freq["Broadband"]),
+            "narrowband": None,
+            "broadband": self.params.signal_bandwidth * 2,
         }
         # Define time axis
         self.time_axis = {
-            "NarrowBand": None,
-            "Broadband": np.linspace(
-                0, 1, self.f_sampling["Broadband"], endpoint=False
-            ),
+            "narrowband": None,
+            "broadband": np.arange(0, 1, 1 / self.f_sampling["broadband"]),
         }
+        # if self.params.signal_type.startswith("broadband"):
+        #     self.params.T = len(self.time_axis["broadband"])
         # distance between array elements
         self.dist_array_elems = {
-            "NarrowBand": 1 / 2,
-            "Broadband": 1
-                         / (2 * (self.max_freq["Broadband"] - self.min_freq["Broadband"])),
+            "narrowband": 1 / 2,
+            "broadband": 1 / 2,
+            # "broadband": 1
+            #              / (2 * (self.max_freq["broadband"] - self.min_freq["broadband"])),
         }
 
     def create_array(self):
@@ -169,7 +179,7 @@ class SystemModel(object):
         Returns:
             tuple: fraunhofer(float), fresnel(float)
         """
-        wavelength = 1
+        wavelength = self.params.wavelength
         spacing = wavelength / 2
         diemeter = (self.params.N - 1) * spacing
         fraunhofer = 2 * diemeter ** 2 / wavelength
@@ -179,44 +189,42 @@ class SystemModel(object):
         return fraunhofer, fresnel
 
     def steering_vec(
-            self, angles: np.ndarray, ranges: np.ndarray = None, f_c: float = 1, array_form: str = "ULA",
-            nominal: bool = False, generate_search_grid: bool = False) -> torch.Tensor:
+            self, angles: [np.ndarray, torch.Tensor], ranges: [np.ndarray, torch.Tensor] = None, array_form: str = "ula",
+            nominal: bool = True, generate_search_grid: bool = False, f_c: np.ndarray = None) -> torch.Tensor:
         """
         Computes the steering vector based on the specified parameters.
         Args:
             angles: the angles of the sources from origin.
             ranges: the ranges of the sources from origin. In case of Far field, the value is None.
-            f_c: the carrier frequency, in case of narrowband, the value is always 1.
             nominal: a flag that suggest if there is any kind of calibration errors.
             array_form: The type of array used.
             generate_search_grid (bool): wether to generate a grid to search on,
              create all combination of angles and ranges, or just create the steering matrix of sources.
+            f_c: the carrier frequency, in case of narrowband, the value is always 1.
 
         Returns:
 
         """
-        if array_form.startswith("ULA"):
-            if self.params.field_type.startswith("Far"):
-                return self.steering_vec_far_field(angles, f_c=f_c, nominal=nominal)
-            elif self.params.field_type.startswith("Near"):
-                return self.steering_vec_near_field(angles, ranges=ranges, f_c=f_c,
-                                                    nominal=nominal, generate_search_grid=generate_search_grid)
+        if array_form.startswith("ula"):
+            if self.params.field_type.startswith("far"):
+                return self.steering_vec_far_field(angles, nominal=nominal, f_c=f_c)
+            elif self.params.field_type.startswith("near"):
+                return self.steering_vec_near_field(angles, ranges=ranges,
+                                                    nominal=nominal, generate_search_grid=generate_search_grid,
+                                                    f_c=f_c)
             else:
                 raise Exception(f"SystemModel.field_type:"
                                 f" field type of approximation {self.params.field_type} is not defined")
         else:
             raise Exception(f"SystemModel.steering_vec: array form {array_form} is not defined")
 
-    def steering_vec_far_field(
-            self, angles: [np.ndarray, torch.Tensor], f_c: float = 1, nominal: bool = False
-    ):
+    def steering_vec_far_field(self, angles: [np.ndarray, torch.Tensor], nominal: bool = False, f_c: np.ndarray=None) -> torch.Tensor:
         """
         Computes the steering vector based on the specified parameters.
 
         Args:
         -----
             angles (np.ndarray): Array of angles.
-            f (float, optional): Frequency. Defaults to 1.
             nominal (bool): flag for creating sv without array mismatches.
 
         Returns:
@@ -224,6 +232,8 @@ class SystemModel(object):
             np.ndarray: Computed steering vector.
 
         """
+        if f_c is None:
+            f_c = np.array([self.params.carrier_frequency])
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles)
             local_device = "cpu" # when creating the data, it's done element-wise, better not to use GPU
@@ -233,18 +243,25 @@ class SystemModel(object):
         array = torch.Tensor(self.array[:, None]).to(torch.float64).to(local_device)
 
         theta = (angles[:, None]).to(torch.float64).to(local_device)
-        dist_array_elems = self.dist_array_elems["NarrowBand"]
+        dist_array_elems = self.dist_array_elems["narrowband"]
 
         if not nominal:
             dist_array_elems += torch.from_numpy(
                 np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N))
             dist_array_elems = dist_array_elems.unsqueeze(-1).to(local_device)
 
-        time_delay = torch.einsum("nm, na -> na",
-                                  array,
-                                  torch.sin(theta).repeat(1, self.params.N).T
-                                  * dist_array_elems)
 
+        # calculate the time delay for each frequency bin
+        if self.params.signal_type.startswith("narrowband"):
+            time_delay = torch.einsum("nm, na -> na",
+                                      array * dist_array_elems,
+                                      torch.sin(theta).repeat(1, self.params.N).T)
+        elif self.params.signal_type.startswith("broadband"):
+            f_c = torch.from_numpy(f_c).to(torch.float64).to(local_device)
+            time_delay = torch.einsum("nk, na -> nak",
+                                      array * (self.params.carrier_frequency / f_c),
+                                      torch.sin(theta).repeat(1, self.params.N).T
+                                      * dist_array_elems)
         if not nominal:
             # Calculate additional steering vector noise
             mis_geometry_noise = ((np.sqrt(2) / 2) * np.sqrt(self.params.sv_noise_var)
@@ -258,8 +275,7 @@ class SystemModel(object):
         return steering_matrix
 
     def steering_vec_near_field(self, angles: [np.ndarray, torch.Tensor], ranges: [np.ndarray, torch.Tensor],
-                                f_c: float = 1,
-                                nominal: bool = True, generate_search_grid: bool = False) -> torch.Tensor:
+                                nominal: bool = True, generate_search_grid: bool = False, f_c: np.ndarray=None) -> torch.Tensor:
         """
 
         Args:
@@ -273,6 +289,8 @@ class SystemModel(object):
         Returns:
             torch.Tensor: the steering matrix.
         """
+        if f_c is None:
+            f_c = np.array([self.params.carrier_frequency])
         if isinstance(angles, np.ndarray):
             angles = torch.from_numpy(angles[:, None])
             local_device = "cpu" # when creating the data, it's done element-wise, better not to use GPU
@@ -294,7 +312,7 @@ class SystemModel(object):
         else:
             distances = distances.unsqueeze(-1)
 
-        dist_array_elems = self.dist_array_elems["NarrowBand"]
+        dist_array_elems = self.dist_array_elems["narrowband"]
         if not nominal:
             dist_array_elems += torch.from_numpy(
                 np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)).to(local_device)
@@ -305,23 +323,43 @@ class SystemModel(object):
         array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(local_device)
         array_square = torch.pow(array, 2)
 
-        first_order = torch.einsum("nm, na -> na",
-                                   array,
-                                   torch.sin(theta).repeat(1, self.params.N).T * dist_array_elems)
+        if self.params.signal_type.startswith("narrowband"):
+            first_order = torch.einsum("nm, na -> na",
+                                      array * dist_array_elems,
+                                      torch.sin(theta).repeat(1, self.params.N).T)
+        elif self.params.signal_type.startswith("broadband"):
+            f_c = torch.from_numpy(f_c).to(torch.float64).to(local_device)
+            first_order = torch.einsum("nk, na -> nak",
+                                      array * (self.params.carrier_frequency / f_c),
+                                      torch.sin(theta).repeat(1, self.params.N).T
+                                      * dist_array_elems)
         if generate_search_grid:
-            first_order = torch.tile(first_order[:, :, None], (1, 1, distances.shape[0]))
+            if self.params.signal_type.startswith("narrowband"):
+                first_order = torch.tile(first_order[:, :, None], (1, 1, distances.shape[0]))
+            elif self.params.signal_type.startswith("broadband"):
+                first_order = torch.tile(first_order[:, :, None, :], (1, 1, distances.shape[0], 1))
 
         dist_array_elems = dist_array_elems.squeeze(-1)
         if theta.dim() == 2:
             theta = theta.squeeze(-1)
-        second_order = -0.5 * torch.div(
-            torch.pow(torch.outer(torch.cos(theta), dist_array_elems), 2).unsqueeze(1), distances)
-        second_order = torch.einsum("nm, nar -> nar",
-                                    array_square,
-                                    torch.transpose(second_order, 2, 0)).transpose(1, 2)
+        if self.params.signal_type.startswith("narrowband"):
+            second_order = -0.5 * torch.div(
+                torch.pow(torch.outer(torch.cos(theta), dist_array_elems), 2).unsqueeze(1), distances)
+            second_order = torch.einsum("nm, nar -> nar",
+                                        array_square,
+                                        torch.transpose(second_order, 2, 0)).transpose(1, 2)
+        elif self.params.signal_type.startswith("broadband"):
+            second_order = -0.5 * torch.div(
+                torch.pow(torch.outer(torch.cos(theta), dist_array_elems), 2).unsqueeze(1), distances)
+            second_order = torch.einsum("nk, nar -> nark",
+                                        array_square * (self.params.carrier_frequency / f_c),
+                                        torch.transpose(second_order, 2, 0)).transpose(1, 2)
 
         if not generate_search_grid:
-            time_delay = first_order + second_order.squeeze(-1)
+            if self.params.signal_type.startswith("narrowband"):
+                time_delay = first_order + second_order.squeeze(-1)
+            elif self.params.signal_type.startswith("broadband"):
+                time_delay = first_order + second_order.squeeze(-2)
         else:
             time_delay = first_order + second_order
 
@@ -334,4 +372,8 @@ class SystemModel(object):
             mis_geometry_noise = 0.0
 
         steering_matrix = torch.exp(2 * -1j * torch.pi * time_delay) + mis_geometry_noise
+        if torch.isnan(steering_matrix).any():
+            raise ValueError("SystemModel.steering_vec_near_field: steering matrix contains NaN values")
         return steering_matrix
+
+

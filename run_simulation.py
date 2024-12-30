@@ -75,6 +75,7 @@ def __run_simulation(**kwargs):
         .set_parameter("snr", SYSTEM_MODEL_PARAMS["snr"])
         .set_parameter("field_type", SYSTEM_MODEL_PARAMS["field_type"])
         .set_parameter("signal_nature", SYSTEM_MODEL_PARAMS["signal_nature"])
+        .set_parameter("signal_type", SYSTEM_MODEL_PARAMS["signal_type"])
         .set_parameter("eta", SYSTEM_MODEL_PARAMS["eta"])
         .set_parameter("bias", SYSTEM_MODEL_PARAMS["bias"])
         .set_parameter("sv_noise_var", SYSTEM_MODEL_PARAMS["sv_noise_var"])
@@ -137,7 +138,7 @@ def __run_simulation(**kwargs):
             train_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=samples_size,
-                save_datasets=True,
+                save_datasets=False,
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_train"],
                 true_range=TRAINING_PARAMS["true_range_train"],
@@ -148,7 +149,7 @@ def __run_simulation(**kwargs):
             generic_test_dataset, _ = create_dataset(
                 system_model_params=system_model_params,
                 samples_size=int(train_test_ratio * samples_size),
-                save_datasets=True,
+                save_datasets=False,
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_test"],
                 true_range=TRAINING_PARAMS["true_range_test"],
@@ -178,15 +179,6 @@ def __run_simulation(**kwargs):
             .set_schedular(step_size=TRAINING_PARAMS["step_size"],
                            gamma=TRAINING_PARAMS["gamma"])
         )
-        if load_model:
-            try:
-                simulation_parameters.load_model(
-                    loading_path=saving_path / "final_models" / model_config.model.get_model_file_name())
-            except Exception as e:
-                print("#############################################")
-                print(e)
-                print("simulation_parameters.load_model: Error loading model")
-                print("#############################################")
 
         # Print training simulation details
         simulation_summary(
@@ -195,17 +187,21 @@ def __run_simulation(**kwargs):
             parameters=simulation_parameters,
             phase="training",
         )
-        # Perform simulation training and evaluation stages
-        model, loss_train_list, loss_valid_list = train(
-            training_parameters=simulation_parameters,
-            saving_path=saving_path,
-            save_figures=save_plots,
-            plot_curves=plot_mode
-        )
-        # Save model weights
-        if save_model:
-            torch.save(model.state_dict(),
-                       saving_path / "final_models" / Path(model.get_model_file_name()))
+
+        trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
+                                           weight_decay=TRAINING_PARAMS["weight_decay"],
+                                           epochs=TRAINING_PARAMS["epochs"],
+                                           optimizer=TRAINING_PARAMS["optimizer"],
+                                           step_size=TRAINING_PARAMS["step_size"],
+                                           gamma=TRAINING_PARAMS["gamma"],
+                                           training_objective=TRAINING_PARAMS["training_objective"],
+                                           scheduler=TRAINING_PARAMS["scheduler"],
+                                           )
+        train_dataloader, valid_dataloader = train_dataset.get_dataloaders(batch_size=TRAINING_PARAMS["batch_size"])
+        trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
+        model = trainer.train(train_dataloader, valid_dataloader,
+                              use_wandb=TRAINING_PARAMS["use_wandb"],
+                              save_final=save_model, load_model=load_model)
 
     # Evaluation stage
     if evaluate_mode:
@@ -293,7 +289,7 @@ def run_simulation(**kwargs):
     if None not in list(next(iter(loss_dict.values())).values()):
         print_loss_results_from_simulation(loss_dict)
         if kwargs["simulation_commands"]["PLOT_LOSS_RESULTS"]:
-            plot_results(loss_dict,
+            plot_results(loss_dict, kwargs["system_model_params"]["field_type"],
                          plot_acc=kwargs["simulation_commands"]["PLOT_ACC_RESULTS"],
                          save_to_file=kwargs["simulation_commands"]["SAVE_PLOTS"])
 

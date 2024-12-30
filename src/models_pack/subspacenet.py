@@ -4,10 +4,6 @@ SubspaceNet: model-based deep learning algorithm as described in:
 """
 import torch
 import torch.nn as nn
-from charset_normalizer.utils import range_scan
-from torch.optim import lr_scheduler
-from torch.autograd import Variable
-from sympy.unify.core import Variable
 
 from src.criterions import RMSPELoss, CartesianLoss, MusicSpectrumLoss
 from src.models_pack.parent_model import ParentModel
@@ -17,7 +13,7 @@ from src.utils import *
 from src.methods_pack.music import MUSIC, SubspaceMethod
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.root_music import RootMusic, root_music
-
+import wandb
 
 class SubspaceNet(ParentModel):
     """SubspaceNet is model-based deep learning model for generalizing DOA estimation problem,
@@ -48,7 +44,7 @@ class SubspaceNet(ParentModel):
     """
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
-                 system_model: SystemModel = None, field_type: str = "Far"):
+                 system_model: SystemModel = None, field_type: str = "far"):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -62,7 +58,7 @@ class SubspaceNet(ParentModel):
         self.N = self.system_model.params.N
         self.diff_method = None
         self.train_loss_type = train_loss_type
-        self.field_type = field_type
+        self.field_type = field_type.lower()
         self.p = 0.2
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
@@ -72,12 +68,13 @@ class SubspaceNet(ParentModel):
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
         self.DropOut = nn.Dropout(self.p)
         self.ReLU = nn.ReLU()
+        # self.layer_norm = nn.LayerNorm([32, 2 * self.N - 1, self.N - 1])
 
         # Set the subspace method for training
         self.train_loss, self.validation_loss, self.test_loss = None, None, None
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
-        self.set_eigenregularization_schedular()
+        self.set_eigenregularization_schedular(init_value=0.0)
 
     def get_surrogate_covariance(self, x: torch.Tensor):
         x = self.pre_processing(x)
@@ -87,29 +84,29 @@ class SubspaceNet(ParentModel):
         ############################
         ## Architecture flow ##
         # CNN block #1
-        x = self.conv1(x)
-        x = self.anti_rectifier(x)
+        x = self.conv1(x) # Shape: [Batch size, 16, 2N-1, N-1]
+        x = self.anti_rectifier(x) # Shape: [Batch size, 32, 2N-1, N-1]
         # CNN block #2
-        x = self.conv2(x)
-        x = self.anti_rectifier(x)
+        x = self.conv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
+        x = self.anti_rectifier(x) # Shape: [Batch size, 64, 2N-2, N-2]
         # CNN block #3
-        x = self.conv3(x)
-        x = self.anti_rectifier(x)
-
-        x = self.deconv2(x)
-        x = self.anti_rectifier(x)
+        x = self.conv3(x) # Shape: [Batch size, 64, 2N-3, N-3]
+        x = self.anti_rectifier(x) # Shape: [Batch size, 128, 2N-3, N-3]
+        x = self.deconv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
+        x = self.anti_rectifier(x) # Shape: [Batch size, 64, 2N-2, N-2]
         # DCNN block #3
-        x = self.deconv3(x)
-        x = self.anti_rectifier(x)
+        x = self.deconv3(x)     # Shape: [Batch size, 16, 2N-1, N-1]
+        x = self.anti_rectifier(x) # Shape: [Batch size, 32, 2N-1, N-1]
         # DCNN block #4
         x = self.DropOut(x)
-        Rx = self.deconv4(x)
+        Rx = self.deconv4(x) # Shape: [Batch size, 1, 2N, N]
+
         # Reshape Output shape: [Batch size, 2N, N]
         Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
         Rx_real = Rx_View[:, :self.N, :]  # Shape: [Batch size, N, N])
         Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
-        Kx_tag = torch.complex(Rx_real, Rx_imag)  # Shape: [Batch size, N, N])
+        Kx_tag = torch.complex(Rx_real, Rx_imag).to(torch.complex128)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
         Rz = gram_diagonal_overload(
             Kx=Kx_tag, eps=1, batch_size=self.batch_size
@@ -137,7 +134,7 @@ class SubspaceNet(ParentModel):
         """
         Rz = self.get_surrogate_covariance(x)
 
-        if self.field_type == "Far":
+        if self.field_type == "far":
             if self.train_loss_type == "music_spectrum" and self.training:
                     _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
                     return noise_subspace, source_estimation, eigen_regularization
@@ -157,7 +154,7 @@ class SubspaceNet(ParentModel):
                 else:
                     raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
-        elif self.field_type == "Near":
+        elif self.field_type == "near":
             if self.training and self.train_loss_type == "music_spectrum":
                 _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
                 return noise_subspace, source_estimation, eigen_regularization
@@ -210,7 +207,7 @@ class SubspaceNet(ParentModel):
 
     def adjust_diff_method_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
-            if epoch % 10 == 0 and epoch != 0:
+            if epoch % 20 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
 
@@ -233,34 +230,34 @@ class SubspaceNet(ParentModel):
         return {"tau": self.tau, "diff_method": self.diff_method, "field_type": self.field_type,
                 "train_loss_type": self.train_loss_type}
 
-    def init_model_train_params(self):
+    def init_model_train_params(self, init_eigenregularization_weight: float = 50):
         self.__set_criterion()
-        self.set_eigenregularization_schedular()
+        self.set_eigenregularization_schedular(init_value=init_eigenregularization_weight)
         if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
-            self.diff_method.init_cells()
+            self.diff_method.init_cells(0.2)
 
     def training_step(self, batch, batch_idx):
-        if self.field_type == "Far":
+        if self.field_type == "far":
             return self.__training_step_far_field(batch, batch_idx)
-        elif self.field_type == "Near":
+        elif self.field_type.lower() == "near":
             return self.__training_step_near_field(batch, batch_idx)
 
     def validation_step(self, batch, batch_idx):
-        if self.field_type == "Far":
+        if self.field_type == "far":
             return self.__validation_step_far_field(batch, batch_idx)
-        elif self.field_type == "Near":
+        elif self.field_type == "near":
             return self.__validation_step_near_field(batch, batch_idx)
 
     def test_step(self, batch, batch_idx):
-        if self.field_type == "Far":
+        if self.field_type == "far":
             return self.__test_step_far_field(batch, batch_idx)
-        elif self.field_type == "Near":
+        elif self.field_type == "near":
             return self.__test_step_near_field(batch, batch_idx)
 
     def predict_step(self, batch, batch_idx):
-        if self.field_type == "Far":
+        if self.field_type == "far":
             return self.__prediction_step_far_field(batch, batch_idx)
-        elif self.field_type == "Near":
+        elif self.field_type == "near":
             return self.__prediction_step_near_field(batch, batch_idx)
 
 
@@ -337,7 +334,11 @@ class SubspaceNet(ParentModel):
             angles_pred, distance_pred, source_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
-        return loss + eigen_regularization * self.eigenregularization_weight, acc
+        try:
+            wandb.log({"eigen regularization": torch.sum(eigen_regularization)})
+        except Exception:
+            pass
+        return self.get_regularized_loss(loss, eigen_regularization), acc
 
     def __validation_step_near_field(self, batch, batch_idx, is_test :bool=False):
         x, sources_num, labels, masks = batch
@@ -386,7 +387,7 @@ class SubspaceNet(ParentModel):
         -------
             Exception: Method diff_method is not defined for SubspaceNet
         """
-        if self.field_type == "Far":
+        if self.field_type == "far":
             if diff_method.startswith("root_music"):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
@@ -397,7 +398,7 @@ class SubspaceNet(ParentModel):
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
                                 f"{self.field_type} scenario")
-        elif self.field_type == "Near":
+        elif self.field_type == "near":
             if diff_method.endswith("music_2D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
             elif diff_method.endswith("music_1D"):
@@ -408,23 +409,23 @@ class SubspaceNet(ParentModel):
                                 f"{self.field_type} Field scenario")
 
     def __set_criterion(self):
-        if self.field_type == "Far":
+        if self.field_type == "far":
             if self.train_loss_type == "rmspe":
                 self.train_loss = RMSPELoss()
             elif self.train_loss_type == "music_spectrum":
                 self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                    sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
+                                                    sensors_distance=self.system_model.dist_array_elems["narrowBand"])
             else:
                 raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.loss_type}")
             self.validation_loss = RMSPELoss()
             self.test_loss = RMSPELoss()
 
-        elif self.field_type == "Near":
+        elif self.field_type == "near":
             if self.train_loss_type == "rmspe":
                 self.train_loss = CartesianLoss()
             elif self.train_loss_type == "music_spectrum":
                 self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                    sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
+                                                    sensors_distance=self.system_model.dist_array_elems["narrowband"])
             else:
                 raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.train_loss_type}")
             self.validation_loss = CartesianLoss()

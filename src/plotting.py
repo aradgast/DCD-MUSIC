@@ -195,7 +195,7 @@ def initialize_figures():
     return figures
 
 
-def plot_results(loss_dict: dict, plot_acc: bool = False, save_to_file: bool = False):
+def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_to_file: bool = False):
     """
     Plot the results of the simulation.
     The dict could be with several scenarios, each with different SNR values, or with different number of snapshots,
@@ -227,9 +227,12 @@ def plot_results(loss_dict: dict, plot_acc: bool = False, save_to_file: bool = F
     plt.rcParams.update({'font.size': 18})
     for scenario, dict_values in loss_dict.items():
         plot_path = os.path.join(plot_paths[scenario], dt_string_for_save)
-        plot_test_results(scenario, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
-        plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=False)
-        plot_test_results(scenario, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=False)
+        if field_type == "Far":
+            plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc)
+        else:
+            plot_test_results(scenario, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=False)
+            plot_test_results(scenario, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=False)
     return
 
 
@@ -250,8 +253,6 @@ def plot_test_results(test: str, res: dict, simulations_path: str, tested_param:
 
 def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Overall",
               save_to_file=False, plot_acc: bool=False):
-    if tested_param not in ["Overall", "Angle", "Distance"]:
-        raise ValueError(f"Unknown tested_param: {tested_param}")
     if tested_param == "Angle":
         units = "rad"
     else:
@@ -268,7 +269,11 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         # else:
         label = method
         if not np.isnan((loss_.get(tested_param))).any():
-            ax.plot(test_values, loss_[tested_param], **plot_styles[method.split("_")[0]], label=label)
+            try:
+                ax.plot(test_values, loss_[tested_param], **plot_styles[method.split("_")[0]], label=label)
+            except KeyError:
+                print(f"{method} does not have plot style")
+                ax.plot(test_values, loss_[tested_param], label=label)
     # decrease the size of the legend
     ax.legend(fontsize='x-small', loc="best")
     ax.grid()

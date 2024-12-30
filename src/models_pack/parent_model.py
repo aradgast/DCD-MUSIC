@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch
 from src.system_model import SystemModel
 
-EIGEN_REGULARIZATION_WEIGHT = 50
+EIGEN_REGULARIZATION_WEIGHT = 1e-3
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(ParentModel, self).__init__()
@@ -26,12 +26,17 @@ class ParentModel(nn.Module):
             M = "rand"
         else:
             M = self.system_model.params.M
+
+        if self.system_model.params.snr is None:
+            snr = "rand"
+        else:
+            snr = self.system_model.params.snr
         return f"{self.get_model_name()}_" + \
             f"N={self.N}_" + \
             f"M={M}_" + \
             f"T={self.system_model.params.T}_" + \
             f"{self.system_model.params.signal_type}_" + \
-            f"SNR={self.system_model.params.snr}_" + \
+            f"SNR={snr}_" + \
             f"{self.system_model.params.field_type}_field_" + \
             f"{self.system_model.params.signal_nature}_" + \
             f"eta={self.system_model.params.eta}_" + \
@@ -57,22 +62,27 @@ class ParentModel(nn.Module):
         self.schedular_step_size = step_size
         self.schedular_gamma = gamma
         self.eigenregularization_weight = init_value
-        if self.field_type == "Far":
+        if self.field_type == "far":
             self.eigenregularization_weight /= 50
-            self.schedular_gamma = 0.1
-        if self.system_model.params.M is not None:
-            self.eigenregularization_weight /= 2
+            self.schedular_gamma = 0.5
+        # if self.system_model.params.M is not None:
+        #     self.eigenregularization_weight /= 2
+        # if self.system_model.params.snr is not None:
+        #     if self.system_model.params.snr < 0:
+        #         self.eigenregularization_weight *= abs(self.system_model.params.snr)
+        #     elif self.system_model.params.snr > 0:
+        #         self.eigenregularization_weight /= self.system_model.params.snr
 
         self.schedular_acc_current = 0
-        self.schedular_patience_ascending = 10
-        self.schedular_patience_descending = 10
+        self.schedular_patience_ascending = 5
+        self.schedular_patience_descending = 5
         self.schedular_patience_counter_descending = 0
         self.schedular_patience_counter_ascending = 0
 
         self.schedular_low_threshold = 70
         self.schedular_high_threshold = 90
-        self.schedular_min_weight = 0.01
-        self.schedular_max_weight = init_value * 2
+        self.schedular_min_weight = min(0.01, init_value / 10)
+        self.schedular_max_weight = init_value * 10
 
     def get_eigenregularization_weight(self):
         return self.eigenregularization_weight
@@ -119,6 +129,10 @@ class ParentModel(nn.Module):
             if (sources_num > source_estimation).any():
                 self.under_estimation_counter += sum(sources_num > source_estimation).item()
         return torch.sum(source_estimation == sources_num * torch.ones_like(source_estimation).float()).item()
+
+    def get_regularized_loss(self, loss, l_eig):
+        loss_r = loss + self.eigenregularization_weight * l_eig
+        return torch.sum(loss_r)
 
 
 if __name__ == "__main__":

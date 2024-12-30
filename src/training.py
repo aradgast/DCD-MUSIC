@@ -52,6 +52,328 @@ from src.models import (SubspaceNet, DeepCNN, DeepAugmentedMUSIC,
 from src.methods_pack.music import MUSIC
 from src.evaluation import evaluate_dnn_model
 from src.data_handler import TimeSeriesDataset, collate_fn, SameLengthBatchSampler
+import wandb
+
+class TrainingParamsNew:
+    def __init__(self, **kwargs):
+        # Set default values
+        self.learning_rate = 0.001
+        self.weight_decay = 1e-9
+        self.epochs = 2
+        self.optimizer = "Adam"
+        self.scheduler = "StepLR"
+        self.step_size = 50
+        self.gamma = 0.5
+        self.training_objective = "angle, range"
+        self.__dict__.update(kwargs)
+
+    def __str__(self):
+        return str(self.__dict__)
+
+    def __repr__(self):
+        return str(self.__dict__)
+
+    def __getitem__(self, key):
+        return self.__dict__[key]
+
+    def __setitem__(self, key, value):
+        self.__dict__[key] = value
+
+    def __contains__(self, key):
+        return key in self.__dict__
+
+    def update(self, new_params):
+        self.__dict__.update(new_params)
+
+
+class Trainer:
+    def __init__(self, model: nn.Module, training_params: TrainingParamsNew, show_plots:bool = False):
+        self.model = model
+        self.training_params = training_params
+        self.optimizer = self.__init_optimizer()
+        self.scheduler = self.__init_scheduler()
+        self.training_objective = self.__extract_training_objective()
+        self.epochs = self.__get_epochs()
+
+        self.is_wandb = False
+        self.root_path = Path(__file__).parent.parent
+        self.checkpoint_path = self.root_path / "data" / "weights" / self.model._get_name()
+        self.simulation_path = self.root_path / "data" / "simulations"
+        self.plots_path = self.root_path / "data" / "simulations" / "plots"
+        self.scores_path = self.root_path / "data" / "simulations" / "scores"
+        self.final_model_checkpoint = self.checkpoint_path / "final_models" / self.model.get_model_file_name()
+        self.checkpoint_path.mkdir(parents=True, exist_ok=True)
+        self.simulation_path.mkdir(parents=True, exist_ok=True)
+        self.plots_path.mkdir(parents=True, exist_ok=True)
+        self.scores_path.mkdir(parents=True, exist_ok=True)
+        self.final_model_checkpoint.parent.mkdir(parents=True, exist_ok=True)
+
+        self.show_plots = show_plots
+
+    def __init_optimizer(self):
+        if self.training_params["optimizer"] == "Adam":
+            return optim.Adam(self.model.parameters(), lr=self.training_params["learning_rate"],
+                              weight_decay=self.training_params["weight_decay"])
+        elif self.training_params["optimizer"] == "SGD":
+            return optim.SGD(self.model.parameters(), lr=self.training_params["learning_rate"],
+                             weight_decay=self.training_params["weight_decay"])
+        else:
+            raise ValueError(f"Optimizer {self.training_params['optimizer']} is not defined.")
+
+    def __init_scheduler(self):
+        if self.training_params["scheduler"] == "StepLR":
+            return lr_scheduler.StepLR(self.optimizer, step_size=self.training_params["step_size"],
+                                       gamma=self.training_params["gamma"])
+        elif self.training_params["scheduler"] == "ReduceLROnPlateau":
+            return lr_scheduler.ReduceLROnPlateau(self.optimizer, mode="min", factor=self.training_params["gamma"],
+                                                  patience=20, verbose=True)
+        else:
+            raise ValueError(f"Scheduler {self.training_params['scheduler']} is not defined.")
+
+    def __extract_training_objective(self):
+        if self.training_params["training_objective"] == "angle":
+            return "angle"
+        elif self.training_params["training_objective"] == "range":
+            return "range"
+        elif self.training_params["training_objective"] == "angle, range":
+            return "angle, range"
+        elif self.training_params["training_objective"] == "source_estimation":
+            return "source_estimation"
+        else:
+            raise ValueError(f"Training objective {self.training_params['training_objective']} is not defined.")
+
+    def __get_epochs(self):
+        epochs = self.training_params["epochs"]
+        if epochs is None:
+            warnings.warn("Trainer.__get_epochs: Number of epochs is not defined. Setting to 10.")
+            return 10
+        return epochs
+
+    def __init_wandb(self):
+        try:
+            wandb.init(project=f"dcd_music",
+                       config=self.training_params,
+                       allow_val_change=True)
+            try:
+                wandb.config.update(self.model.system_model.params)
+            except AttributeError:
+                pass
+            wandb.watch(self.model, log="all")
+            self.is_wandb = True
+        except Exception:
+            print("Error initializing wandb")
+
+    def __init_metrics(self):
+        self.loss_train_list = []
+        self.loss_valid_list = []
+        self.loss_train_list_angles = []
+        self.loss_train_list_ranges = []
+        self.loss_valid_list_angles = []
+        self.loss_valid_list_ranges = []
+        self.acc_train_list = []
+        self.acc_valid_list = []
+        self.min_valid_loss = np.inf
+        self.best_epoch = 0
+        self.best_model_wts = copy.deepcopy(self.model.state_dict())
+
+    def __configure_model(self):
+        if isinstance(self.model, TransMUSIC):
+            if self.training_objective == "source_estimation":
+                transmusic_mode = "num_source_train"
+            else:
+                transmusic_mode = "subspace_train"
+            self.model.update_train_mode(transmusic_mode)
+        if isinstance(self.model, DCDMUSIC):
+            if self.training_objective == "angle, range":
+                self.model.update_angle_extractor_training(True)
+            elif self.training_objective == "range":
+                self.model.update_angle_extractor_training(False)
+
+            self.model.update_criterion()
+
+    def train(self, train_dataloader, valid_dataloader, use_wandb:bool=False, save_final:bool=False,
+              load_model:bool=False):
+        self.model = self.model.to(device)
+        self.__init_metrics()
+        self.__configure_model()
+        # Set initial time for start training
+        since = time.time()
+        if use_wandb:
+            # init wandb
+            self.__init_wandb()
+
+        print("\n---Start Training Stage ---\n")
+        # Run over all epochs
+
+        for epoch in range(self.epochs):
+            if epoch == 40:
+                pass
+            epoch_train_loss = 0.0
+            epoch_train_loss_angle = 0.0
+            epoch_train_loss_distance = 0.0
+            epoch_train_acc = 0.0
+            # init tmp loss values
+            train_loss, train_loss_angle, train_loss_distance = None, None, None
+            # Set model to train mode
+            self.model.train()
+            train_length = 0
+
+
+            for idx, data in tqdm(enumerate(train_dataloader), desc=f"Training {epoch + 1}/{self.epochs}"):
+                if isinstance(self.model, (SubspaceNet, TransMUSIC)):
+                    train_loss, acc = self.model.training_step(data, idx)
+                    if isinstance(train_loss, tuple):
+                        train_loss, train_loss_angle, train_loss_distance = train_loss
+                        epoch_train_loss_angle += train_loss_angle.item()
+                        epoch_train_loss_distance += train_loss_distance.item()
+                    epoch_train_loss += train_loss.item()
+
+                    train_length += data[0].shape[0]
+                    epoch_train_acc += acc
+                else:
+                    raise NotImplementedError(
+                        f"train_model: Training for model {self.model.get_model_name()} is not implemented")
+
+                ############################################################################################################
+                # Back-propagation stage
+                try:
+                    train_loss.backward(retain_graph=True)
+                except RuntimeError as r:
+                    raise Exception(f"linalg error: \n{r}")
+
+                # optimizer update
+                self.optimizer.step()
+                # reset gradients
+                self.model.zero_grad()
+
+            ################################################################################################################
+            epoch_train_loss /= train_length
+            epoch_train_acc /= train_length
+
+            # End of epoch. Calculate the average loss
+            self.loss_train_list.append(epoch_train_loss)
+            if epoch_train_loss_angle != 0.0 and epoch_train_loss_distance != 0.0:
+                self.loss_train_list_angles.append(epoch_train_loss_angle / train_length)
+                self.loss_train_list_ranges.append(epoch_train_loss_distance / train_length)
+
+            # Calculate evaluation loss
+            valid_loss = evaluate_dnn_model(
+                self.model,
+                valid_dataloader,
+            )
+
+            # Calculate the average loss
+            self.loss_valid_list.append(valid_loss.get("Overall"))
+            self.acc_train_list.append(epoch_train_acc * 100)
+            self.acc_valid_list.append(valid_loss.get('Accuracy') * 100)
+
+            # Update schedular
+            if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
+                self.scheduler.step(self.loss_valid_list[-1])
+            else:
+                self.scheduler.step()
+
+            # Update eigenregularization weight
+            # try:
+            #     self.model.update_eigenregularization_weight(self.acc_valid_list[-1])
+            # except AttributeError:
+            #     pass
+
+            try:
+                self.model.adjust_diff_method_temperature(epoch)
+            except AttributeError:
+                pass
+
+            self.__report_results(epoch, epoch_train_loss, epoch_train_acc, valid_loss)
+            self.__save_model(epoch, valid_loss)
+
+
+        # Training complete
+        time_elapsed = time.time() - since
+        print("\n--- Training summary ---")
+        print(f"Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
+        print(f"Minimal Validation loss: {self.min_valid_loss:4f} at epoch {self.best_epoch}")
+        self.__plot_res()
+        if save_final:
+            self.__save_final_model()
+        return self.model
+
+    def __report_results(self, epoch, epoch_train_loss, epoch_train_acc, valid_loss):
+        result_txt = (f"[Epoch : {epoch + 1}/{self.epochs}]"
+                      f" Train loss = {epoch_train_loss:.6f}, Validation loss = {valid_loss.get('Overall'):.6f}")
+        if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
+            self.loss_valid_list_angles.append(valid_loss.get("Angle"))
+            self.loss_valid_list_ranges.append(valid_loss.get("Distance"))
+            result_txt += f"\nAngle loss = {valid_loss.get('Angle'):.6f}, Range loss = {valid_loss.get('Distance'):.6f}"
+
+        result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
+                       f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
+        result_txt += f"\nlr {self.scheduler.get_last_lr()[0]}"
+        try:
+            eigenregularization_weight_tmp = self.model.get_eigenregularization_weight()
+        except AttributeError:
+            eigenregularization_weight_tmp = None
+        if eigenregularization_weight_tmp is not None:
+            result_txt += f", Eigenregularization weight = {eigenregularization_weight_tmp}"
+
+        print(result_txt)
+
+        if self.is_wandb:
+            wandb.log({"Train Loss": epoch_train_loss, "Validation Loss": valid_loss.get("Overall"),
+                       "Accuracy Train": epoch_train_acc, "Accuracy Validation": valid_loss.get("Accuracy")})
+            if self.loss_valid_list_angles and self.loss_valid_list_ranges:
+                wandb.log({"Angle Loss": valid_loss.get("Angle"), "Range Loss": valid_loss.get("Distance")})
+
+            wandb.log({"lr": self.scheduler.get_last_lr()[0]})
+            if eigenregularization_weight_tmp is not None:
+                wandb.log({"tmp_Eigenregularization weight": eigenregularization_weight_tmp})
+
+    def __save_model(self, epoch, valid_loss):
+        if self.min_valid_loss > valid_loss.get("Overall"):
+            print(
+                f"Validation Loss Decreased({self.min_valid_loss:.6f}--->{valid_loss.get('Overall'):.6f}) \t Saving The Model"
+            )
+            self.min_valid_loss = valid_loss.get("Overall")
+            self.best_epoch = epoch
+            # Saving State Dict
+            self.best_model_wts = copy.deepcopy(self.model.state_dict())
+            torch.save(self.model.state_dict(), str(self.checkpoint_path / self.model.get_model_file_name()) + ".pt")
+
+    def __save_final_model(self):
+        self.model.load_state_dict(self.best_model_wts)
+        torch.save(self.model.state_dict(), str(self.final_model_checkpoint) + ".pt")
+
+    def __load_model(self):
+        self.model.load_state_dict(torch.load(str(self.final_model_checkpoint) + ".pt"))
+
+    def __plot_res(self):
+        now = datetime.now()
+        dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
+
+        if self.acc_train_list is not None and self.acc_valid_list is not None:
+            fig_acc = plot_accuracy_curve(
+                list(range(1, self.epochs + 1)), self.acc_train_list, self.acc_valid_list,
+                model_name=self.model._get_name()
+            )
+            fig_acc.savefig(self.plots_path / f"Accuracy_{self.model.get_model_name()}_{dt_string_for_save}.png")
+            if self.show_plots:
+                fig_acc.show()
+        fig_loss = plot_learning_curve(
+            list(range(1, self.epochs + 1)), self.loss_train_list, self.loss_valid_list,
+            model_name=self.model._get_name(),
+            angle_train_loss=self.loss_train_list_angles,
+            angle_valid_loss=self.loss_valid_list_angles,
+            range_train_loss=self.loss_train_list_ranges,
+            range_valid_loss=self.loss_valid_list_ranges
+        )
+        fig_loss.savefig(self.plots_path / f"Loss_{self.model.get_model_name()}_{dt_string_for_save}.png")
+        if self.show_plots:
+            fig_loss.show()
+        try:
+            print("over estimation = ", self.model.over_estimation_counter)
+            print("under estimation = ", self.model.under_estimation_counter)
+        except Exception as e:
+            pass
 
 
 class TrainingParams(object):
@@ -157,7 +479,10 @@ class TrainingParams(object):
         Exception: If the model type is not defined.
         """
         # assign model to device
-        self.model = model_gen.model.to(device)
+        if isinstance(model_gen, ModelGenerator):
+            self.model = model_gen.model.to(device)
+        else:
+            self.model = model_gen.to(device)
         return self
 
     def load_model(self, loading_path: Path):
@@ -424,9 +749,10 @@ def train_model(training_params: TrainingParams, checkpoint_path=None) -> dict:
         model.update_train_mode(transmusic_mode)
     if isinstance(model, DCDMUSIC):
         if training_params.training_objective == "angle, range":
-            model.training_angle_extractor = True
+            model.update_angle_extractor_training(True)
         elif training_params.training_objective == "range":
-            model.training_angle_extractor = False
+            model.update_angle_extractor_training(False)
+
         model.update_criterion()
 
     # Set initial time for start training
@@ -610,7 +936,7 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
     title = "Learning Curve: Loss per Epoch"
     if model_name is not None:
         title += f" {model_name}"
-    if angle_train_loss is not None and range_train_loss is not None:
+    if angle_train_loss and range_train_loss :
 
         # create 3 subplots, the main one will spread over 2 cols, and the other 2 will be under it.
         fig = plt.figure(figsize=(10, 6))

@@ -137,25 +137,13 @@ class ModelGenerator(object):
         """
 
         """
-        tau = self.model_params.get("tau")
-        diff_method = self.model_params.get("diff_method")
-        train_loss_type = self.model_params.get("train_loss_type")
-        field_type = self.model_params.get("field_type")
-        self.model = SubspaceNet(tau=tau,
-                                 diff_method=diff_method, train_loss_type=train_loss_type,
-                                 system_model=self.system_model,
-                                 field_type=field_type)
+        self.model = SubspaceNet(system_model=self.system_model, **self.model_params)
 
     def __set_dcd_music(self):
         """
 
         """
-        tau = self.model_params.get("tau")
-        diff_method = self.model_params.get("diff_method")
-        train_loss_type = self.model_params.get("train_loss_type")
-        self.model = DCDMUSIC(tau=tau,
-                              diff_method=diff_method, train_loss_type=train_loss_type,
-                              system_model=self.system_model)
+        self.model = DCDMUSIC(system_model=self.system_model, **self.model_params)
 
     def __set_transmusic(self):
         """
@@ -167,9 +155,7 @@ class ModelGenerator(object):
         """
 
         """
-        N = self.system_model.params.N
-        grid_size = self.model_params.get("grid_size")
-        self.model = DeepCNN(N=N, grid_size=grid_size)
+        self.model = DeepCNN(N=self.system_model.params.N, **self.model_params)
 
     def __set_da_music(self):
         """
@@ -184,9 +170,7 @@ class ModelGenerator(object):
         """
 
         """
-        tau = self.model_params.get("tau")
-        activation_val = self.model_params.get("activation_value")
-        self.model = DeepRootMUSIC(tau=tau, activation_value=activation_val)
+        self.model = DeepRootMUSIC(**self.model_params)
 
     def __verify_model_params(self, model_params):
         """

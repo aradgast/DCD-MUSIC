@@ -19,14 +19,14 @@ class DCDMUSIC(SubspaceNet):
 
     def __init__(self, tau: int, system_model: SystemModel,diff_method: tuple = ("esprit", "music_1d"),
                  train_loss_type: str=("rmspe", "rmspe"),
-                 state_path: str = None):
-        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "Near")
+                 state_path: str = None, angle_extractor: SubspaceNet = None, train_angle_extractor: bool = False):
+        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near")
         self.angle_extractor = None
         self.angle_extractor_diff_method = diff_method[0]
         self.angle_extractor_train_loss_type = train_loss_type[0]
         self.state_path = state_path
-        self.__init_angle_extractor(path=self.state_path)
-        self.train_angle_extractor = False
+        self.__init_angle_extractor(path=self.state_path, model=angle_extractor)
+        self.train_angle_extractor = train_angle_extractor
         self.__set_criterion()
         self.set_eigenregularization_schedular(init_value=0.0, step_size=10000, gamma=1.0)
         self.schedular_min_weight = 0.0
@@ -43,30 +43,31 @@ class DCDMUSIC(SubspaceNet):
         Returns
             The distance prediction.
          """
-
-        if not self.train_angle_extractor:
-            angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
-        else: # in this case, when using orthogonality loss, the angle extractor doesn't extract angles. TODO
-            raise NotImplementedError
-
         if self.train_loss_type == "music_spectrum" and self.training:
+            angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
             Rz = self.get_surrogate_covariance(x)
             _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz,
                                                                                                               number_of_sources)
             return angles, noise_subspace, source_estimation, eigen_regularization
 
-        _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
-        return angles, distances, sources_estimation, eigen_regularization
+        else:
+            angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
 
-    def __init_angle_extractor(self, path: str = None):
-        self.angle_extractor = SubspaceNet(tau=self.tau,
-                                           diff_method=self.angle_extractor_diff_method,
-                                           train_loss_type=self.angle_extractor_train_loss_type,
-                                           system_model=self.system_model,
-                                           field_type="Far")
-        if path is None:
-            path = self.angle_extractor.get_model_file_name()
-        self._load_state_for_angle_extractor(path)
+            _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
+            return angles, distances, sources_estimation, eigen_regularization
+
+    def __init_angle_extractor(self, path: str = None, model: SubspaceNet = None):
+        if model is not None:
+            self.angle_extractor = model
+        else:
+            self.angle_extractor = SubspaceNet(tau=self.tau,
+                                               diff_method=self.angle_extractor_diff_method,
+                                               train_loss_type=self.angle_extractor_train_loss_type,
+                                               system_model=self.system_model,
+                                               field_type="far")
+            if path is None:
+                path = self.angle_extractor.get_model_file_name()
+            self._load_state_for_angle_extractor(path)
 
     def _load_state_for_angle_extractor(self, path: str = None):
         cwd = Path(__file__).parent.parent.parent
@@ -93,14 +94,14 @@ class DCDMUSIC(SubspaceNet):
         """
         eigen_regularization = None
         if not self.train_angle_extractor:
-            with torch.no_grad():
+            if self.angle_extractor.training:
                 self.angle_extractor.eval()
+            with torch.no_grad():
                 angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
-                self.angle_extractor.train()
-            # angles = torch.sort(angles, dim=1)[0]
         else:
+            if not self.angle_extractor.training:
+                self.angle_extractor.train()
             angles, sources_estimation, eigen_regularization = self.angle_extractor(Rx_tau, number_of_sources)
-            # angles = torch.sort(angles, dim=1)[0]
         return angles, sources_estimation, eigen_regularization
 
     def print_model_params(self):
@@ -111,7 +112,7 @@ class DCDMUSIC(SubspaceNet):
         if str(self.angle_extractor.diff_method).startswith("music"):
             angle_extractor_diff_method = str(self.angle_extractor.diff_method) + "_" + self.angle_extractor.train_loss_type
         else:
-            angle_extractor_diff_method = str(self.angle_extractor.diff_method)
+            angle_extractor_diff_method = str(self.angle_extractor_diff_method)
         if str(self.diff_method).startswith("music"):
             diff_method = str(self.diff_method) + "_" + self.train_loss_type
         else:
@@ -191,7 +192,7 @@ class DCDMUSIC(SubspaceNet):
         if self.train_loss_type == "music_spectrum":
             self.train_loss = MusicSpectrumLoss(
                 array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                sensors_distance=self.system_model.dist_array_elems["NarrowBand"])
+                sensors_distance=self.system_model.dist_array_elems["narrowband"])
         else:
             if self.train_angle_extractor:
                 self.train_loss = CartesianLoss()
@@ -204,4 +205,10 @@ class DCDMUSIC(SubspaceNet):
     def update_criterion(self):
         self.__set_criterion()
 
+    def update_angle_extractor_training(self, train_angle_extractor: bool):
+        self.train_angle_extractor = train_angle_extractor
+        self.__set_angle_extractor_requires_grad(train_angle_extractor)
 
+    def __set_angle_extractor_requires_grad(self, requires_grad: bool):
+        for param in self.angle_extractor.parameters():
+            param.requires_grad = requires_grad

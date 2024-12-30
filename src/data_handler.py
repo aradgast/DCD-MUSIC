@@ -37,6 +37,7 @@ from pathlib import Path
 from src.signal_creation import Samples
 from src.system_model import SystemModelParams
 from src.utils import *
+from sklearn.model_selection import train_test_split
 
 
 def create_dataset(
@@ -71,7 +72,7 @@ def create_dataset(
     sources_num = []
     samples_model = Samples(system_model_params)
 
-    for i in tqdm(range(samples_size)):
+    for i in tqdm(range(samples_size), desc="Creating dataset"):
         if system_model_params.M is None:
             M = np.random.randint(2, np.min((6, system_model_params.N-1)))
         else:
@@ -86,7 +87,7 @@ def create_dataset(
             )[0]
         # Ground-truth creation
         Y = torch.tensor(samples_model.doa, dtype=torch.float32)
-        if system_model_params.field_type.endswith("Near"):
+        if system_model_params.field_type.endswith("near"):
             Y1 = torch.tensor(samples_model.distances, dtype=torch.float32)
             Y = torch.cat((Y, Y1), dim=0)
         time_series.append(X)
@@ -248,6 +249,26 @@ class TimeSeriesDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx], self.M[idx], self.Y[idx]
+
+    def get_dataloaders(self, batch_size):
+        # Divide into training and validation datasets
+        train_dataset, valid_dataset = train_test_split(
+            self, test_size=0.1, shuffle=True
+        )
+        print("Training DataSet size", len(train_dataset))
+        print("Validation DataSet size", len(valid_dataset))
+
+        # init sampler
+        batch_sampler_train = SameLengthBatchSampler(train_dataset, batch_size=batch_size)
+        batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32, shuffle=False)
+        # Transform datasets into DataLoader objects
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_train
+        )
+        valid_dataloader = torch.utils.data.DataLoader(
+            valid_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_valid
+        )
+        return train_dataloader, valid_dataloader
 
 
 def collate_fn(batch):

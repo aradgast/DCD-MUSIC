@@ -13,7 +13,6 @@ This class is used for defining the samples model.
 """
 
 # Imports
-import numpy as np
 from random import sample
 
 import torch
@@ -89,15 +88,42 @@ class Samples(SystemModel):
             #         break
 
             # based on https://stackoverflow.com/questions/51918580/python-random-list-of-numbers-in-a-range-keeping-with-a-minimum-distance
-            range_size = 2 * self.params.doa_range - (gap - 1) * (M - 1)
-            # assert(range_size<0) , Warning(range_size<10)
+            doa_range = self.params.doa_range
             doa_resolution = self.params.doa_resolution
-            if self.params.doa_resolution >= 1:
-                DOA = [(gap - 1) * i + x - self.params.doa_range for i, x in
-                       enumerate(sorted(sample(range(0, range_size, doa_resolution), M)))]
+            if doa_resolution <= 0:
+                raise ValueError("DOA resolution must be positive.")
+            if M <= 0:
+                raise ValueError("M (number of elements) must be positive.")
+            if gap <= 0:
+                raise ValueError("Gap must be positive.")
+
+            # Compute the range of possible DOA values
+            # Ensure the sampled DOAs do not exceed [-doa_range, +doa_range]
+            max_offset = (gap - 1) * (M - 1)
+            effective_range = 2 * doa_range - max_offset
+            if effective_range <= 0:
+                raise ValueError(f"Invalid effective range: {effective_range}. Check your parameters.")
+
+            # Define the valid range for sampling
+            if doa_resolution >= 1:
+                valid_range = range(0, effective_range, doa_resolution)
+                sampled_values = sorted(sample(valid_range, M))
             else:
-                DOA = [((gap - 1) * i + x - self.params.doa_range)*doa_resolution for i, x in enumerate(sorted(sample(range(int(range_size//doa_resolution)), M)))]
-                DOA = np.round(DOA, 3)
+                step_count = int(effective_range // doa_resolution)
+                valid_range = range(step_count)
+                sampled_values = sorted(sample(valid_range, M))
+                sampled_values = [x * doa_resolution for x in sampled_values]
+
+            # Compute DOAs
+            DOA = [(gap - 1) * i + x - doa_range for i, x in enumerate(sampled_values)]
+
+            # Ensure all DOAs fall naturally within the valid range
+            if any(d < -doa_range or d > doa_range for d in DOA):
+                raise ValueError("Computed DOAs exceed the valid range. Check your logic.")
+
+            # Round results to 3 decimal places
+            DOA = np.round(DOA, 3)
+
             return DOA
 
         if doa == None:
@@ -171,39 +197,25 @@ class Samples(SystemModel):
         # Generate noise matrix
         noise = self.noise_creation(noise_mean, noise_variance)
         noise = torch.from_numpy(noise)
-        # Generate Narrowband samples
-        if self.params.signal_type.startswith("NarrowBand"):
-            if self.params.field_type.startswith("Far"):
-                A = self.steering_vec(self.doa)
-                samples = (A @ signal) + noise
-            elif self.params.field_type.startswith("Near"):
-                A = self.steering_vec(angles=self.doa, ranges=self.distances, nominal=False, generate_search_grid=False)
-                samples = (A @ signal) + noise
+        if self.params.field_type.startswith("far"):
+            A = self.steering_vec(self.doa, f_c=self.f_rng[self.params.signal_type])
+            if self.params.signal_type.startswith("broadband"):
+                samples = torch.einsum("nmk, mk -> nk", A, signal)
             else:
-                raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")
-            return samples, signal, A, noise
-        # Generate Broadband samples
-        elif self.params.signal_type.startswith("Broadband"):
-            samples = []
-            SV = []
-
-            for idx in range(self.f_sampling["Broadband"]):
-                # mapping from index i to frequency f
-                if idx > int(self.f_sampling["Broadband"]) // 2:
-                    f = -int(self.f_sampling["Broadband"]) + idx
-                else:
-                    f = idx
-                A = np.array([self.steering_vec(theta, f) for theta in self.doa]).T
-                samples.append((A @ signal[:, idx]) + noise[:, idx])
-                SV.append(A)
-            samples = np.array(samples)
-            SV = np.array(SV)
-            samples_time_domain = np.fft.ifft(samples.T, axis=1)[:, : self.params.T]
-            return samples_time_domain, signal, SV, noise
+                samples = (A @ signal) + noise
+        elif self.params.field_type.startswith("near"):
+            A = self.steering_vec(angles=self.doa, ranges=self.distances, nominal=False, generate_search_grid=False,
+                                  f_c=self.f_rng[self.params.signal_type])
+            if self.params.signal_type.startswith("broadband"):
+                samples = torch.einsum("nmk, mk -> nk", A, signal) + noise
+            else:
+                samples = (A @ signal) + noise
         else:
-            raise Exception(
-                f"Samples.samples_creation: signal type {self.params.signal_type} is not defined"
-            )
+            raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")
+        if self.params.signal_type.startswith("broadband"):
+            # transform the signal to the time domain in broadband settings
+            samples = torch.fft.ifft(samples, n=self.params.T, dim=1) + noise
+        return samples, signal, A, noise
 
     def noise_creation(self, noise_mean, noise_variance):
         """Creates noise based on the specified mean and variance.
@@ -219,33 +231,20 @@ class Samples(SystemModel):
 
         """
         # for NarrowBand signal_type Noise represented in the time domain
-        if self.params.signal_type.startswith("NarrowBand"):
-            return (
-                np.sqrt(noise_variance)
-                * (np.sqrt(2) / 2)
-                * (
-                    np.random.randn(self.params.N, self.params.T)
-                    + 1j * np.random.randn(self.params.N, self.params.T)
-                )
-                + noise_mean
+        noise =  (
+            np.sqrt(noise_variance)
+            * (np.sqrt(2) / 2)
+            * (
+                np.random.randn(self.params.N, self.params.T)
+                + 1j * np.random.randn(self.params.N, self.params.T)
             )
+            + noise_mean
+        )
         # for Broadband signal_type Noise represented in the frequency domain
-        elif self.params.signal_type.startswith("Broadband"):
-            noise = (
-                np.sqrt(noise_variance)
-                * (np.sqrt(2) / 2)
-                * (
-                    np.random.randn(self.params.N, len(self.time_axis["Broadband"]))
-                    + 1j
-                    * np.random.randn(self.params.N, len(self.time_axis["Broadband"]))
-                )
-                + noise_mean
-            )
-            return np.fft.fft(noise)
-        else:
-            raise Exception(
-                f"Samples.noise_creation: signal type {self.params.signal_type} is not defined"
-            )
+        # if self.params.signal_type.startswith("broadband"):
+            # noise  = np.fft.fft(noise,axis=1)
+            # noise  = np.fft.fft(noise, n=self.params.number_subcarriers,axis=1)
+        return noise
 
     def signal_creation(self, signal_mean: float = 0, signal_variance: float = 1, source_number: int = None):
         """
@@ -266,9 +265,13 @@ class Samples(SystemModel):
             Exception: If the signal nature is not defined.
         """
         M = source_number
-        amplitude = 10 ** (self.params.snr / 10)
+        if self.params.snr is None:
+            snr = np.random.uniform(-10, 10)
+        else:
+            snr = self.params.snr
+        amplitude = 10 ** (snr / 10)
         # NarrowBand signal creation
-        if self.params.signal_type == "NarrowBand":
+        if self.params.signal_type == "narrowband":
             if self.params.signal_nature == "non-coherent":
                 # create M non-coherent signals
                 return (
@@ -297,59 +300,39 @@ class Samples(SystemModel):
                 return np.repeat(sig, M, axis=0)
 
         # OFDM Broadband signal creation
-        elif self.params.signal_type.startswith("Broadband"):
-            num_sub_carriers = self.max_freq[
-                "Broadband"
-            ]  # number of subcarriers per signal
+        elif self.params.signal_type.startswith("broadband"):
             if self.params.signal_nature == "non-coherent":
-                # create M non-coherent signals
-                signal = np.zeros(
-                    (self.params.M, len(self.time_axis["Broadband"]))
-                ) + 1j * np.zeros((self.params.M, len(self.time_axis["Broadband"])))
-                for i in range(self.params.M):
-                    for j in range(num_sub_carriers):
-                        sig_amp = (
-                            amplitude
-                            * (np.sqrt(2) / 2)
-                            * (np.random.randn(1) + 1j * np.random.randn(1))
-                        )
-                        signal[i] += sig_amp * np.exp(
-                            1j
-                            * 2
-                            * np.pi
-                            * j
-                            * len(self.f_rng["Broadband"])
-                            * self.time_axis["Broadband"]
-                            / num_sub_carriers
-                        )
-                    signal[i] *= 1 / num_sub_carriers
-                return np.fft.fft(signal)
-            # Coherent signals: same amplitude and phase for all signals
+                # create M non-coherent broadband signals
+                # each source, has K subcarriers which are generated as a complex number.
+                # the symbols are of size M x K
+                symbols = (amplitude
+                           * (
+                                   np.random.randn(M, self.params.number_subcarriers)
+                                   + 1j * np.random.randn(M, self.params.number_subcarriers)))
             elif self.params.signal_nature == "coherent":
-                signal = np.zeros(
-                    (1, len(self.time_axis["Broadband"]))
-                ) + 1j * np.zeros((1, len(self.time_axis["Broadband"])))
-                for j in range(num_sub_carriers):
-                    sig_amp = (
-                        amplitude
-                        * (np.sqrt(2) / 2)
-                        * (np.random.randn(1) + 1j * np.random.randn(1))
-                    )
-                    signal += sig_amp * np.exp(
-                        1j
-                        * 2
-                        * np.pi
-                        * j
-                        * len(self.f_rng["Broadband"])
-                        * self.time_axis["Broadband"]
-                        / num_sub_carriers
-                    )
-                signal *= 1 / num_sub_carriers
-                return np.tile(np.fft.fft(signal), (self.params.M, 1))
-            else:
-                raise Exception(
-                    f"signal nature {self.params.signal_nature} is not defined"
-                )
+                # Coherent signals: same amplitude and phase for all signals
+                symbols = (amplitude
+                            * (
+                                      np.random.randn(1, self.params.number_subcarriers)
+                                      + 1j * np.random.randn(1, self.params.number_subcarriers)))
+                symbols = np.repeat(symbols, M, axis=0)
+            # each symbol is multiplied by the phase shift of the subcarrier
+            # the phase shift is a function of the subcarrier frequency and the time
+            # the phase shift is of size K x T
+            phase_shift = np.exp(
+                1j * 2 * np.pi
+                * (np.arange(self.params.number_subcarriers)[:, None] - self.params.number_subcarriers // 2) @ self.time_axis["broadband"][:, None].T
+                * self.params.signal_bandwidth
+                / (self.params.number_subcarriers)
+            )
+            # the signal is the product of the symbols and the phase shift normalized by the number of subcarriers
+            # the signal is of size M x T
+            signal = symbols @ phase_shift / self.params.number_subcarriers
+            # the creation of this signal is in the time domain, if we want to multiply it by the steering vector
+            # we need to transform it to the frequency domain
+            signal_frq = np.fft.fft(signal, n=self.params.number_subcarriers, axis=1)
+            # signal_frq = np.fft.fft(signal, axis=1)
+            return signal_frq
 
         else:
             raise Exception(f"signal type {self.params.signal_type} is not defined")

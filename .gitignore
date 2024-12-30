@@ -16,3 +16,4 @@ src/__pycache__/
 >>>>>>> a2714f3bc5d3796295b1342e2f96ed575e990d82
 !/src/*.py
 weights/
+wandb/

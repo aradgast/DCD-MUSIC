@@ -121,6 +121,25 @@ def spatial_smoothing_covariance(x: torch.Tensor):
     # Divide overall matrix by the number of sources
     return Rx_smoothed
 
+def tops_covariance(x: torch.Tensor, number_of_bins: int=1):
+    """
+    Tops algorithm uses K bins to calculate the covariance by using STFT.
+    Args:
+        x:
+        number_of_bins:
+
+
+    Returns:
+
+    """
+    Rx = torch.zeros(x.shape[0], number_of_bins,x.shape[1], x.shape[1], dtype=torch.complex128, device=device)
+    bin_size = x.shape[2] // number_of_bins
+    for i in range(number_of_bins):
+        x_bin = x[:, :, i*bin_size:(i+1)*bin_size]
+        Rx[:, i, :, :] = sample_covariance(x_bin)
+    return Rx
+
+
 def keep_far_enough_points(tensor, M, D):
     # # Calculate pairwise distances between columns
     # distances = cdist(tensor.T, tensor.T, metric="euclidean")
@@ -466,7 +485,10 @@ def parse_loss_results_for_plotting(loss_results: dict, tested_param: str):
         for method, loss_ in results.items():
             if plt_res.get(method) is None:
                 plt_res[method] = {tested_param: []}
-            plt_res[method][tested_param].append(loss_[tested_param])
+            try:
+                plt_res[method][tested_param].append(loss_[tested_param])
+            except KeyError:
+                plt_res[method][tested_param].append(loss_["Overall"])
             if loss_.get("Accuracy") is not None:
                 if "Accuracy" not in plt_res[method].keys():
                     plt_res[method]["Accuracy"] = []

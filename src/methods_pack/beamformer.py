@@ -2,8 +2,10 @@
 This file contain an implementation for a Beamformer to use for Far field(DOA) and Near field(DOA and Range) scenarios.
 """
 import torch
+from sympy.functions.special.beta_functions import betainc_mpmath_fix
 from torch.nn import Module
 from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
 
 from src.criterions import CartesianLoss
 from src.system_model import SystemModel
@@ -23,12 +25,106 @@ class Beamformer(Module):
         self.__init_criteria()
         self.eval()  # This a torch based model without any trainable parameters.
 
-    def forward(self, x: torch.Tensor, sources_num: int):
-        samp_cov = self.pre_processing(x)
-        spectrum = self.get_spectrum(samp_cov)
+    def forward(self, cov: torch.Tensor, sources_num: int):
+        spectrum = self.get_spectrum(cov)
         peaks = self.find_peaks(spectrum, sources_num)
         labels = self.get_labels(peaks)
         return labels
+
+    def beam_pattern(self, cov: torch.Tensor):
+        """
+        The MVDR beamformer implementation. it will return the optimal weights for the given input signal.
+        Args:
+            x:
+
+        Returns:
+
+        """
+        eigvals, eigvecs = torch.linalg.eigh(cov)
+        # inv_cov = torch.bmm(torch.bmm(eigvecs, torch.diag_embed(eigvals ** (-1)).to(torch.complex128)), eigvecs.conj().transpose(1,2))
+        sqr_inv_cov = torch.bmm(torch.bmm(eigvecs, torch.diag_embed(eigvals ** (-0.5)).to(torch.complex128)), eigvecs.conj().transpose(1,2))
+        # sqr_cov = torch.bmm(torch.bmm(eigvecs, torch.diag_embed(eigvals ** 0.5).to(torch.complex128)), eigvecs.conj().transpose(1,2))
+        if self.system_model.params.field_type.lower() == "far":
+            beam_pattern = torch.bmm(sqr_inv_cov, self.steering_dict.unsqueeze(0).repeat(cov.shape[0], 1, 1))
+            beam_pattern = torch.linalg.norm(beam_pattern, dim=1)
+            beam_pattern = 1 / (beam_pattern + 1e-10)
+        else:
+            beam_pattern = torch.einsum("bnm, mar -> bnar", sqr_inv_cov, self.steering_dict)
+            beam_pattern = torch.linalg.norm(beam_pattern, dim=1)
+            beam_pattern = 1 / (beam_pattern + 1e-10)
+        return beam_pattern
+
+    def plot_beam_pattern(self, beampattern: torch.Tensor):
+        """
+        Plot the beam pattern of the beamformer.
+        Args:
+            beampattern: the beam pattern to plot.
+
+        Returns:
+
+        """
+        if self.system_model.params.field_type.lower() == "far":
+            self.plot_2D_beampattern(beampattern)
+        else:
+            self.plot_3D_beampattern(beampattern)
+
+    def plot_2D_beampattern(self, beampattern: torch.Tensor):
+        """
+        Plot the 2D beam pattern of the beamformer.
+        Args:
+            beampattern: the beam pattern to plot.
+
+        Returns:
+
+        """
+        angles_rad = self.angles_dict.cpu().detach().numpy()
+        beampattern = beampattern.cpu().detach().numpy()
+        plt.figure(figsize=(8, 8))
+        ax = plt.subplot(111, polar=True)
+        ax.plot(angles_rad, 10 * np.log10(beampattern), label="Beampattern")
+
+        # Customize the plot
+        ax.set_theta_zero_location("N")  # Set 0 degrees at the top
+        ax.set_theta_direction(-1)  # Clockwise direction
+        ax.set_xlim(angles_rad[0], angles_rad[-1])  # Angle range
+        ax.set_ylim(-40, 10)  # dB range (adjust if needed)
+        ax.set_yticks([-40, -30, -20, -10, 0, 10])  # dB ticks
+
+        ax.set_xlabel("Magnitude (dB)", labelpad=20)
+        plt.title("Beampattern of MVDR", va='bottom')
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
+    def plot_3D_beampattern(self, beampattern: torch.Tensor):
+        """
+        plot an heatmap of the 3D beam pattern of the beamformer.
+        Args:
+            beampattern:
+
+        Returns:
+
+        """
+        angles = self.angles_dict.cpu().detach().numpy()
+        ranges = self.ranges_dict.cpu().detach().numpy()
+        beampattern = 10 * torch.log10(beampattern)
+        beampattern = beampattern.cpu().detach().numpy()
+        # Create a polar plot
+        theta_grid, r_grid = np.meshgrid(angles, ranges)
+
+        plt.figure(figsize=(8, 8))
+        ax = plt.subplot(111, polar=True)
+        c = ax.pcolormesh(theta_grid, r_grid, beampattern.T, cmap='viridis', shading='auto')
+
+        # Customize the plot
+        plt.colorbar(c, label="Array Response (dB)")
+        ax.set_theta_zero_location("E")  # Set 0 degrees at the top
+        ax.set_theta_direction(-1)  # Clockwise direction
+        plt.title("3D Beampattern Heatmap", va='bottom')
+        ax.set_xlim(angles[0], angles[-1])  # Angle range
+        ax.set_ylim(ranges[0], ranges[-1])  # Range range
+
+        plt.show()
 
     def get_spectrum(self, cov: torch.Tensor):
         """
@@ -39,7 +135,7 @@ class Beamformer(Module):
         Returns:
             torch.Tensor: the outcome of the beamformer for Far or Near field cases.
         """
-        if self.system_model.params.field_type == "Far":
+        if self.system_model.params.field_type.lower() == "far":
             # in this case, the steering search space is 2D -> NxA, whereas A is the size of the search grid.
             v1 = torch.einsum("an, bnm -> bam", self.steering_dict.conj().transpose(0, 1), cov)
             spectrum = torch.einsum("ban, na -> ba", v1, self.steering_dict)
@@ -62,7 +158,7 @@ class Beamformer(Module):
             torch.Tensor: the peaks in the spectrum to use to extract the predicted labels from the dictionary.
 
         """
-        if self.system_model.params.field_type == "Far":
+        if self.system_model.params.field_type.lower() == "far":
             return self.__find_peaks_far_field(spectrum, sources_num)
         else:
             return self.__find_peaks_near_field(spectrum, sources_num)
@@ -88,7 +184,7 @@ class Beamformer(Module):
         return labels
 
     @staticmethod
-    def pre_processing(x: torch.Tensor):
+    def pre_processing(x: torch.Tensor, mode: str = "sample"):
         """
         The pre-processing stage of the beamformer is the calculation of the sample covariance.
 
@@ -99,9 +195,13 @@ class Beamformer(Module):
         Returns:
             tensor: a Tensor of size BxNxN represent the sample covariance for each element in the batch.
         """
-        return sample_covariance(x)
+        if mode == "sample":
+            cov = sample_covariance(x)
+        else:
+            raise NotImplementedError
+        return cov
 
-    def test_step(self, batch, batch_idx: int):
+    def test_step(self, batch, batch_idx: int, model: Module=None):
         x, sources_num, label, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -114,6 +214,7 @@ class Beamformer(Module):
             masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
             angles = label.to(device)  # only angles
+
         # Check if the sources number is the same for all samples in the batch
         if (sources_num != sources_num[0]).any():
             # in this case, the sources number is not the same for all samples in the batch
@@ -121,8 +222,11 @@ class Beamformer(Module):
                             f" The sources number is not the same for all samples in the batch.")
         else:
             sources_num = sources_num[0]
-
-        predictions = self(x, sources_num)
+        if model is not None:
+            Rx = model.get_surrogate_covariance(x)
+        else:
+            Rx = self.pre_processing(x)
+        predictions = self(Rx, sources_num)
         if isinstance(predictions, tuple):
             angles_prediction, ranges_prediction = predictions
             rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
@@ -197,7 +301,7 @@ class Beamformer(Module):
         # if it's the Far field case, need to init angles range.
         self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
                                         dtype=torch.float64).requires_grad_(False).to(torch.float64)
-        if self.system_model.params.field_type.startswith("Near"):
+        if self.system_model.params.field_type.startswith("near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
@@ -222,7 +326,7 @@ class Beamformer(Module):
                                                                 nominal=True, generate_search_grid=True)
 
     def __init_criteria(self):
-        if self.system_model.params.field_type == "Far":
+        if self.system_model.params.field_type.lower() == "far":
             self.criterion = RMSPELoss(1.0)
         else:
             self.criterion = CartesianLoss()

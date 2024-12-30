@@ -45,6 +45,7 @@ from src.methods_pack.root_music import RootMusic, root_music
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
 from src.methods_pack.beamformer import Beamformer
+from src.methods_pack.music_tops import TOPS
 from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
 from src.plotting import plot_spectrum
@@ -64,15 +65,20 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     an instance of the method.
     """
     if method_name.lower().endswith("1d-music"):
-        return MUSIC(system_model=system_model, estimation_parameter="angle")
-    if method_name.lower().endswith("2d-music"):
-        return MUSIC(system_model=system_model, estimation_parameter="angle, range")
-    if method_name.lower() == "root-music":
-        return RootMusic(system_model)
-    if method_name.lower().endswith("esprit"):
-        return ESPRIT(system_model)
-    if method_name.lower().endswith("beamformer"):
-        return Beamformer(system_model)
+        method = MUSIC(system_model=system_model, estimation_parameter="angle")
+    elif method_name.lower().endswith("2d-music"):
+        method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
+    elif method_name.lower() == "root-music":
+        method = RootMusic(system_model)
+    elif method_name.lower().endswith("esprit"):
+        method = ESPRIT(system_model)
+    elif method_name.lower().endswith("beamformer"):
+        method = Beamformer(system_model)
+    elif method_name.lower() == "tops":
+        method = TOPS(system_model)
+    method = method.to(device)
+    method = method.eval()
+    return method
 
 
 def get_model(model_name: str, params: dict, system_model: SystemModel):
@@ -84,9 +90,9 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
         .set_model()
     )
     model = model_config.model
-    path = os.path.join(Path(__file__).parent.parent, "data", "weights", "final_models", model.get_model_file_name())
+    path = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name())
     try:
-        model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
+        model.load_state_dict(torch.load(path+".pt", map_location=device, weights_only=True))
     except FileNotFoundError as e:
         print("####################################")
         raise e
@@ -100,7 +106,7 @@ def get_model(model_name: str, params: dict, system_model: SystemModel):
         #     print(e)
         #     print("####################################")
         #     warnings.warn(f"get_model: Model {model_name}'s weights not found")
-    return model.to(device)
+    return model.to(device).eval()
 
 
 def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid") -> dict:
@@ -171,101 +177,65 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
     return overall_loss
 
 
-def evaluate_augmented_model(
-        model: SubspaceNet,
-        dataset,
-        system_model,
-        criterion=None,
-        algorithm: str = "music",
-        plot_spec: bool = False,
-        figures: dict = None,
-):
+def evaluate_augmented_model(augmented_method: tuple[str, str],
+                            dataset,
+                            system_model: SystemModel):
     """
-    Evaluate an augmented model that combines a SubspaceNet model with another subspace method on a given dataset.
 
     Args:
-    -----
-        model (nn.Module): The trained SubspaceNet model.
-        dataset: The evaluation dataset.
-        system_model (SystemModel): The system model for the hybrid algorithm.
-        criterion: The loss criterion for evaluation. Defaults to RMSPE.
-        algorithm (str): The hybrid algorithm to use (e.g., "music", "mvdr", "esprit"). Defaults to "music".
-        plot_spec (bool): Whether to plot the spectrum for the hybrid algorithm. Defaults to False.
-        figures (dict): Dictionary containing figure objects for plotting. Defaults to None.
+        augmented_method: a tuple of strings that contains the augmented method and the method to use.
+        dataset: the dataset to evaluate on.
+        system_model: the system model to use for the evaluation.
 
     Returns:
-    --------
-        float: The average evaluation loss.
-
-    Raises:
-    -------
-        Exception: If the algorithm is not supported.
-        Exception: If the algorithm is not supported
+        the test score of the augmented method.
     """
     # Initialize parameters for evaluation
     hybrid_loss = []
-    if not isinstance(model, SubspaceNet):
-        raise Exception("evaluate_augmented_model: model is not from type SubspaceNet")
-    # Set model to eval mode
-    model.eval()
+    model_name = augmented_method[0]
+    algorithm = augmented_method[1].lower()
+    model_params = augmented_method[2]
+
+    model = get_model(model_name,
+                model_params,
+                system_model)
     # Initialize instances of subspace methods
-    methods = {
-        "mvdr": MVDR(system_model),
-        "music": MUSIC(system_model, estimation_parameter="angle"),
-        "esprit": ESPRIT(system_model),
-        "r-music": RootMusic(system_model),
-        "music_2D": MUSIC(system_model, estimation_parameter="angle, range")
-    }
-    # If algorithm is not in methods
-    if methods.get(algorithm) is None:
-        raise Exception(
-            f"evaluate_augmented_model: Algorithm {algorithm} is not supported."
-        )
+    method = get_model_based_method(algorithm, system_model)
+    over_all_loss = 0.0
+    angle_loss, distance_loss, acc = None, None, None
+    test_length = 0
+    if isinstance(method, nn.Module):
+        method = method.to(device)
+        # Set model to eval mode
+        method.eval()
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for i, data in enumerate(dataset):
-            X, true_label = data
-            if algorithm.endswith("2D"):
-                DOA, RANGE = torch.split(true_label, true_label.size(1) // 2, dim=1)
-                RANGE.to(device)
-            else:
-                DOA = true_label
+            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music", "beamformer", "tops"]:
+                tmp_rmspe, tmp_acc, tmp_length = method.test_step(data, i, model)
+                if isinstance(tmp_rmspe, tuple):
+                    tmp_rmspe, tmp_rmspe_angle, tmp_rmspe_range = tmp_rmspe
+                    if angle_loss is None:
+                        angle_loss = 0.0
+                    if distance_loss is None:
+                        distance_loss = 0.0
+                    angle_loss += tmp_rmspe_angle
+                    distance_loss += tmp_rmspe_range
+                over_all_loss += tmp_rmspe
+                if acc is None:
+                    acc = 0.0
 
-            # Convert observations and DoA to device
-            X = X.to(device)
-            DOA = DOA.to(device)
-            # Apply method with SubspaceNet augmentation
-            method_output = methods[algorithm].narrowband(
-                X=X, mode="SubspaceNet", model=model
-            )
-            # Calculate loss, if algorithm is "music" or "esprit"
-            if not algorithm.startswith("mvdr"):
-                if algorithm.endswith("2D"):
-                    predictions_doa, predictions_distance = method_output[0], method_output[1]
-                    loss = criterion(predictions_doa, DOA * R2D, predictions_distance, RANGE)
-                else:
-                    predictions, M = method_output[0], method_output[-1]
-                    # If the amount of predictions is less than the amount of sources
-                    predictions = add_random_predictions(M, predictions, algorithm)
-                    # Calculate loss criterion
-                    loss = criterion(predictions, DOA * R2D)
-                hybrid_loss.append(loss)
+                acc += tmp_acc
+                test_length += tmp_length
             else:
-                hybrid_loss.append(0)
-            # Plot spectrum, if algorithm is "music" or "mvdr"
-            if not algorithm.startswith("esprit"):
-                if plot_spec and i == len(dataset.dataset) - 1:
-                    predictions, spectrum = method_output[0], method_output[1]
-                    figures[algorithm]["norm factor"] = np.max(spectrum)
-                    plot_spectrum(
-                        predictions=predictions,
-                        true_DOA=DOA * R2D,
-                        system_model=system_model,
-                        spectrum=spectrum,
-                        algorithm="SubNet+" + algorithm.upper(),
-                        figures=figures,
-                    )
-    return np.mean(hybrid_loss)
+                raise NotImplementedError(f"evaluate_model_based: Algorithm {algorithm} is not supported.")
+        result = {"Overall": over_all_loss / test_length}
+        if distance_loss is not None and angle_loss is not None:
+            result["Angle"] = angle_loss / test_length
+            result["Distance"] = distance_loss / test_length
+        if acc is not None:
+            result["Accuracy"] = acc / test_length
+    return result
 
 
 def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorithm: str = "music"):
@@ -299,7 +269,7 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for i, data in enumerate(dataset):
-            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music", "beamformer"]:
+            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music", "beamformer", "tops"]:
                 tmp_rmspe, tmp_acc, tmp_length = model_based.test_step(data, i)
                 if isinstance(tmp_rmspe, tuple):
                     tmp_rmspe, tmp_rmspe_angle, tmp_rmspe_range = tmp_rmspe
@@ -479,13 +449,11 @@ def evaluate(
     # Evaluate SubspaceNet augmented methods
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(
-            model=model,
+            augmented_method=algorithm,
             dataset=generic_test_dataset,
             system_model=system_model,
-            criterion=criterion,
-            algorithm=algorithm,
         )
-        res["augmented" + algorithm] = loss
+        res["augmented" + f"_{algorithm[0]}_{algorithm[1]}"] = loss
     # Evaluate classical subspace methods
     for algorithm in subspace_methods:
         start = time.time()

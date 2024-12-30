@@ -10,18 +10,19 @@ from src.data_handler import *
 import argparse
 
 # default values for the argparse
-number_sensors = 8
-number_sources = None
+number_sensors = 15
+number_sources = 2
 number_snapshots = 100
-snr = 0
+snr = 10
 field_type = "Near"
-signal_nature = "coherent"
+signal_type = "broadband"
+signal_nature = "non-coherent"
 err_loc_sv = 0.0
 tau = 8
-sample_size = 1024
-train_test_ratio = 0.1
+sample_size = 4096
+train_test_ratio = 0.0
 batch_size = 128
-epochs = 2
+epochs = 100
 optimizer = "Adam"
 learning_rate = 0.001
 weight_decay = 1e-9
@@ -39,6 +40,7 @@ def train_dcd_music(*args, **kwargs):
     save_to_file = SIMULATION_COMMANDS["SAVE_TO_FILE"]  # Saving results to file or present them over CMD
     create_data = SIMULATION_COMMANDS["CREATE_DATA"]  # Creating new dataset
     load_model = SIMULATION_COMMANDS["LOAD_MODEL"]  # Load specific model for training
+    save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Save model after training
     load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
     print("Training model - DCD-MUSIC, all training steps.")
@@ -74,6 +76,7 @@ def train_dcd_music(*args, **kwargs):
         .set_parameter("T", SYSTEM_MODEL_PARAMS["T"])
         .set_parameter("snr", SYSTEM_MODEL_PARAMS["snr"])
         .set_parameter("field_type", SYSTEM_MODEL_PARAMS["field_type"])
+        .set_parameter("signal_type", SYSTEM_MODEL_PARAMS["signal_type"])
         .set_parameter("signal_nature", SYSTEM_MODEL_PARAMS["signal_nature"])
         .set_parameter("eta", SYSTEM_MODEL_PARAMS["eta"])
         .set_parameter("bias", SYSTEM_MODEL_PARAMS["bias"])
@@ -126,7 +129,7 @@ def train_dcd_music(*args, **kwargs):
         .set_model_type("SubspaceNet")
         .set_system_model(system_model)
         .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
-                           "tau": MODEL_PARAMS.get("tau"), "field_type": "Far"})
+                           "tau": MODEL_PARAMS.get("tau"), "field_type": "far"})
         .set_model()
     )
     # Assign the training parameters object
@@ -143,15 +146,6 @@ def train_dcd_music(*args, **kwargs):
         .set_schedular(step_size=TRAINING_PARAMS["step_size"],
                        gamma=TRAINING_PARAMS["gamma"])
     )
-    if load_model:
-        try:
-            simulation_parameters.load_model(
-                loading_path=saving_path / "final_models" / model_config.model.get_model_file_name())
-        except Exception as e:
-            print("#############################################")
-            print(e)
-            print("simulation_parameters.load_model: Error loading model")
-            print("#############################################")
 
         # Print training simulation details
     simulation_summary(
@@ -160,30 +154,33 @@ def train_dcd_music(*args, **kwargs):
         parameters=simulation_parameters,
         phase="training",
     )
-    # Perform simulation training and evaluation stages
-    model, loss_train_list, loss_valid_list = train(
-        training_parameters=simulation_parameters,
-        saving_path=saving_path,
-    )
-    # Save model weights
-    torch.save(model.state_dict(),
-               saving_path / "final_models" / Path(model.get_model_file_name()))
+
+    trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
+                                       weight_decay=TRAINING_PARAMS["weight_decay"],
+                                       epochs=TRAINING_PARAMS["epochs"],
+                                       optimizer=TRAINING_PARAMS["optimizer"],
+                                       step_size=TRAINING_PARAMS["step_size"],
+                                       gamma=TRAINING_PARAMS["gamma"],
+                                       training_objective="angle",
+                                       scheduler=TRAINING_PARAMS["scheduler"],
+                                       )
+    train_dataloader, valid_dataloader = train_dataset.get_dataloaders(batch_size=TRAINING_PARAMS["batch_size"])
+    trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
+    model = trainer.train(train_dataloader, valid_dataloader,
+                          use_wandb=TRAINING_PARAMS["use_wandb"],
+                          save_final=save_model, load_model=load_model)
+
     print("END OF TRAINING - Step 1: angle branch training.")
 
     # Update model configuration
     model_config.set_model_type("DCD-MUSIC")
     model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
                                    "diff_method": diff_method,
-                                   "train_loss_type": train_loss_type})
+                                   "train_loss_type": train_loss_type,
+                                   "angle_extractor": model})
     model_config.set_model()
     # Assign the training parameters object
-    simulation_parameters.set_training_objective("range")
-    simulation_parameters.set_model(model_gen=model_config)
-    simulation_parameters.set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
-                                        learning_rate=TRAINING_PARAMS["learning_rate"],
-                                        weight_decay=TRAINING_PARAMS["weight_decay"])
-    simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
-                       gamma=TRAINING_PARAMS["gamma"])
+    trainingparams.update({"training_objective": "range"})
 
     if load_model:
         try:
@@ -194,45 +191,22 @@ def train_dcd_music(*args, **kwargs):
             print(e)
             print("simulation_parameters.load_model: Error loading model")
             print("#############################################")
-    # update eigen regularization to 0
+    trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
+    model = trainer.train(train_dataloader, valid_dataloader,
+                            use_wandb=TRAINING_PARAMS["use_wandb"],
+                            save_final=save_model, load_model= load_model)
 
-    # Perform simulation training and evaluation stages
-    model, loss_train_list, loss_valid_list = train(
-        training_parameters=simulation_parameters,
-        saving_path=saving_path,
-    )
-    # Save model weights
-    torch.save(model.state_dict(),
-               saving_path / "final_models" / Path(model.get_model_file_name()))
     print("END OF TRAINING - Step 2: distance branch training.")
 
     # Assign the training parameters object
-    simulation_parameters.set_training_objective("angle, range")
-    simulation_parameters.set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
-                                        learning_rate=TRAINING_PARAMS["learning_rate"] / 2,
-                                        weight_decay=TRAINING_PARAMS["weight_decay"])
-    simulation_parameters.set_schedular(step_size=TRAINING_PARAMS["step_size"],
-                                        gamma=TRAINING_PARAMS["gamma"])
-    simulation_parameters.model.init_model_train_params()
-
-    if load_model:
-        try:
-            simulation_parameters.load_model(
-                loading_path=saving_path / "final_models" / model_config.model.get_model_file_name())
-        except Exception as e:
-            print("#############################################")
-            print(e)
-            print("simulation_parameters.load_model: Error loading model")
-            print("#############################################")
-
-    # Perform simulation training and evaluation stages
-    model, loss_train_list, loss_valid_list = train(
-        training_parameters=simulation_parameters,
-        saving_path=saving_path,
-    )
-    # Save model weights
-    torch.save(model.state_dict(),
-               saving_path / "final_models" / Path(model.get_model_file_name()))
+    simulation_parameters.set_model(model_gen=model)
+    trainingparams.update({"training_objective": "angle, range",
+                           "learning_rate": TRAINING_PARAMS["learning_rate"] / 10})
+    simulation_parameters.model.init_model_train_params(0.0)
+    trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
+    model = trainer.train(train_dataloader, valid_dataloader,
+                          use_wandb=TRAINING_PARAMS["use_wandb"],
+                          save_final=save_model, load_model=load_model)
     print("END OF TRAINING - Step 3: adaption by position.")
     if save_to_file:
         sys.stdout = orig_stdout
@@ -245,6 +219,7 @@ def parse_arguments():
     parser.add_argument('-t', '--number_snapshots', type=int, help='Number of snapshots', default=number_snapshots)
     parser.add_argument('-s', '--snr', type=int, help='SNR value', default=snr)
     parser.add_argument('-ft', '--field_type', type=str, help='Field type', default=field_type)
+    parser.add_argument('-st', '--signal_type', type=str, help='Signal type', default=signal_type)
     parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature', default=signal_nature)
     parser.add_argument('-eta', '--err_loc_sv', type=float, help="Error in sensors' locations", default=err_loc_sv)
 
@@ -255,6 +230,7 @@ def parse_arguments():
     parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=batch_size)
     parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=epochs)
     parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default=optimizer)
+    parser.add_argument('-sch', "--scheduler", type=str, help='Scheduler type', default="StepLR")
     parser.add_argument('-lr', "--learning_rate", type=float, help='Learning rate', default=learning_rate)
     parser.add_argument('-wd', "--weight_decay", type=float, help='Weight decay for optimizer', default=weight_decay)
     parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=step_size)
@@ -271,6 +247,7 @@ if __name__ == "__main__":
         "T": args.number_snapshots,  # number of snapshots
         "snr": args.snr,  # if defined, values in scenario_dict will be ignored
         "field_type": args.field_type,  # Near, Far
+        "signal_type": args.signal_type,  # broadband, narrowband
         "signal_nature": args.signal_nature,  # if defined, values in scenario_dict will be ignored
         "eta": args.err_loc_sv,  # steering vector error
         "bias": 0,
@@ -285,6 +262,7 @@ if __name__ == "__main__":
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "optimizer": args.optimizer,  # Adam, SGD
+        "scheduler": args.scheduler,
         "learning_rate": args.learning_rate,
         "weight_decay": args.weight_decay,
         "step_size": args.step_size,
@@ -293,11 +271,13 @@ if __name__ == "__main__":
         "true_range_train": None,  # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,  # if set, this range will be set to all samples in the train dataset
+        "use_wandb": False
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,
-        "CREATE_DATA": False,
+        "CREATE_DATA": True,
         "LOAD_MODEL": False,
+        "SAVE_MODEL": True,
     }
     train_dcd_music(simulation_commands=simulation_commands,
                     system_model_params=system_model_params,

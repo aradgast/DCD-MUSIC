@@ -31,7 +31,7 @@ class ESPRIT(SubspaceMethod):
 
         return prediction, sources_estimation, regularization
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx, model: nn.Module=None):
         x, sources_num, label, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -50,13 +50,15 @@ class ESPRIT(SubspaceMethod):
                             f" The sources number is not the same for all samples in the batch.")
         else:
             sources_num = sources_num[0]
-
-        if self.system_model.params.signal_nature == "coherent":
-            # Spatial smoothing
-            Rx = self.pre_processing(x, mode="sps")
+        if model is not None:
+            Rx = model.get_surrogate_covariance(x)
         else:
-            # Conventional
-            Rx = self.pre_processing(x, mode="sample")
+            if self.system_model.params.signal_nature == "coherent":
+                # Spatial smoothing
+                Rx = self.pre_processing(x, mode="sps")
+            else:
+                # Conventional
+                Rx = self.pre_processing(x, mode="sample")
         angles_prediction, sources_num_estimation, _ = self(Rx, sources_num=sources_num)
         rmspe = self.criterion(angles_prediction, angles).item()
         acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)

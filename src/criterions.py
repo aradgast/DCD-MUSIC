@@ -199,7 +199,8 @@ class CartesianLoss(nn.Module):
 
 
 class MusicSpectrumLoss(nn.Module):
-    def __init__(self, array: torch.Tensor, sensors_distance: float, mode:str = "inverse_spectrum"):
+    def __init__(self, array: torch.Tensor, sensors_distance: float, mode:str = "inverse_spectrum",
+                 aggregate: str = "sum"):
         super(MusicSpectrumLoss, self).__init__()
         self.array = array
         self.sensors_distance = sensors_distance
@@ -207,6 +208,7 @@ class MusicSpectrumLoss(nn.Module):
         if mode not in ["spectrum", "inverse_spectrum"]:
             raise Exception(f"MusicSpectrumLoss: mode {mode} is not defined")
         self.mode = mode
+        self.aggregate = aggregate
 
 
     def forward(self, **kwargs):
@@ -253,10 +255,18 @@ class MusicSpectrumLoss(nn.Module):
         # get the norm value for each element in the batch.
         inverse_spectrum = torch.norm(var1, dim=-1) ** 2
         if self.mode == "inverse_spectrum":
-            loss = torch.sum(inverse_spectrum, dim=-1).sum()
+            loss = torch.sum(inverse_spectrum, dim=-1)
         elif self.mode == "spectrum":
-            loss = -torch.sum(1 / inverse_spectrum, dim=-1).sum()
-        return loss
+            loss = -torch.sum(1 / inverse_spectrum, dim=-1)
+        else:
+            raise Exception(f"MusicSpectrumLoss: mode {self.mode} is not defined")
+
+        if self.aggregate == "sum":
+            return torch.sum(loss)
+        elif self.aggregate == "mean":
+            return torch.mean(loss)
+        else:
+            return loss
 
 
 def set_criterions(criterion_name: str, balance_factor: float = 0.0):

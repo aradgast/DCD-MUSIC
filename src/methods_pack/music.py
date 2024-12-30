@@ -13,6 +13,55 @@ from src.utils import *
 from src.criterions import RMSPELoss, CartesianLoss
 
 
+from scipy.ndimage import maximum_filter
+from scipy.ndimage import label
+from scipy.ndimage import find_objects
+
+def find_k_highest_peaks(matrix, k):
+    """
+    Find the k highest peaks in a 2D matrix using SciPy tools. A peak is defined as a
+    local maximum surrounded by smaller values.
+
+    Parameters:
+    - matrix (2D array-like): Input matrix.
+    - k (int): Number of highest peaks to extract.
+
+    Returns:
+    - peaks (list): List of tuples (row, col, value) representing the positions and values of the k highest peaks.
+    """
+    # Apply maximum filter to find local maxima
+    neighborhood = maximum_filter(matrix, size=21, mode='constant', cval=-np.inf)
+    local_max = (matrix == neighborhood)
+
+    # Label the connected components of local maxima
+    labeled, num_features = label(local_max)
+    slices = find_objects(labeled)
+
+    # Extract peak positions and values
+    peaks = []
+    try:
+        for sl in slices:
+            row = int((sl[0].start + sl[0].stop - 1) / 2)
+            col = int((sl[1].start + sl[1].stop - 1) / 2)
+            value = matrix[row, col]
+            peaks.append((row, col, value))
+    except Exception as e:
+        pass
+
+    # Sort peaks by value (descending) and select the top k
+    peaks = sorted(peaks, key=lambda x: x[2], reverse=True)[:k]
+    if len(peaks) < k:
+        warnings.warn(f"find_k_highest_peaks: Less than {k} peaks found.")
+        # add random peaks
+        x_random = np.random.randint(0, matrix.shape[0], (k - len(peaks),))
+        y_random = np.random.randint(0, matrix.shape[1], (k - len(peaks),))
+        for i in range(k - len(peaks)):
+            peaks.append((x_random[i], y_random[i], matrix[x_random[i], y_random[i]]))
+
+
+    return peaks
+
+
 class MUSIC(SubspaceMethod):
     """
     This is implementation of the MUSIC method for localization in Far and Near field environments.
@@ -46,7 +95,7 @@ class MUSIC(SubspaceMethod):
         self.__init_criteria()
 
         # if this is the music 2D case, the search grid is constant and can be calculated once.
-        if self.system_model.params.field_type.startswith("Near"):
+        if self.system_model.params.field_type.startswith("near"):
             if self.angles_dict is not None and self.ranges_dict is not None:
                 self.set_search_grid()
             elif self.angles_dict is not None:  # Near field case with Far field inference
@@ -70,7 +119,7 @@ class MUSIC(SubspaceMethod):
         if sources_num is None:
             sources_num = number_of_sources
         # single param estimation: the search grid should be updated for each batch, else, it's the same search grid.
-        if self.system_model.params.field_type.startswith("Near") and self.estimation_params in ["range"]:
+        if self.system_model.params.field_type.startswith("near") and self.estimation_params in ["range"]:
             if known_angles.shape[-1] == 1:
                 self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
             else:
@@ -82,7 +131,10 @@ class MUSIC(SubspaceMethod):
                 return params
         _, noise_subspace, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), sources_num)
         inverse_spectrum = self.get_inverse_spectrum(noise_subspace.to(device)).to(device)
-        self.music_spectrum = 1 / inverse_spectrum
+        if self._get_name() == "TOPS":
+            self.music_spectrum = torch.sum(1 / (inverse_spectrum + 1e-10), dim=-1)
+        else:
+            self.music_spectrum = 1 / (inverse_spectrum + 1e-10)
         params = self.peak_finder(sources_num)
         return params, source_estimation, eigen_regularization
 
@@ -126,7 +178,7 @@ class MUSIC(SubspaceMethod):
         in case of dual param estimation it will be 2D inverse spectrum:
                                                     BatchSizex(length_search_grid_angle)x(length_search_grid_distance)
         """
-        if self.system_model.params.field_type.startswith("Far"):
+        if self.system_model.params.field_type.startswith("far"):
             var1 = torch.einsum("an, bnm -> bam", self.steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
                                 noise_subspace)
             inverse_spectrum = torch.norm(var1, dim=2)
@@ -145,7 +197,9 @@ class MUSIC(SubspaceMethod):
             elif self.estimation_params.startswith("range"):
                 var1 = torch.einsum("dbn, nbm -> bdm", self.steering_dict.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
-                inverse_spectrum = torch.norm(var1, dim=2)
+                inverse_spectrum = torch.norm(var1, dim=-1)
+                if torch.isnan(inverse_spectrum).any():
+                    raise ValueError("Nan values in inverse spectrum")
             else:
                 raise ValueError(f"MUSIC.get_inverse_spectrum: unknown estimation param {self.estimation_params}")
         return inverse_spectrum
@@ -173,9 +227,9 @@ class MUSIC(SubspaceMethod):
                 return self._peak_finder_1d(self.ranges_dict, source_number)
 
     def set_search_grid(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
-        if self.system_model.params.field_type.startswith("Far"):
+        if self.system_model.params.field_type.startswith("far"):
             self.__set_search_grid_far_field()
-        elif self.system_model.params.field_type.startswith("Near"):
+        elif self.system_model.params.field_type.startswith("near"):
             self.__set_search_grid_near_field(known_angles=known_angles, known_distances=known_distances)
         else:
             raise ValueError(f"MUSIC.set_search_grid: Unrecognized field type: {self.system_model.params.field_type}")
@@ -188,7 +242,7 @@ class MUSIC(SubspaceMethod):
         else:
             self._plot_1d_spectrum(highlight_corrdinates, batch)
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx, model: nn.Module=None):
         x, sources_num, label, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
@@ -208,11 +262,16 @@ class MUSIC(SubspaceMethod):
                             f" The sources number is not the same for all samples in the batch.")
         else:
             sources_num = sources_num[0]
-
-        if self.system_model.params.signal_nature == "non-coherent":
-            Rx = self.pre_processing(x, mode="sample")
+        if model is not None:
+            try:
+                Rx = model.get_surrogate_covariance(x)
+            except NotImplementedError as e:
+                raise e
         else:
-            Rx = self.pre_processing(x, mode="sps")
+            if self.system_model.params.signal_nature == "non-coherent":
+                Rx = self.pre_processing(x, mode="sample")
+            else:
+                Rx = self.pre_processing(x, mode="sps")
         predictions, sources_num_estimation, _ = self(Rx, number_of_sources=sources_num)
         if self.estimation_params == "angle, range":
             angles_prediction, ranges_prediction = predictions
@@ -242,7 +301,7 @@ class MUSIC(SubspaceMethod):
             if len(peaks_tmp) < source_number:
                 warnings.warn(f"MUSIC._peak_finder_1d: No peaks were found! taking max values instead.")
                 # random_peaks = np.random.randint(0, search_space.shape[0], (source_number - peaks_tmp.shape[0],))
-                random_peaks = torch.topk(search_space, source_number - peaks_tmp.shape[0],
+                random_peaks = torch.topk(torch.from_numpy(music_spectrum), source_number - peaks_tmp.shape[0],
                                           largest=True).indices.cpu().detach().numpy()
                 peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
             # Sort the peak by their amplitude
@@ -269,17 +328,24 @@ class MUSIC(SubspaceMethod):
                               , dtype=torch.int64, device=device)
         for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].detach().cpu().numpy().squeeze()
-            # Flatten the spectrum
-            spectrum_flatten = music_spectrum.flatten()
-            # Find spectrum peaks
-            peaks = sc.signal.find_peaks(spectrum_flatten)[0]
-            # Sort the peak by their amplitude
-            sorted_peaks = peaks[np.argsort(spectrum_flatten[peaks])[::-1]]
-            # convert the peaks to 2d indices
-            original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
-            if source_number > 1:
-                # pass
-                original_idx = keep_far_enough_points(original_idx, source_number, 10)
+            # # Flatten the spectrum
+            # spectrum_flatten = music_spectrum.flatten()
+            # # Find spectrum peaks
+            # peaks = sc.signal.find_peaks(spectrum_flatten)[0]
+            # # Sort the peak by their amplitude
+            # sorted_peaks = peaks[np.argsort(spectrum_flatten[peaks])[::-1]]
+            # if len(sorted_peaks) < source_number:
+            #     warnings.warn(f"MUSIC._peak_finder_2d: No peaks were found! taking max values instead.")
+            #     max_peaks = torch.topk(torch.from_numpy(spectrum_flatten), source_number - sorted_peaks.shape[0],
+            #                               largest=True).indices.cpu().detach().numpy()
+            #     sorted_peaks = np.concatenate((sorted_peaks, max_peaks))
+            # # convert the peaks to 2d indices
+            # original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, music_spectrum.shape))).T
+            # if source_number > 1:
+            #     # pass
+            #     original_idx = keep_far_enough_points(original_idx, source_number, 10)
+            peaks = find_k_highest_peaks(music_spectrum, source_number)
+            original_idx = torch.from_numpy(np.array(peaks)[:, :2]).T
             max_row[batch] = original_idx[0][0: source_number]
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:
@@ -357,12 +423,12 @@ class MUSIC(SubspaceMethod):
         angle_resolution = np.deg2rad(self.system_model.params.doa_resolution / 2)
         angle_decimals = int(np.ceil(np.log10(1 / angle_resolution)))
 
-        if self.system_model.params.field_type.startswith("Far"):
+        if self.system_model.params.field_type.startswith("far"):
             # if it's the Far field case, need to init angles range.
             self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
                                             dtype=torch.float64).requires_grad_(True).to(torch.float64)
             self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
-        elif self.system_model.params.field_type.startswith("Near"):
+        elif self.system_model.params.field_type.startswith("near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
@@ -383,15 +449,15 @@ class MUSIC(SubspaceMethod):
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
 
-    def __init_cells(self):
+    def __init_cells(self, coeff: float = 0.2):
 
         if self.estimation_params == "range":
-            self.cell_size = int(self.ranges_dict.shape[0] * 0.2)
+            self.cell_size = int(self.ranges_dict.shape[0] * coeff)
         elif self.estimation_params == "angle":
-            self.cell_size = int(self.angles_dict.shape[0] * 0.2)
+            self.cell_size = int(self.angles_dict.shape[0] * coeff)
         elif self.estimation_params == "angle, range":
-            self.cell_size_angle = int(self.angles_dict.shape[0] * 0.2)
-            self.cell_size_range = int(self.ranges_dict.shape[0] * 0.2)
+            self.cell_size_angle = int(self.angles_dict.shape[0] * coeff)
+            self.cell_size_range = int(self.ranges_dict.shape[0] * coeff)
 
         if self.cell_size is not None:
             if self.cell_size % 2 == 0:
@@ -403,8 +469,8 @@ class MUSIC(SubspaceMethod):
             if self.cell_size_range % 2 == 0:
                 self.cell_size_range += 1
 
-    def init_cells(self):
-        self.__init_cells()
+    def init_cells(self, coeff: float = 0.3):
+        self.__init_cells(coeff)
 
     def _plot_1d_spectrum(self, highlight_corrdinates, batch):
         if self.estimation_params == "angle":
@@ -507,7 +573,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
     def __set_search_grid_far_field(self):
-        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict)
+        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict, f_c=None).squeeze(-1)
 
     def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         """
@@ -520,7 +586,10 @@ class MUSIC(SubspaceMethod):
         if known_distances is None:
             known_distances = self.ranges_dict
         self.steering_dict = self.system_model.steering_vec(angles=known_angles, ranges=known_distances,
-                                                                       generate_search_grid=True, nominal=True)
+                                                                       generate_search_grid=True, nominal=True,
+                                                            f_c=None).squeeze(-1)
+        if torch.isnan(self.steering_dict).any():
+            raise ValueError("Nan values in steering matrix")
 
     def __str__(self):
         if self.estimation_params == "angle":
