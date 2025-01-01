@@ -143,6 +143,10 @@ class MUSIC(SubspaceMethod):
         self.music_spectrum = 1 / inverse_spectrum
         return self.music_spectrum
 
+    def update_number_of_sensors(self, number_of_sensors: int):
+        self.system_model.create_array(number_of_sensors)
+        self.set_search_grid()
+
     def adjust_cell_size(self):
         if self.estimation_params == "range":
             if self.cell_size > 1 and self.cell_size > int(self.ranges_dict.shape[0] * 0.02):
@@ -178,30 +182,36 @@ class MUSIC(SubspaceMethod):
         in case of dual param estimation it will be 2D inverse spectrum:
                                                     BatchSizex(length_search_grid_angle)x(length_search_grid_distance)
         """
+        steering_dict = self.steering_dict.to(device)
         if self.system_model.params.field_type.startswith("far"):
-            var1 = torch.einsum("an, bnm -> bam", self.steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
+            steering_dict = self.steering_dict.to(device)
+            var1 = torch.einsum("an, bnm -> bam", steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
                                 noise_subspace)
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
                 var1 = torch.einsum("adk, bkl -> badl",
-                                    torch.transpose(self.steering_dict.conj(), 0, 2).transpose(0, 1)[:, :,
-                                    :noise_subspace.shape[1]],
+                                    torch.transpose(steering_dict.conj(), 0, 2).transpose(0, 1),
                                     noise_subspace)
                 # get the norm value for each element in the batch.
                 inverse_spectrum = torch.norm(var1, dim=-1) ** 2
             elif self.estimation_params.endswith("angle"):
-                var1 = torch.einsum("an, nbm -> abm", self.steering_dict.conj().transpose(0, 1),
+                var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1).T
             elif self.estimation_params.startswith("range"):
-                var1 = torch.einsum("dbn, nbm -> bdm", self.steering_dict.conj().transpose(0, 2),
+                var1 = torch.einsum("dbn, nbm -> bdm", steering_dict.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1)
                 if torch.isnan(inverse_spectrum).any():
                     raise ValueError("Nan values in inverse spectrum")
             else:
                 raise ValueError(f"MUSIC.get_inverse_spectrum: unknown estimation param {self.estimation_params}")
+        del steering_dict
+        try:
+            torch.cuda.empty_cache()
+        except AttributeError:
+            pass
         return inverse_spectrum
 
     def peak_finder(self, source_number: int = None):
@@ -350,8 +360,15 @@ class MUSIC(SubspaceMethod):
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:
             # if the model is not in training mode, return the peaks.
-            angles_pred = self.angles_dict[max_row]
-            distances_pred = self.ranges_dict[max_col]
+            angle_dict = self.angles_dict.to(device)
+            range_dict = self.ranges_dict.to(device)
+            angles_pred = angle_dict[max_row]
+            distances_pred = range_dict[max_col]
+            del angle_dict, range_dict
+            try:
+                torch.cuda.empty_cache()
+            except AttributeError:
+                pass
             return angles_pred, distances_pred
         else:
             return self.__maskpeak_2d(max_row, max_col, source_number)
@@ -425,8 +442,8 @@ class MUSIC(SubspaceMethod):
 
         if self.system_model.params.field_type.startswith("far"):
             # if it's the Far field case, need to init angles range.
-            self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
-                                            dtype=torch.float64).requires_grad_(True).to(torch.float64)
+            self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution,
+                                            dtype=torch.float64).to(torch.float64)
             self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
         elif self.system_model.params.field_type.startswith("near"):
             # if it's the Near field, there are 3 possabilities.
@@ -434,7 +451,7 @@ class MUSIC(SubspaceMethod):
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
                 self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution,
-                                                device=device, dtype=torch.float64).requires_grad_(True).to(torch.float64)
+                                                dtype=torch.float64).to(torch.float64)
                 self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
 
 
@@ -443,8 +460,7 @@ class MUSIC(SubspaceMethod):
                 distance_resolution = self.system_model.params.range_resolution / 2
                 self.ranges_dict = torch.arange(np.floor(fresnel),
                                                 fraunhofer * fraunhofer_ratio,
-                                                distance_resolution,
-                                                device=device, dtype=torch.float64).requires_grad_(True)
+                                                distance_resolution, dtype=torch.float64)
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
@@ -587,7 +603,7 @@ class MUSIC(SubspaceMethod):
             known_distances = self.ranges_dict
         self.steering_dict = self.system_model.steering_vec(angles=known_angles, ranges=known_distances,
                                                                        generate_search_grid=True, nominal=True,
-                                                            f_c=None).squeeze(-1)
+                                                            f_c=None).squeeze(-1).cpu()
         if torch.isnan(self.steering_dict).any():
             raise ValueError("Nan values in steering matrix")
 

@@ -287,6 +287,11 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
                 test_length += tmp_length
             else:
                 raise NotImplementedError(f"evaluate_model_based: Algorithm {algorithm} is not supported.")
+        # clear cache
+        try:
+            torch.cuda.empty_cache()
+        except AttributeError:
+            pass
         result = {"Overall": over_all_loss / test_length}
         if distance_loss is not None and angle_loss is not None:
             result["Angle"] = angle_loss / test_length
@@ -447,6 +452,7 @@ def evaluate(
         print(f"{model_name} evaluation time: {time.time() - start}")
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
+    system_model.create_array()
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(
             augmented_method=algorithm,
@@ -455,6 +461,7 @@ def evaluate(
         )
         res["augmented" + f"_{algorithm[0]}_{algorithm[1]}"] = loss
     # Evaluate classical subspace methods
+    system_model.create_array()
     for algorithm in subspace_methods:
         start = time.time()
         loss = evaluate_model_based(generic_test_dataset, system_model,algorithm=algorithm)

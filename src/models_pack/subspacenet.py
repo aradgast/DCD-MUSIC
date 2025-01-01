@@ -75,11 +75,25 @@ class SubspaceNet(ParentModel):
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
         self.set_eigenregularization_schedular(init_value=0.0)
+        self.reshaper = self.__init_reshaper()
+
+
+    def __init_reshaper(self, target_size: int=25):
+        if self.N > target_size:
+            self.reshaper = nn.Conv2d(in_channels=1,
+                                      out_channels=1,
+                                      kernel_size=(2 * (self.N - target_size) + 1, self.N - target_size + 1),
+                                      stride=(1, 1), padding=0).to(device)
+            # update the number of sensors of the diff method
+            self.diff_method.update_number_of_sensors(target_size)
+        else:
+            self.reshaper = nn.Identity()
+        return self.reshaper
 
     def get_surrogate_covariance(self, x: torch.Tensor):
         x = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
-        self.N = x.shape[-1]
+        N = x.shape[-1]
         self.batch_size = x.shape[0]
         ############################
         ## Architecture flow ##
@@ -104,8 +118,8 @@ class SubspaceNet(ParentModel):
         # Reshape Output shape: [Batch size, 2N, N]
         Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
         # Real and Imaginary Reconstruction
-        Rx_real = Rx_View[:, :self.N, :]  # Shape: [Batch size, N, N])
-        Rx_imag = Rx_View[:, self.N:, :]  # Shape: [Batch size, N, N])
+        Rx_real = Rx_View[:, :N, :]  # Shape: [Batch size, N, N])
+        Rx_imag = Rx_View[:, N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag).to(torch.complex128)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
         Rz = gram_diagonal_overload(
@@ -175,8 +189,8 @@ class SubspaceNet(ParentModel):
         The input data is a complex signal of size [batch, N, T] and the input to the model supposed to be complex
          tensors of size [batch, tau, 2N, N].
         """
-        batch_size = x.shape[0]
-        Rx_tau = torch.zeros(batch_size, self.tau, 2 * self.N, self.N, device=device)
+        batch_size, N, T = x.shape
+        Rx_tau = torch.zeros(batch_size, self.tau, 2 * N, N, device=device)
         meu = torch.mean(x, dim=-1, keepdim=True).to(device)
         center_x = x - meu
         if center_x.dim() == 2:
@@ -188,6 +202,13 @@ class SubspaceNet(ParentModel):
             Rx_lag = torch.einsum("BNT, BTM -> BNM", x1, x2) / (center_x.shape[-1] - i - 1)
             Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), dim=1)
             Rx_tau[:, i, :, :] = Rx_lag
+
+        if N > 25:
+            b, t, n, m = Rx_tau.shape
+            Rx_tau = Rx_tau.view(b * t, 1, n, m)
+            Rx_tau = self.reshaper(Rx_tau)
+            Rx_tau = Rx_tau.view(b, t, Rx_tau.shape[-2], Rx_tau.shape[-1])
+
 
         return Rx_tau
 

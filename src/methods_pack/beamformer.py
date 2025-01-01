@@ -54,7 +54,7 @@ class Beamformer(Module):
             beam_pattern = 1 / (beam_pattern + 1e-10)
         return beam_pattern
 
-    def plot_beam_pattern(self, beampattern: torch.Tensor):
+    def plot_beam_pattern(self, beampattern: torch.Tensor, angles: torch.Tensor, ranges: torch.Tensor = None):
         """
         Plot the beam pattern of the beamformer.
         Args:
@@ -64,11 +64,11 @@ class Beamformer(Module):
 
         """
         if self.system_model.params.field_type.lower() == "far":
-            self.plot_2D_beampattern(beampattern)
+            self.plot_2D_beampattern(beampattern, angles)
         else:
-            self.plot_3D_beampattern(beampattern)
+            self.plot_3D_beampattern(beampattern, angles, ranges)
 
-    def plot_2D_beampattern(self, beampattern: torch.Tensor):
+    def plot_2D_beampattern(self, beampattern: torch.Tensor, true_angles: torch.Tensor):
         """
         Plot the 2D beam pattern of the beamformer.
         Args:
@@ -79,16 +79,20 @@ class Beamformer(Module):
         """
         angles_rad = self.angles_dict.cpu().detach().numpy()
         beampattern = beampattern.cpu().detach().numpy()
+        beampattern = beampattern / beampattern.max()
         plt.figure(figsize=(8, 8))
         ax = plt.subplot(111, polar=True)
         ax.plot(angles_rad, 10 * np.log10(beampattern), label="Beampattern")
+        if true_angles is not None:
+            true_angles = true_angles.cpu().detach().numpy()
+            ax.plot(true_angles, np.zeros_like(true_angles), 'ro', label="True DoAs")
 
         # Customize the plot
         ax.set_theta_zero_location("N")  # Set 0 degrees at the top
         ax.set_theta_direction(-1)  # Clockwise direction
         ax.set_xlim(angles_rad[0], angles_rad[-1])  # Angle range
-        ax.set_ylim(-40, 10)  # dB range (adjust if needed)
-        ax.set_yticks([-40, -30, -20, -10, 0, 10])  # dB ticks
+        # ax.set_ylim(-40, 10)  # dB range (adjust if needed)
+        # ax.set_yticks([-40, -30, -20, -10, 0, 10])  # dB ticks
 
         ax.set_xlabel("Magnitude (dB)", labelpad=20)
         plt.title("Beampattern of MVDR", va='bottom')
@@ -96,7 +100,7 @@ class Beamformer(Module):
         plt.legend()
         plt.show()
 
-    def plot_3D_beampattern(self, beampattern: torch.Tensor):
+    def plot_3D_beampattern(self, beampattern: torch.Tensor, true_angles: torch.Tensor, true_ranges: torch.Tensor):
         """
         plot an heatmap of the 3D beam pattern of the beamformer.
         Args:
@@ -107,7 +111,7 @@ class Beamformer(Module):
         """
         angles = self.angles_dict.cpu().detach().numpy()
         ranges = self.ranges_dict.cpu().detach().numpy()
-        beampattern = 10 * torch.log10(beampattern)
+        beampattern = 10 * torch.log10(beampattern / beampattern.max())
         beampattern = beampattern.cpu().detach().numpy()
         # Create a polar plot
         theta_grid, r_grid = np.meshgrid(angles, ranges)
@@ -115,6 +119,10 @@ class Beamformer(Module):
         plt.figure(figsize=(8, 8))
         ax = plt.subplot(111, polar=True)
         c = ax.pcolormesh(theta_grid, r_grid, beampattern.T, cmap='viridis', shading='auto')
+        if true_angles is not None:
+            true_angles = true_angles.cpu().detach().numpy()
+            true_ranges = true_ranges.cpu().detach().numpy()
+            ax.plot(true_angles, true_ranges, 'ro', label="Ground Truth")
 
         # Customize the plot
         plt.colorbar(c, label="Array Response (dB)")
@@ -123,6 +131,10 @@ class Beamformer(Module):
         plt.title("3D Beampattern Heatmap", va='bottom')
         ax.set_xlim(angles[0], angles[-1])  # Angle range
         ax.set_ylim(ranges[0], ranges[-1])  # Range range
+        ax.set_xlabel("Azimuth (rad)", labelpad=20)
+        ax.set_ylabel("Range (m)", labelpad=20)
+        plt.grid(True)
+        plt.legend()
 
         plt.show()
 

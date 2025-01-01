@@ -50,20 +50,20 @@ simulation_commands = {
 }
 
 system_model_params = {
-    "N": 15,  # number of antennas
-    "M": 3,  # number of sources
+    "N": 105,  # number of antennas
+    "M": 2,  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 6,  # if defined, values in scenario_dict will be ignored
+    "snr": 1,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
-    "doa_range": 75,
-    "doa_resolution": .5,
+    "doa_range": 55,
+    "doa_resolution": 1,
     "max_range_ratio_to_limit": 0.5,
-    "range_resolution": 0.5,
+    "range_resolution": 1,
 }
 model_config = {
     "model_type": "SubspaceNet",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
@@ -85,11 +85,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 250000,
     "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 128,
-    "epochs": 3,
+    "batch_size": 256,
+    "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "StepLR",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -122,7 +122,7 @@ evaluation_params = {
         # "TransMUSIC": {},
     },
     "augmented_methods": [
-        ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "music_2D", "train_loss_type": "music_spectrum", "field_type": "near"}),
+        # ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "music_2D", "train_loss_type": "music_spectrum", "field_type": "near"}),
         # ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "esprit", "train_loss_type": "rmspe", "field_type": "far"}),
         # ("SubspaceNet", "esprit", {"tau": 8, "diff_method": "esprit", "train_loss_type": "rmspe", "field_type": "far"}),
     ],
@@ -130,7 +130,7 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        "Beamformer",
+        # "Beamformer",
         # "2D-MUSIC",
         # "TOPS",
         # "CCRB"

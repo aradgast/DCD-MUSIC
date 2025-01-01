@@ -51,8 +51,8 @@ class SystemModelParams:
     field_type = "far"
     signal_type = "narrowband"
     freq_values = [0, 500]
-    wavelength = 1
-    carrier_frequency = 3e8 / wavelength # 0.3 Ghz
+    wavelength = 0.125
+    carrier_frequency = 3e8 / wavelength # 0.3 Ghz if wavelength = 1, 2.4 Ghz if wavelength = 0.125
     signal_bandwidth = 500 # 500 Hz
     number_subcarriers = 500
     signal_nature = "non-coherent"
@@ -164,9 +164,13 @@ class SystemModel(object):
             #              / (2 * (self.max_freq["broadband"] - self.min_freq["broadband"])),
         }
 
-    def create_array(self):
+    def create_array(self, overwrite_n: int = None):
         """create an array of sensors locations, around to origin."""
-        self.array = np.linspace(0, self.params.N, self.params.N, endpoint=False)
+        if overwrite_n is not None:
+            N = overwrite_n
+        else:
+            N = self.params.N
+        self.array = np.linspace(0, N, N, endpoint=False)
 
     def calc_fresnel_fraunhofer_distance(self) -> tuple:
         """
@@ -312,26 +316,29 @@ class SystemModel(object):
         else:
             distances = distances.unsqueeze(-1)
 
+        array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(local_device)
+        array_square = torch.pow(array, 2)
+        N = array.shape[0]
+
         dist_array_elems = self.dist_array_elems["narrowband"]
         if not nominal:
             dist_array_elems += torch.from_numpy(
-                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N)).to(local_device)
+                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=N)).to(local_device)
             dist_array_elems = dist_array_elems.unsqueeze(-1)
         if isinstance(dist_array_elems, float):
-            dist_array_elems = dist_array_elems * torch.ones(self.params.N, 1, device=local_device, dtype=torch.float64)
+            dist_array_elems = dist_array_elems * torch.ones(N, 1, device=local_device, dtype=torch.float64)
 
-        array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(local_device)
-        array_square = torch.pow(array, 2)
+
 
         if self.params.signal_type.startswith("narrowband"):
             first_order = torch.einsum("nm, na -> na",
                                       array * dist_array_elems,
-                                      torch.sin(theta).repeat(1, self.params.N).T)
+                                      torch.sin(theta).repeat(1, N).T)
         elif self.params.signal_type.startswith("broadband"):
             f_c = torch.from_numpy(f_c).to(torch.float64).to(local_device)
             first_order = torch.einsum("nk, na -> nak",
                                       array * (self.params.carrier_frequency / f_c),
-                                      torch.sin(theta).repeat(1, self.params.N).T
+                                      torch.sin(theta).repeat(1, N).T
                                       * dist_array_elems)
         if generate_search_grid:
             if self.params.signal_type.startswith("narrowband"):

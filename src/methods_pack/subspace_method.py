@@ -194,6 +194,10 @@ class SubspaceMethod(nn.Module):
             Rx = sample_covariance(x)
         elif mode == "sps":
             Rx = spatial_smoothing_covariance(x)
+            try:
+                self.update_number_of_sensors(Rx.shape[1])
+            except AttributeError:
+                pass
         else:
             raise ValueError(
                 f"SubspaceMethod.pre_processing: method {mode} is not recognized for covariance calculation.")
