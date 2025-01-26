@@ -74,18 +74,31 @@ class SubspaceNet(ParentModel):
         self.train_loss, self.validation_loss, self.test_loss = None, None, None
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
-        self.set_eigenregularization_schedular(init_value=0.0)
+        self.set_eigenregularization_schedular(init_value=0.1)
+        self.reshaper_target_size = 150
         self.reshaper = self.__init_reshaper()
 
+    def _get_name(self):
+        if self.field_type == "far":
+            return super(SubspaceNet, self)._get_name()
+        elif self.field_type == "near" and self.train_loss_type == "music_spectrum":
+            return "NF" + super(SubspaceNet, self)._get_name()
 
-    def __init_reshaper(self, target_size: int=25):
-        if self.N > target_size:
-            self.reshaper = nn.Conv2d(in_channels=1,
-                                      out_channels=1,
-                                      kernel_size=(2 * (self.N - target_size) + 1, self.N - target_size + 1),
-                                      stride=(1, 1), padding=0).to(device)
+
+    def __init_reshaper(self):
+        h_dim = 2 * (self.N - self.reshaper_target_size) + 1
+        w_dim = self.N - self.reshaper_target_size + 1
+        if self.N > self.reshaper_target_size:
+            conv = nn.Conv2d(in_channels=self.tau,
+                            out_channels=self.tau,
+                            kernel_size=(h_dim, w_dim),
+                            stride=(1, 1), padding=0).to(device)
+            self.reshaper = nn.Sequential(conv, nn.ReLU())
+            # count the number of parameters
+            print(f"Number of parameters in the reshaper: {sum(p.numel() for p in self.reshaper.parameters())}")
+            print(f"Number of parameters in the model: {sum(p.numel() for p in self.parameters())}")
             # update the number of sensors of the diff method
-            self.diff_method.update_number_of_sensors(target_size)
+            self.diff_method.update_number_of_sensors(self.reshaper_target_size)
         else:
             self.reshaper = nn.Identity()
         return self.reshaper
@@ -203,9 +216,8 @@ class SubspaceNet(ParentModel):
             Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), dim=1)
             Rx_tau[:, i, :, :] = Rx_lag
 
-        if N > 25:
+        if N > self.reshaper_target_size:
             b, t, n, m = Rx_tau.shape
-            Rx_tau = Rx_tau.view(b * t, 1, n, m)
             Rx_tau = self.reshaper(Rx_tau)
             Rx_tau = Rx_tau.view(b, t, Rx_tau.shape[-2], Rx_tau.shape[-1])
 
@@ -435,7 +447,7 @@ class SubspaceNet(ParentModel):
                 self.train_loss = RMSPELoss()
             elif self.train_loss_type == "music_spectrum":
                 self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                    sensors_distance=self.system_model.dist_array_elems["narrowBand"])
+                                                    sensors_distance=self.system_model.dist_array_elems["narrowband"])
             else:
                 raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.loss_type}")
             self.validation_loss = RMSPELoss()

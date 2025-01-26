@@ -50,20 +50,21 @@ simulation_commands = {
 }
 
 system_model_params = {
-    "N": 105,  # number of antennas
+    "N": 101,  # number of antennas
     "M": 2,  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 1,  # if defined, values in scenario_dict will be ignored
-    "field_type": "near",  # Near, Far
+    "snr": 5,  # if defined, values in scenario_dict will be ignored
+    "field_type": "Near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
     "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
-    "eta": 0.0,  # steering vector error
+    "eta": 0.02,  # steering vector error
     "bias": 0,
     "sv_noise_var": 0.0,
     "doa_range": 55,
     "doa_resolution": 1,
     "max_range_ratio_to_limit": 0.5,
     "range_resolution": 1,
+    "wavelength": 1,
 }
 model_config = {
     "model_type": "SubspaceNet",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
@@ -85,10 +86,10 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 250000,
+    "samples_size": 40000,
     "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 256,
+    "batch_size": 8,
     "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "StepLR",  # StepLR, ReduceLROnPlateau
@@ -130,8 +131,8 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        # "Beamformer",
-        # "2D-MUSIC",
+        "Beamformer",
+        "2D-MUSIC",
         # "TOPS",
         # "CCRB"
     ]

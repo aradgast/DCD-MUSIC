@@ -51,7 +51,7 @@ class SystemModelParams:
     field_type = "far"
     signal_type = "narrowband"
     freq_values = [0, 500]
-    wavelength = 0.125
+    wavelength = 1
     carrier_frequency = 3e8 / wavelength # 0.3 Ghz if wavelength = 1, 2.4 Ghz if wavelength = 0.125
     signal_bandwidth = 500 # 500 Hz
     number_subcarriers = 500

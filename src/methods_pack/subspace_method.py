@@ -35,7 +35,7 @@ class SubspaceMethod(nn.Module):
         sorted_eigvectors = torch.gather(eigenvectors, 2,
                                          sorted_idx.unsqueeze(-1).expand(-1, -1, covariance.shape[-1]).transpose(1, 2))
         # number of sources estimation
-        source_estimation, l_eig = self.estimate_number_of_sources(eigenvalues, method="threshold",
+        source_estimation, l_eig = self.estimate_number_of_sources(eigenvalues, method="aic",
                                                                    number_of_sources=number_of_sources)
         if number_of_sources is None:
             warnings.warn("Number of sources is not defined, using the number of sources estimation.")

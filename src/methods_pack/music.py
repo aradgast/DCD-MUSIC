@@ -322,7 +322,7 @@ class MUSIC(SubspaceMethod):
             if peaks.dim() == 1:
                 return search_space[peaks]
             else:
-                labels = torch.gather(search_space.unsqueeze(1).repeat(1, source_number), 0, peaks)
+                labels = torch.gather(search_space.unsqueeze(1).repeat(1, source_number).to(device), 0, peaks)
                 return labels
         else:
             return self.__maskpeak_1d(peaks, search_space, source_number)

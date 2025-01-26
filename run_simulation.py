@@ -83,6 +83,7 @@ def __run_simulation(**kwargs):
         .set_parameter("doa_resolution", SYSTEM_MODEL_PARAMS["doa_resolution"])
         .set_parameter("max_range_ratio_to_limit", SYSTEM_MODEL_PARAMS["max_range_ratio_to_limit"])
         .set_parameter("range_resolution", SYSTEM_MODEL_PARAMS["range_resolution"])
+        .set_parameter("wavelength", SYSTEM_MODEL_PARAMS["wavelength"])
     )
     system_model = SystemModel(system_model_params)
 
@@ -196,6 +197,7 @@ def __run_simulation(**kwargs):
                                            gamma=TRAINING_PARAMS["gamma"],
                                            training_objective=TRAINING_PARAMS["training_objective"],
                                            scheduler=TRAINING_PARAMS["scheduler"],
+                                           batch_size=TRAINING_PARAMS["batch_size"]
                                            )
         train_dataloader, valid_dataloader = train_dataset.get_dataloaders(batch_size=TRAINING_PARAMS["batch_size"])
         trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)

@@ -84,6 +84,9 @@ class TrainingParamsNew:
 
     def update(self, new_params):
         self.__dict__.update(new_params)
+    
+    def get(self, key, default=None):
+        return self.__dict__.get(key, default)
 
 
 class Trainer:
@@ -93,109 +96,21 @@ class Trainer:
         self.optimizer = self.__init_optimizer()
         self.scheduler = self.__init_scheduler()
         self.training_objective = self.__extract_training_objective()
-        self.epochs = self.__get_epochs()
+        
 
         self.is_wandb = False
-        self.root_path = Path(__file__).parent.parent
-        self.checkpoint_path = self.root_path / "data" / "weights" / self.model._get_name()
-        self.simulation_path = self.root_path / "data" / "simulations"
-        self.plots_path = self.root_path / "data" / "simulations" / "plots"
-        self.scores_path = self.root_path / "data" / "simulations" / "scores"
-        self.final_model_checkpoint = self.checkpoint_path / "final_models" / self.model.get_model_file_name()
-        self.checkpoint_path.mkdir(parents=True, exist_ok=True)
-        self.simulation_path.mkdir(parents=True, exist_ok=True)
-        self.plots_path.mkdir(parents=True, exist_ok=True)
-        self.scores_path.mkdir(parents=True, exist_ok=True)
-        self.final_model_checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        self.__init_paths()
 
         self.show_plots = show_plots
-
-    def __init_optimizer(self):
-        if self.training_params["optimizer"] == "Adam":
-            return optim.Adam(self.model.parameters(), lr=self.training_params["learning_rate"],
-                              weight_decay=self.training_params["weight_decay"])
-        elif self.training_params["optimizer"] == "SGD":
-            return optim.SGD(self.model.parameters(), lr=self.training_params["learning_rate"],
-                             weight_decay=self.training_params["weight_decay"])
-        else:
-            raise ValueError(f"Optimizer {self.training_params['optimizer']} is not defined.")
-
-    def __init_scheduler(self):
-        if self.training_params["scheduler"] == "StepLR":
-            return lr_scheduler.StepLR(self.optimizer, step_size=self.training_params["step_size"],
-                                       gamma=self.training_params["gamma"])
-        elif self.training_params["scheduler"] == "ReduceLROnPlateau":
-            return lr_scheduler.ReduceLROnPlateau(self.optimizer, mode="min", factor=self.training_params["gamma"],
-                                                  patience=20, verbose=True)
-        else:
-            raise ValueError(f"Scheduler {self.training_params['scheduler']} is not defined.")
-
-    def __extract_training_objective(self):
-        if self.training_params["training_objective"] == "angle":
-            return "angle"
-        elif self.training_params["training_objective"] == "range":
-            return "range"
-        elif self.training_params["training_objective"] == "angle, range":
-            return "angle, range"
-        elif self.training_params["training_objective"] == "source_estimation":
-            return "source_estimation"
-        else:
-            raise ValueError(f"Training objective {self.training_params['training_objective']} is not defined.")
-
-    def __get_epochs(self):
-        epochs = self.training_params["epochs"]
-        if epochs is None:
-            warnings.warn("Trainer.__get_epochs: Number of epochs is not defined. Setting to 10.")
-            return 10
-        return epochs
-
-    def __init_wandb(self):
-        try:
-            wandb.init(project=f"dcd_music",
-                       config=self.training_params,
-                       allow_val_change=True)
-            try:
-                wandb.config.update(self.model.system_model.params)
-            except AttributeError:
-                pass
-            wandb.watch(self.model, log="all")
-            self.is_wandb = True
-        except Exception:
-            print("Error initializing wandb")
-
-    def __init_metrics(self):
-        self.loss_train_list = []
-        self.loss_valid_list = []
-        self.loss_train_list_angles = []
-        self.loss_train_list_ranges = []
-        self.loss_valid_list_angles = []
-        self.loss_valid_list_ranges = []
-        self.acc_train_list = []
-        self.acc_valid_list = []
-        self.min_valid_loss = np.inf
-        self.best_epoch = 0
-        self.best_model_wts = copy.deepcopy(self.model.state_dict())
-
-    def __configure_model(self):
-        if isinstance(self.model, TransMUSIC):
-            if self.training_objective == "source_estimation":
-                transmusic_mode = "num_source_train"
-            else:
-                transmusic_mode = "subspace_train"
-            self.model.update_train_mode(transmusic_mode)
-        if isinstance(self.model, DCDMUSIC):
-            if self.training_objective == "angle, range":
-                self.model.update_angle_extractor_training(True)
-            elif self.training_objective == "range":
-                self.model.update_angle_extractor_training(False)
-
-            self.model.update_criterion()
 
     def train(self, train_dataloader, valid_dataloader, use_wandb:bool=False, save_final:bool=False,
               load_model:bool=False):
         self.model = self.model.to(device)
         self.__init_metrics()
         self.__configure_model()
+        
+        if load_model:
+            self.__load_model()
         # Set initial time for start training
         since = time.time()
         if use_wandb:
@@ -204,8 +119,9 @@ class Trainer:
 
         print("\n---Start Training Stage ---\n")
         # Run over all epochs
+        epochs = self.training_params.get("epochs", 10)
 
-        for epoch in range(self.epochs):
+        for epoch in range(epochs):
             if epoch == 40:
                 pass
             epoch_train_loss = 0.0
@@ -219,7 +135,7 @@ class Trainer:
             train_length = 0
 
 
-            for idx, data in tqdm(enumerate(train_dataloader), desc=f"Training {epoch + 1}/{self.epochs}"):
+            for idx, data in tqdm(enumerate(train_dataloader), desc=f"Training {epoch + 1}/{epochs}"):
                 if isinstance(self.model, (SubspaceNet, TransMUSIC)):
                     train_loss, acc = self.model.training_step(data, idx)
                     if isinstance(train_loss, tuple):
@@ -274,10 +190,10 @@ class Trainer:
                 self.scheduler.step()
 
             # Update eigenregularization weight
-            # try:
-            #     self.model.update_eigenregularization_weight(self.acc_valid_list[-1])
-            # except AttributeError:
-            #     pass
+            try:
+                self.model.update_eigenregularization_weight(self.acc_valid_list[-1])
+            except AttributeError:
+                pass
 
             try:
                 self.model.adjust_diff_method_temperature(epoch)
@@ -374,6 +290,99 @@ class Trainer:
             print("under estimation = ", self.model.under_estimation_counter)
         except Exception as e:
             pass
+    
+    def __init_paths(self):
+        self.root_path = Path(__file__).parent.parent
+        self.checkpoint_path = self.root_path / "data" / "weights" / self.model._get_name()
+        self.simulation_path = self.root_path / "data" / "simulations"
+        self.plots_path = self.root_path / "data" / "simulations" / "plots"
+        self.scores_path = self.root_path / "data" / "simulations" / "scores"
+        self.final_model_checkpoint = self.checkpoint_path / "final_models" / self.model.get_model_file_name()
+        self.__verify_paths()
+
+    def __verify_paths(self):
+        self.checkpoint_path.mkdir(parents=True, exist_ok=True)
+        self.simulation_path.mkdir(parents=True, exist_ok=True)
+        self.plots_path.mkdir(parents=True, exist_ok=True)
+        self.scores_path.mkdir(parents=True, exist_ok=True)
+        self.final_model_checkpoint.parent.mkdir(parents=True, exist_ok=True)
+
+    def __init_optimizer(self):
+        optimizer = self.training_params.get("optimizer", "Adam")
+        if optimizer == "Adam":
+            return optim.Adam(self.model.parameters(), lr=self.training_params["learning_rate"],
+                              weight_decay=self.training_params["weight_decay"])
+        elif optimizer == "SGD":
+            return optim.SGD(self.model.parameters(), lr=self.training_params["learning_rate"],
+                             weight_decay=self.training_params["weight_decay"])
+        else:
+            raise ValueError(f"Optimizer {optimizer} is not defined.")
+
+    def __init_scheduler(self):
+        scheduler = self.training_params.get("scheduler", "StepLR")
+        if scheduler == "StepLR":
+            return lr_scheduler.StepLR(self.optimizer, step_size=self.training_params["step_size"],
+                                       gamma=self.training_params["gamma"])
+        elif scheduler == "ReduceLROnPlateau":
+            return lr_scheduler.ReduceLROnPlateau(self.optimizer, mode="min", factor=self.training_params["gamma"],
+                                                  patience=20, verbose=True)
+        else:
+            raise ValueError(f"Scheduler {scheduler} is not defined.")
+
+    def __extract_training_objective(self):
+        if self.training_params["training_objective"] == "angle":
+            return "angle"
+        elif self.training_params["training_objective"] == "range":
+            return "range"
+        elif self.training_params["training_objective"] == "angle, range":
+            return "angle, range"
+        elif self.training_params["training_objective"] == "source_estimation":
+            return "source_estimation"
+        else:
+            raise ValueError(f"Training objective {self.training_params['training_objective']} is not defined.")
+
+    def __init_wandb(self):
+        try:
+            wandb.init(entity="gast", project="dcd_music",
+                       name="no-compression",
+                       config=self.training_params,
+                       allow_val_change=True)
+            try:
+                wandb.config.update(self.model.system_model.params)
+            except AttributeError:
+                pass
+            wandb.watch(self.model, log="all")
+            self.is_wandb = True
+        except Exception:
+            print("Error initializing wandb")
+
+    def __init_metrics(self):
+        self.loss_train_list = []
+        self.loss_valid_list = []
+        self.loss_train_list_angles = []
+        self.loss_train_list_ranges = []
+        self.loss_valid_list_angles = []
+        self.loss_valid_list_ranges = []
+        self.acc_train_list = []
+        self.acc_valid_list = []
+        self.min_valid_loss = np.inf
+        self.best_epoch = 0
+        self.best_model_wts = copy.deepcopy(self.model.state_dict())
+
+    def __configure_model(self):
+        if isinstance(self.model, TransMUSIC):
+            if self.training_objective == "source_estimation":
+                transmusic_mode = "num_source_train"
+            else:
+                transmusic_mode = "subspace_train"
+            self.model.update_train_mode(transmusic_mode)
+        if isinstance(self.model, DCDMUSIC):
+            if self.training_objective == "angle, range":
+                self.model.update_angle_extractor_training(True)
+            elif self.training_objective == "range":
+                self.model.update_angle_extractor_training(False)
+
+            self.model.update_criterion()
 
 
 class TrainingParams(object):
