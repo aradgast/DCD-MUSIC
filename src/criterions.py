@@ -236,7 +236,6 @@ class MusicSpectrumLoss(nn.Module):
         ranges = kwargs["ranges"][:, :, None].to(torch.float64)
         array_square = torch.pow(self.array, 2).to(torch.float64)
         noise_subspace = kwargs["noise_subspace"].to(torch.complex128)
-
         first_order = torch.einsum("nm, bna -> bna",
                                    self.array,
                                    torch.sin(angles).repeat(1, 1, self.number_sensors).transpose(1, 2) * self.sensors_distance)
@@ -262,7 +261,7 @@ class MusicSpectrumLoss(nn.Module):
             raise Exception(f"MusicSpectrumLoss: mode {self.mode} is not defined")
 
         if self.aggregate == "sum":
-            return torch.sum(loss)
+            return torch.sum(loss) # TODO
         elif self.aggregate == "mean":
             return torch.mean(loss)
         else:

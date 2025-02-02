@@ -159,7 +159,7 @@ class Samples(SystemModel):
             return np.round(distances, 3)
 
         if distance is None:
-            self.distances = choose_distances(M, min_val=np.ceil(self.fresnel),
+            self.distances = choose_distances(M, min_val=np.ceil(self.fresnel) + self.params.range_resolution,
                                               max_val=np.floor(self.fraunhofer * self.params.max_range_ratio_to_limit),
                                               distance_resolution=self.params.range_resolution)
         else:

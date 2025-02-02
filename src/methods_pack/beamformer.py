@@ -1,6 +1,7 @@
 """
 This file contain an implementation for a Beamformer to use for Far field(DOA) and Near field(DOA and Range) scenarios.
 """
+import numpy as np
 import torch
 from sympy.functions.special.beta_functions import betainc_mpmath_fix
 from torch.nn import Module
@@ -135,7 +136,7 @@ class Beamformer(Module):
         ax.set_ylabel("Range (m)", labelpad=20)
         plt.grid(True)
         plt.legend()
-
+        plt.savefig("3D_BeamPattern.png")
         plt.show()
 
     def get_spectrum(self, cov: torch.Tensor):
@@ -239,6 +240,7 @@ class Beamformer(Module):
         else:
             Rx = self.pre_processing(x)
         predictions = self(Rx, sources_num)
+        # self.plot_beam_pattern(self.beam_pattern(Rx)[0], angles[0], ranges[0])
         if isinstance(predictions, tuple):
             angles_prediction, ranges_prediction = predictions
             rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
@@ -311,16 +313,16 @@ class Beamformer(Module):
         angle_range = np.deg2rad(self.system_model.params.doa_range)
         angle_resolution = np.deg2rad(self.system_model.params.doa_resolution / 2)
         # if it's the Far field case, need to init angles range.
-        self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution, device=device,
-                                        dtype=torch.float64).requires_grad_(False).to(torch.float64)
+        self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution, device=device,
+                                        dtype=torch.float64).requires_grad_(False)
         if self.system_model.params.field_type.startswith("near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
             distance_resolution = self.system_model.params.range_resolution / 2
-            self.ranges_dict = torch.arange(np.floor(fresnel),
-                                            fraunhofer * fraunhofer_ratio,
+            self.ranges_dict = torch.arange(np.ceil(fresnel),
+                                            fraunhofer * fraunhofer_ratio + distance_resolution,
                                             distance_resolution,
                                             device=device, dtype=torch.float64).requires_grad_(False)
 

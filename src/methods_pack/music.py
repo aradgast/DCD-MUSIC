@@ -182,7 +182,7 @@ class MUSIC(SubspaceMethod):
         in case of dual param estimation it will be 2D inverse spectrum:
                                                     BatchSizex(length_search_grid_angle)x(length_search_grid_distance)
         """
-        steering_dict = self.steering_dict.to(device)
+        # steering_dict = self.steering_dict.to(device)
         if self.system_model.params.field_type.startswith("far"):
             steering_dict = self.steering_dict.to(device)
             var1 = torch.einsum("an, bnm -> bam", steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
@@ -190,11 +190,25 @@ class MUSIC(SubspaceMethod):
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
-                var1 = torch.einsum("adk, bkl -> badl",
-                                    torch.transpose(steering_dict.conj(), 0, 2).transpose(0, 1),
-                                    noise_subspace)
-                # get the norm value for each element in the batch.
-                inverse_spectrum = torch.norm(var1, dim=-1) ** 2
+                steering_dict = self.steering_dict.conj().transpose(0, 2).transpose(0, 1).to(device)
+                try:
+                    var1 = torch.einsum("adk, bkl -> badl",
+                                        steering_dict,
+                                        noise_subspace)
+                    # get the norm value for each element in the batch.
+                    inverse_spectrum = torch.norm(var1, dim=-1) ** 2
+                except RuntimeError:
+                    warnings.warn("MUSIC.get_inverse_spectrum: Out of memory error, trying to free some memory and convert the batch operation to for loop.")
+                    torch.cuda.empty_cache()
+                    inverse_spectrum = torch.zeros((noise_subspace.shape[0], self.angles_dict.shape[0], self.ranges_dict.shape[0]), dtype=torch.float64, device=device)
+                    for batch in range(noise_subspace.shape[0]):
+                        var1 = torch.einsum("adk, kl -> adl",
+                                        steering_dict,
+                                        noise_subspace[batch])
+                        inverse_spectrum[batch] = torch.norm(var1, dim=-1) ** 2
+
+                        del var1
+                
             elif self.estimation_params.endswith("angle"):
                 var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
@@ -246,9 +260,9 @@ class MUSIC(SubspaceMethod):
 
 
 
-    def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0, method: str = "heatmap"):
+    def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0, method: str = "heatmap", music_spectrum = None):
         if self.estimation_params == "angle, range":
-            self._plot_3d_spectrum(highlight_corrdinates, batch, method)
+            self._plot_3d_spectrum(highlight_corrdinates, batch, method, music_spectrum=music_spectrum)
         else:
             self._plot_1d_spectrum(highlight_corrdinates, batch)
 
@@ -442,25 +456,25 @@ class MUSIC(SubspaceMethod):
 
         if self.system_model.params.field_type.startswith("far"):
             # if it's the Far field case, need to init angles range.
-            self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution,
-                                            dtype=torch.float64).to(torch.float64)
+            self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
+                                            dtype=torch.float64).to(torch.float64).requires_grad_(False)
             self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
         elif self.system_model.params.field_type.startswith("near"):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
-                self.angles_dict = torch.arange(-angle_range, angle_range, angle_resolution,
-                                                dtype=torch.float64).to(torch.float64)
-                self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
+                self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
+                                                dtype=torch.float64).to(torch.float64).requires_grad_(False)
+                # self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
 
 
             if self.estimation_params.endswith("range"):
                 fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
                 distance_resolution = self.system_model.params.range_resolution / 2
-                self.ranges_dict = torch.arange(np.floor(fresnel),
-                                                fraunhofer * fraunhofer_ratio,
-                                                distance_resolution, dtype=torch.float64)
+                self.ranges_dict = torch.arange(np.ceil(fresnel),
+                                                fraunhofer * fraunhofer_ratio + distance_resolution,
+                                                distance_resolution, dtype=torch.float64).requires_grad_(False)
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
@@ -510,7 +524,7 @@ class MUSIC(SubspaceMethod):
         plt.legend()
         plt.show()
 
-    def _plot_3d_spectrum(self, highlight_coordinates, batch, method):
+    def _plot_3d_spectrum(self, highlight_coordinates, batch, method, music_spectrum=None):
         """
         Plot the MUSIC 2D spectrum.
 
@@ -519,7 +533,10 @@ class MUSIC(SubspaceMethod):
             # Creating figure
             distances = self.ranges_dict.detach().cpu().numpy()
             angles = self.angles_dict.detach().cpu().numpy()
-            spectrum = self.music_spectrum[batch].detach().cpu().numpy()
+            if music_spectrum is None:
+                spectrum = self.music_spectrum[batch].detach().cpu().numpy()
+            else:
+                spectrum = music_spectrum[batch].detach().cpu().numpy()
             x, y = np.meshgrid(distances, np.rad2deg(angles))
             # Plotting the 3D surface
             fig = plt.figure()
@@ -554,7 +571,10 @@ class MUSIC(SubspaceMethod):
         elif method == "heatmap":
             xmin, xmax = np.min(self.ranges_dict.cpu().detach().numpy()), np.max(self.ranges_dict.cpu().detach().numpy())
             ymin, ymax = np.min(self.angles_dict.cpu().detach().numpy()), np.max(self.angles_dict.cpu().detach().numpy())
-            spectrum = self.music_spectrum[batch].cpu().detach().numpy()
+            if music_spectrum is None:
+                spectrum = self.music_spectrum[batch].cpu().detach().numpy()
+            else:
+                spectrum = music_spectrum[batch].cpu().detach().numpy()
             plt.imshow(spectrum, cmap="hot",
                        extent=[xmin, xmax, np.rad2deg(ymin), np.rad2deg(ymax)], origin='lower', aspect="auto")
             if highlight_coordinates is not None:
@@ -571,6 +591,7 @@ class MUSIC(SubspaceMethod):
             plt.ylabel("Angles [deg]")
 
             plt.figaspect(2)
+            plt.savefig("music_spectrum.png")
             plt.show()
         elif method == "slice":
             x = self.ranges_dict.detach().cpu().numpy()

@@ -166,28 +166,6 @@ def __run_simulation(**kwargs):
             .set_model_params(MODEL_CONFIG.get("model_params"))
             .set_model()
         )
-        # Assign the training parameters object
-        simulation_parameters = (
-            TrainingParams()
-            .set_training_objective(TRAINING_PARAMS["training_objective"])
-            .set_batch_size(TRAINING_PARAMS["batch_size"])
-            .set_epochs(TRAINING_PARAMS["epochs"])
-            .set_model(model_gen=model_config)
-            .set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
-                           learning_rate=TRAINING_PARAMS["learning_rate"],
-                           weight_decay=TRAINING_PARAMS["weight_decay"])
-            .set_training_dataset(train_dataset)
-            .set_schedular(step_size=TRAINING_PARAMS["step_size"],
-                           gamma=TRAINING_PARAMS["gamma"])
-        )
-
-        # Print training simulation details
-        simulation_summary(
-            system_model_params=system_model_params,
-            model_type=model_config.model_type,
-            parameters=simulation_parameters,
-            phase="training",
-        )
 
         trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
                                            weight_decay=TRAINING_PARAMS["weight_decay"],
@@ -197,7 +175,8 @@ def __run_simulation(**kwargs):
                                            gamma=TRAINING_PARAMS["gamma"],
                                            training_objective=TRAINING_PARAMS["training_objective"],
                                            scheduler=TRAINING_PARAMS["scheduler"],
-                                           batch_size=TRAINING_PARAMS["batch_size"]
+                                           batch_size=TRAINING_PARAMS["batch_size"],
+                                           simulation_name=TRAINING_PARAMS["simulation_name"],
                                            )
         train_dataloader, valid_dataloader = train_dataset.get_dataloaders(batch_size=TRAINING_PARAMS["batch_size"])
         trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
@@ -210,10 +189,8 @@ def __run_simulation(**kwargs):
         if not train_model:
             model = None
         # Define loss measure for evaluation
-        criterion = set_criterions(EVALUATION_PARAMS["criterion"],
-                                                       EVALUATION_PARAMS["balance_factor"])
 
-        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=64)
+        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=1)
         generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                            collate_fn=collate_fn,
                                                            batch_sampler=batch_sampler_test,
@@ -222,7 +199,6 @@ def __run_simulation(**kwargs):
         # Evaluate DNN models, augmented and subspace methods
         loss = evaluate(
             generic_test_dataset=generic_test_dataset,
-            criterion=criterion,
             system_model=system_model,
             models=EVALUATION_PARAMS["models"],
             augmented_methods=EVALUATION_PARAMS["augmented_methods"],

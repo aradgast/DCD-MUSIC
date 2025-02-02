@@ -108,7 +108,7 @@ class Trainer:
         self.model = self.model.to(device)
         self.__init_metrics()
         self.__configure_model()
-        
+
         if load_model:
             self.__load_model()
         # Set initial time for start training
@@ -116,10 +116,23 @@ class Trainer:
         if use_wandb:
             # init wandb
             self.__init_wandb()
+        epochs = self.training_params.get("epochs", 10)
+        
 
         print("\n---Start Training Stage ---\n")
+        print(f"Training Objective: {self.training_objective}")
+        print(f"Model: {self.model.get_model_name()}")
+        print(f"Device: {device}")
+        print(f"Optimizer: {self.optimizer}")
+        print(f"Scheduler: {self.scheduler}")
+        print(f"Learning Rate: {self.training_params['learning_rate']}")
+        print(f"Weight Decay: {self.training_params['weight_decay']}")
+        print(f"Batch Size: {self.training_params['batch_size']}")
+        print(f"Epochs: {epochs}")
+        print(f"Number of trainable parameters: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
+        print("\n--- Training ---\n")
+
         # Run over all epochs
-        epochs = self.training_params.get("epochs", 10)
 
         for epoch in range(epochs):
             if epoch == 40:
@@ -128,6 +141,7 @@ class Trainer:
             epoch_train_loss_angle = 0.0
             epoch_train_loss_distance = 0.0
             epoch_train_acc = 0.0
+            epoch_eigenregularization = 0.0
             # init tmp loss values
             train_loss, train_loss_angle, train_loss_distance = None, None, None
             # Set model to train mode
@@ -137,7 +151,7 @@ class Trainer:
 
             for idx, data in tqdm(enumerate(train_dataloader), desc=f"Training {epoch + 1}/{epochs}"):
                 if isinstance(self.model, (SubspaceNet, TransMUSIC)):
-                    train_loss, acc = self.model.training_step(data, idx)
+                    train_loss, acc, eigen_regularization = self.model.training_step(data, idx)
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss
                         epoch_train_loss_angle += train_loss_angle.item()
@@ -146,6 +160,7 @@ class Trainer:
 
                     train_length += data[0].shape[0]
                     epoch_train_acc += acc
+                    epoch_eigenregularization += eigen_regularization.item()
                 else:
                     raise NotImplementedError(
                         f"train_model: Training for model {self.model.get_model_name()} is not implemented")
@@ -165,6 +180,7 @@ class Trainer:
             ################################################################################################################
             epoch_train_loss /= train_length
             epoch_train_acc /= train_length
+            epoch_eigenregularization /= train_length
 
             # End of epoch. Calculate the average loss
             self.loss_train_list.append(epoch_train_loss)
@@ -200,7 +216,7 @@ class Trainer:
             except AttributeError:
                 pass
 
-            self.__report_results(epoch, epoch_train_loss, epoch_train_acc, valid_loss)
+            self.__report_results(epoch, epoch_train_loss, epoch_train_acc, valid_loss, epoch_eigenregularization)
             self.__save_model(epoch, valid_loss)
 
 
@@ -214,8 +230,8 @@ class Trainer:
             self.__save_final_model()
         return self.model
 
-    def __report_results(self, epoch, epoch_train_loss, epoch_train_acc, valid_loss):
-        result_txt = (f"[Epoch : {epoch + 1}/{self.epochs}]"
+    def __report_results(self, epoch, epoch_train_loss, epoch_train_acc, valid_loss, eigenregularization=None):
+        result_txt = (f"[Epoch : {epoch + 1}/{self.training_params.get('epochs', 10)}]"
                       f" Train loss = {epoch_train_loss:.6f}, Validation loss = {valid_loss.get('Overall'):.6f}")
         if valid_loss.get("Angle") is not None and valid_loss.get("Distance") is not None:
             self.loss_valid_list_angles.append(valid_loss.get("Angle"))
@@ -242,7 +258,8 @@ class Trainer:
 
             wandb.log({"lr": self.scheduler.get_last_lr()[0]})
             if eigenregularization_weight_tmp is not None:
-                wandb.log({"tmp_Eigenregularization weight": eigenregularization_weight_tmp})
+                wandb.log({"tmp_Eigenregularization weight": eigenregularization_weight_tmp, 
+                           "Eigen Regularization" : eigenregularization})
 
     def __save_model(self, epoch, valid_loss):
         if self.min_valid_loss > valid_loss.get("Overall"):
@@ -260,7 +277,12 @@ class Trainer:
         torch.save(self.model.state_dict(), str(self.final_model_checkpoint) + ".pt")
 
     def __load_model(self):
-        self.model.load_state_dict(torch.load(str(self.final_model_checkpoint) + ".pt"))
+        try:
+            self.model.load_state_dict(torch.load(str(self.final_model_checkpoint) + ".pt"))
+            print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+        except FileNotFoundError:
+            print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
+
 
     def __plot_res(self):
         now = datetime.now()
@@ -268,14 +290,14 @@ class Trainer:
 
         if self.acc_train_list is not None and self.acc_valid_list is not None:
             fig_acc = plot_accuracy_curve(
-                list(range(1, self.epochs + 1)), self.acc_train_list, self.acc_valid_list,
+                list(range(1, self.training_params.get("epochs", 10) + 1)), self.acc_train_list, self.acc_valid_list,
                 model_name=self.model._get_name()
             )
             fig_acc.savefig(self.plots_path / f"Accuracy_{self.model.get_model_name()}_{dt_string_for_save}.png")
             if self.show_plots:
                 fig_acc.show()
         fig_loss = plot_learning_curve(
-            list(range(1, self.epochs + 1)), self.loss_train_list, self.loss_valid_list,
+            list(range(1, self.training_params.get("epochs", 10) + 1)), self.loss_train_list, self.loss_valid_list,
             model_name=self.model._get_name(),
             angle_train_loss=self.loss_train_list_angles,
             angle_valid_loss=self.loss_valid_list_angles,
@@ -344,7 +366,7 @@ class Trainer:
     def __init_wandb(self):
         try:
             wandb.init(entity="gast", project="dcd_music",
-                       name="no-compression",
+                       name=self.training_params.get('simulation_name'),
                        config=self.training_params,
                        allow_val_change=True)
             try:
@@ -414,7 +436,6 @@ class TrainingParams(object):
         self.diff_method = None
         self.tau = None
         self.model_type = None
-        self.epochs = None
         self.batch_size = None
         self.training_objective = None
 

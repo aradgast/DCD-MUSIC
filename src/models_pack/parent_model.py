@@ -22,8 +22,9 @@ class ParentModel(nn.Module):
         return None
 
     def get_model_file_name(self):
-        if self.system_model.params.M is None:
-            M = "rand"
+        if isinstance(self.system_model.params.M, tuple):
+            low_M, high_M = self.system_model.params.M
+            M = f"random_{low_M}_{high_M}"
         else:
             M = self.system_model.params.M
 

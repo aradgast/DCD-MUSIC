@@ -10,6 +10,7 @@ Purpose:
 --------
 This script defines the SystemModel class for defining the settings of the DoA estimation system model.
 """
+import warnings
 
 # Imports
 import numpy as np
@@ -51,8 +52,8 @@ class SystemModelParams:
     field_type = "far"
     signal_type = "narrowband"
     freq_values = [0, 500]
-    wavelength = 1
-    carrier_frequency = 3e8 / wavelength # 0.3 Ghz if wavelength = 1, 2.4 Ghz if wavelength = 0.125
+    wavelength = 0.06
+    carrier_frequency = 3e8 / wavelength # 0.3 Ghz if wavelength = 1, 2.4 Ghz if wavelength = 0.125, 5 Ghz if wavelength = 0.06
     signal_bandwidth = 500 # 500 Hz
     number_subcarriers = 500
     signal_nature = "non-coherent"
@@ -170,7 +171,13 @@ class SystemModel(object):
             N = overwrite_n
         else:
             N = self.params.N
-        self.array = np.linspace(0, N, N, endpoint=False)
+        if N % 2 == 0:
+            warnings.warn("SystemModel.create_array: Number of sensors is even, it's better to use odd number of sensors")
+            self.array = np.linspace(0, N, N, endpoint=False)
+        else:
+            semi_n = N // 2
+            self.array = np.linspace(-semi_n, semi_n, N, endpoint=True)
+
 
     def calc_fresnel_fraunhofer_distance(self) -> tuple:
         """

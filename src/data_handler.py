@@ -73,8 +73,14 @@ def create_dataset(
     samples_model = Samples(system_model_params)
 
     for i in tqdm(range(samples_size), desc="Creating dataset"):
-        if system_model_params.M is None:
-            M = np.random.randint(2, np.min((6, system_model_params.N-1)))
+        if isinstance(system_model_params.M, tuple):
+            low_M, high_M = system_model_params.M
+            high_M = min(high_M, system_model_params.N-1)
+            if low_M >= high_M:
+                warnings.warn("create_dataset: low_M should be less than high_M")
+                M = low_M
+            else:
+                M = np.random.randint(low_M, high_M)
         else:
             M = system_model_params.M
         # Samples model creation
@@ -215,8 +221,9 @@ def set_dataset_filename(system_model_params: SystemModelParams, samples_size: f
     --------
         str: Suffix dataset filename
     """
-    if system_model_params.M is None:
-        M = "rand"
+    if isinstance(system_model_params.M, tuple):
+        low_M, high_M = system_model_params.M
+        M = f"random_{low_M}_{high_M}"
     else:
         M = system_model_params.M
     suffix_filename = (

@@ -46,6 +46,7 @@ from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.mle import MLE
 from src.methods_pack.beamformer import Beamformer
 from src.methods_pack.music_tops import TOPS
+from src.methods_pack.csestimator import CsEstimator
 from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
 from src.plotting import plot_spectrum
@@ -76,6 +77,10 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
         method = Beamformer(system_model)
     elif method_name.lower() == "tops":
         method = TOPS(system_model)
+    elif method_name.lower() == "cs_estimator":
+        method = CsEstimator(system_model)
+    else:
+        raise NotImplementedError(f"get_model_based_method: Method {method_name} is not supported.")
     method = method.to(device)
     method = method.eval()
     return method
@@ -269,24 +274,21 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
     # Gradients calculation isn't required for evaluation
     with torch.no_grad():
         for i, data in enumerate(dataset):
-            if algorithm.lower() in ["1d-music", "2d-music", "esprit", "root-music", "beamformer", "tops"]:
-                tmp_rmspe, tmp_acc, tmp_length = model_based.test_step(data, i)
-                if isinstance(tmp_rmspe, tuple):
-                    tmp_rmspe, tmp_rmspe_angle, tmp_rmspe_range = tmp_rmspe
-                    if angle_loss is None:
-                        angle_loss = 0.0
-                    if distance_loss is None:
-                        distance_loss = 0.0
-                    angle_loss += tmp_rmspe_angle
-                    distance_loss += tmp_rmspe_range
-                over_all_loss += tmp_rmspe
-                if acc is None:
-                    acc = 0.0
+            tmp_rmspe, tmp_acc, tmp_length = model_based.test_step(data, i)
+            if isinstance(tmp_rmspe, tuple):
+                tmp_rmspe, tmp_rmspe_angle, tmp_rmspe_range = tmp_rmspe
+                if angle_loss is None:
+                    angle_loss = 0.0
+                if distance_loss is None:
+                    distance_loss = 0.0
+                angle_loss += tmp_rmspe_angle
+                distance_loss += tmp_rmspe_range
+            over_all_loss += tmp_rmspe
+            if acc is None:
+                acc = 0.0
 
-                acc += tmp_acc
-                test_length += tmp_length
-            else:
-                raise NotImplementedError(f"evaluate_model_based: Algorithm {algorithm} is not supported.")
+            acc += tmp_acc
+            test_length += tmp_length
         # clear cache
         try:
             torch.cuda.empty_cache()
@@ -408,7 +410,6 @@ def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
 
 def evaluate(
         generic_test_dataset: DataLoader,
-        criterion: nn.Module,
         system_model: SystemModel,
         models: dict = None,
         augmented_methods: list = None,
@@ -420,7 +421,6 @@ def evaluate(
 
     Parameters:
         generic_test_dataset (list): Test dataset for generic subspace methods.
-        criterion (nn.Module): Loss criterion for (DNN) model evaluation.
         system_model: instance of SystemModel.
         models (dict): dict that contains the models to evluate and their parameters.
         augmented_methods (list, optional): List of augmented methods for evaluation.

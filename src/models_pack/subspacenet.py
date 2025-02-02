@@ -74,7 +74,7 @@ class SubspaceNet(ParentModel):
         self.train_loss, self.validation_loss, self.test_loss = None, None, None
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
-        self.set_eigenregularization_schedular(init_value=0.1)
+        self.set_eigenregularization_schedular(init_value=0.0)
         self.reshaper_target_size = 150
         self.reshaper = self.__init_reshaper()
 
@@ -106,8 +106,8 @@ class SubspaceNet(ParentModel):
     def get_surrogate_covariance(self, x: torch.Tensor):
         x = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
-        N = x.shape[-1]
-        self.batch_size = x.shape[0]
+        # N = x.shape[-1]
+        self.batch_size, _, _, N = x.shape
         ############################
         ## Architecture flow ##
         # CNN block #1
@@ -367,11 +367,8 @@ class SubspaceNet(ParentModel):
             angles_pred, distance_pred, source_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(angles_pred=angles_pred, angles=angles, ranges_pred=distance_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
-        try:
-            wandb.log({"eigen regularization": torch.sum(eigen_regularization)})
-        except Exception:
-            pass
-        return self.get_regularized_loss(loss, eigen_regularization), acc
+        loss = self.get_regularized_loss(loss, eigen_regularization)
+        return loss, acc, eigen_regularization
 
     def __validation_step_near_field(self, batch, batch_idx, is_test :bool=False):
         x, sources_num, labels, masks = batch
