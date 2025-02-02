@@ -11,11 +11,11 @@ import argparse
 
 # default values for the argparse
 number_sensors = 15
-number_sources = 2
+number_sources = "2"
 number_snapshots = 100
 snr = 10
 field_type = "Near"
-signal_type = "broadband"
+signal_type = "narrowband"
 signal_nature = "non-coherent"
 err_loc_sv = 0.0
 tau = 8
@@ -30,6 +30,7 @@ step_size = 50
 gamma = 0.5
 diff_method = ("esprit", "music_1D")
 train_loss_type = ("rmspe", "rmspe")
+wandb_flag = False
 
 
 def train_dcd_music(*args, **kwargs):
@@ -215,7 +216,7 @@ def train_dcd_music(*args, **kwargs):
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run simulation with optional parameters.")
     parser.add_argument('-n', '--number_sensors', type=int, help='Number of sensors', default=number_sensors)
-    parser.add_argument('-m', '--number_sources', type=int, help='Number of sources', default=number_sources)
+    parser.add_argument('-m', '--number_sources', type=str, help='Number of sources', default=number_sources)
     parser.add_argument('-t', '--number_snapshots', type=int, help='Number of snapshots', default=number_snapshots)
     parser.add_argument('-s', '--snr', type=int, help='SNR value', default=snr)
     parser.add_argument('-ft', '--field_type', type=str, help='Field type', default=field_type)
@@ -235,15 +236,20 @@ def parse_arguments():
     parser.add_argument('-wd', "--weight_decay", type=float, help='Weight decay for optimizer', default=weight_decay)
     parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=step_size)
     parser.add_argument('-gm', "--gamma", type=float, help='Gamma value for schedular', default=gamma)
+    parser.add_argument('-w', "--wandb", type=bool, help='Use wandb', default=wandb_flag)
 
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_arguments()
+    if args.number_sources.isnumeric():
+        M = int(args.number_sources)
+    else:
+        M = tuple(map(int, args.number_sources.split(',')))
     system_model_params = {
         "N": args.number_sensors,  # number of antennas
-        "M": args.number_sources,  # number of sources
+        "M": M,  # number of sources
         "T": args.number_snapshots,  # number of snapshots
         "snr": args.snr,  # if defined, values in scenario_dict will be ignored
         "field_type": args.field_type,  # Near, Far
@@ -271,7 +277,7 @@ if __name__ == "__main__":
         "true_range_train": None,  # if set, this range will be set to all samples in the train dataset
         "true_doa_test": None,  # if set, this doa will be set to all samples in the test dataset
         "true_range_test": None,  # if set, this range will be set to all samples in the train dataset
-        "use_wandb": False
+        "use_wandb": args.wandb
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,

@@ -21,8 +21,6 @@ The script can be run with the following command line arguments:
 """
 # Imports
 import os
-from curses.ascii import isalpha
-
 from src.training import *
 from run_simulation import run_simulation
 import argparse
@@ -89,10 +87,10 @@ elif model_config.get("model_type") == "DeepCNN":
 
 training_params = {
     "samples_size": 100,
-    "train_test_ratio": 1,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 1,
-    "epochs": 30,
+    "batch_size": 128,
+    "epochs": 5,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "StepLR",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -147,15 +145,17 @@ def parse_arguments():
     parser.add_argument('-s', "--snr" ,type=int, help='SNR value', default=None)
     parser.add_argument('-n', "--number_of_sensors",type=int, help='Number of antennas', default=None)
     parser.add_argument('-m', "--number_of_sources", help='Number of sources, could be int or tuple for random case', default=None)
+    parser.add_argument('-snap', "--number_of_snapshots", type=int, help='Number of snapshots', default=None)
+    parser.add_argument('-eta', "--sv_error_var", type=float, help='Steering vector uniform error variance', default=None)
     parser.add_argument('-ft', '--field_type', type=str, help='Field type, far or near field.', default=None)
-    parser.add_argument('-sn','--signal_nature', type=str, help='Signal nature; non-coherent or coherent', default=None)
-    parser.add_argument('-mt','--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
+    parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature; non-coherent or coherent', default=None)
+    parser.add_argument('-mt', '--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
     parser.add_argument('-t', '--train', type=bool, help='Train model', default=None)
-    parser.add_argument('-to','--training_objective', type=str, help='Training objective; angle, range or angle, range.', default=None)
-    parser.add_argument('-e','--eval', type=bool, help='Evaluate model', default=None)
-    parser.add_argument('-ss','--samples_size', type=int, help='Samples size', default=None)
+    parser.add_argument('-to', '--training_objective', type=str, help='Training objective; angle, range or angle, range.', default=None)
+    parser.add_argument('-e', '--eval', type=bool, help='Evaluate model', default=False)
+    parser.add_argument('-ss', '--samples_size', type=int, help='Samples size', default=None)
     parser.add_argument('-ttr', '--train_test_ratio', type=float, help='Train test ratio', default=None)
-    parser.add_argument('-w', '--wandb', type=bool, help='Use wandb', default=None)
+    parser.add_argument('-w', '--wandb', type=bool, help='Use wandb', default=False)
     return parser.parse_args()
 
 
@@ -170,10 +170,14 @@ if __name__ == "__main__":
     if args.number_of_sources is not None:
         # catch a case of random number of sources between two possible values
         str_m = args.number_of_sources
-        if isalpha(str_m):
+        if str_m.isnumeric():
             system_model_params["M"] = int(str_m)
         else:
             system_model_params["M"] = tuple(map(int, str_m.split(',')))
+    if args.number_of_snapshots is not None:
+        system_model_params["T"] = args.number_of_snapshots
+    if args.sv_error_var is not None:
+        system_model_params["eta"] = args.sv_error_var
     if args.field_type is not None:
         system_model_params["field_type"] = args.field_type
     if args.signal_nature is not None:
@@ -183,7 +187,10 @@ if __name__ == "__main__":
     if args.train is not None:
         simulation_commands["TRAIN_MODEL"] = args.train
     if args.training_objective is not None:
-        training_params["training_objective"] = args.training_objective
+        if args.training_objective.startswith("angle,range"):
+            training_params["training_objective"] = "angle, range"
+        else:
+            training_params["training_objective"] = args.training_objective
     if args.eval is not None:
         simulation_commands["EVALUATE_MODE"] = args.eval
     if args.samples_size is not None:
