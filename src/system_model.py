@@ -52,7 +52,7 @@ class SystemModelParams:
     field_type = "far"
     signal_type = "narrowband"
     freq_values = [0, 500]
-    wavelength = 0.06
+    wavelength = 1
     carrier_frequency = 3e8 / wavelength # 0.3 Ghz if wavelength = 1, 2.4 Ghz if wavelength = 0.125, 5 Ghz if wavelength = 0.06
     signal_bandwidth = 500 # 500 Hz
     number_subcarriers = 500
@@ -63,7 +63,7 @@ class SystemModelParams:
     sv_noise_var = 0
     doa_range = 55
     doa_resolution = 1
-    max_range_ratio_to_limit = 0.4
+    max_range_ratio_to_limit = 0.5
     range_resolution = 1
 
     def set_parameter(self, name: str, value):

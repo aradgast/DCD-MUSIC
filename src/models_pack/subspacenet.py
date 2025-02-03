@@ -74,7 +74,7 @@ class SubspaceNet(ParentModel):
         self.train_loss, self.validation_loss, self.test_loss = None, None, None
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
-        self.set_eigenregularization_schedular(init_value=0.0)
+        self.set_eigenregularization_schedular()
         self.reshaper_target_size = 150
         self.reshaper = self.__init_reshaper()
 
@@ -316,7 +316,8 @@ class SubspaceNet(ParentModel):
             angles_pred, source_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(angles_pred=angles_pred, angles=angles)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
-        return loss + eigen_regularization * self.eigenregularization_weight, acc
+        loss = self.get_regularized_loss(loss, eigen_regularization)
+        return loss, acc, eigen_regularization
 
     def __validation_step_far_field(self, batch, batch_idx):
         x, sources_num, angles, masks = batch
@@ -422,7 +423,7 @@ class SubspaceNet(ParentModel):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
                 self.diff_method = ESPRIT(system_model=system_model)
-            elif diff_method.endswith("music_1D"):
+            elif diff_method.endswith("music_1d"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle")
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
@@ -431,7 +432,7 @@ class SubspaceNet(ParentModel):
         elif self.field_type == "near":
             if diff_method.endswith("music_2D"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
-            elif diff_method.endswith("music_1D"):
+            elif diff_method.endswith("music_1d"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"

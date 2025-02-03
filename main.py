@@ -21,6 +21,8 @@ The script can be run with the following command line arguments:
 """
 # Imports
 import os
+import warnings
+
 from src.training import *
 from run_simulation import run_simulation
 import argparse
@@ -30,7 +32,7 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    # "SNR": [-10, 0, 10],
+    # "SNR": [-10, -5,0,5, 10],
     # "T": [10, 20, 50, 70, 100],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
     # "M": [2, 3, 4, 5, 6, 7],
@@ -40,20 +42,20 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
-    "SAVE_MODEL": False,
+    "TRAIN_MODEL": True,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 2,  # number of sources
-    "T": 2,  # number of snapshots
-    "snr": 20,  # if defined, values in scenario_dict will be ignored
+    "M": (2, 8),  # number of sources
+    "T": 100,  # number of snapshots
+    "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
     "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
@@ -86,13 +88,13 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
+    "samples_size": 4096,
     "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 128,
-    "epochs": 5,
+    "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
-    "scheduler": "StepLR",  # StepLR, ReduceLROnPlateau
+    "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
     "weight_decay": 1e-9,
     "step_size": 20,
@@ -107,7 +109,7 @@ training_params = {
 evaluation_params = {
     "models": {
         # "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
-        #              "diff_method": ("esprit", "music_1D"),
+        #              "diff_method": ("esprit", "music_1d"),
         #              "train_loss_type": ("rmspe", "rmspe")},
         # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
@@ -130,10 +132,10 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        # "Beamformer",
         # "2D-MUSIC",
+        # "Beamformer",
         # "TOPS",
-        "CS_Estimator",
+        # "CS_Estimator",
         # "CCRB"
     ]
 }
@@ -149,13 +151,27 @@ def parse_arguments():
     parser.add_argument('-eta', "--sv_error_var", type=float, help='Steering vector uniform error variance', default=None)
     parser.add_argument('-ft', '--field_type', type=str, help='Field type, far or near field.', default=None)
     parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature; non-coherent or coherent', default=None)
+    parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength of the signal in meters', default=None)
+
     parser.add_argument('-mt', '--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
-    parser.add_argument('-t', '--train', type=bool, help='Train model', default=None)
-    parser.add_argument('-to', '--training_objective', type=str, help='Training objective; angle, range or angle, range.', default=None)
-    parser.add_argument('-e', '--eval', type=bool, help='Evaluate model', default=False)
+
     parser.add_argument('-ss', '--samples_size', type=int, help='Samples size', default=None)
     parser.add_argument('-ttr', '--train_test_ratio', type=float, help='Train test ratio', default=None)
-    parser.add_argument('-w', '--wandb', type=bool, help='Use wandb', default=False)
+    parser.add_argument('-to', '--training_objective', type=str, help='Training objective; angle, range or angle, range.', default=None)
+    parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=None)
+    parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=None)
+    parser.add_argument('-op', '--optimizer', type=str, help='Optimizer; Adam, SGD', default=None)
+    parser.add_argument('-sch', '--scheduler', type=str, help='Scheduler; StepLR, ReduceLROnPlateau', default=None)
+    parser.add_argument('-lr', '--learning_rate', type=float, help='Learning rate', default=None)
+    parser.add_argument('-wd', '--weight_decay', type=float, help='Weight decay', default=None)
+    parser.add_argument('-step', '--step_size', type=int, help='Step size', default=None)
+    parser.add_argument('-g', '--gamma', type=float, help='Gamma', default=None)
+    parser.add_argument('-w', '--wandb', action="store_true", help='Use wandb', default=False)
+
+    parser.add_argument('-t', '--train', action="store_true", help='Train model', default=True)
+    parser.add_argument('-no_t', "--no_train", action="store_false", help='Do not train model', dest='train')
+    parser.add_argument('-e', '--eval', action="store_true", help='Evaluate model', default=False)
+
     return parser.parse_args()
 
 
@@ -182,23 +198,43 @@ if __name__ == "__main__":
         system_model_params["field_type"] = args.field_type
     if args.signal_nature is not None:
         system_model_params["signal_nature"] = args.signal_nature
+    if args.wavelength is not None:
+        system_model_params["wavelength"] = args.wavelength
+
     if args.model_type is not None:
+        warnings.warn("Please make sure to configure the model parameters in the script.")
         model_config["model_type"] = args.model_type
-    if args.train is not None:
-        simulation_commands["TRAIN_MODEL"] = args.train
+
+    if args.samples_size is not None:
+        training_params["samples_size"] = args.samples_size
+    if args.train_test_ratio is not None:
+        training_params["train_test_ratio"] = args.train_test_ratio
     if args.training_objective is not None:
         if args.training_objective.startswith("angle,range"):
             training_params["training_objective"] = "angle, range"
         else:
             training_params["training_objective"] = args.training_objective
-    if args.eval is not None:
-        simulation_commands["EVALUATE_MODE"] = args.eval
-    if args.samples_size is not None:
-        training_params["samples_size"] = args.samples_size
-    if args.train_test_ratio is not None:
-        training_params["train_test_ratio"] = args.train_test_ratio
+    if args.batch_size is not None:
+        training_params["batch_size"] = args.batch_size
+    if args.epochs is not None:
+        training_params["epochs"] = args.epochs
+    if args.optimizer is not None:
+        training_params["optimizer"] = args.optimizer
+    if args.scheduler is not None:
+        training_params["scheduler"] = args.scheduler
+    if args.learning_rate is not None:
+        training_params["learning_rate"] = args.learning_rate
+    if args.weight_decay is not None:
+        training_params["weight_decay"] = args.weight_decay
+    if args.step_size is not None:
+        training_params["step_size"] = args.step_size
+    if args.gamma is not None:
+        training_params["gamma"] = args.gamma
     if args.wandb is not None:
         training_params["use_wandb"] = args.wandb
+
+    simulation_commands["TRAIN_MODEL"] = args.train
+    simulation_commands["EVALUATE_MODE"] = args.eval
 
     start = time.time()
     loss = run_simulation(simulation_commands=simulation_commands,

@@ -145,7 +145,8 @@ class DCDMUSIC(SubspaceNet):
         if isinstance(loss, tuple):
             loss = loss[0]
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
-        return loss, acc
+        loss = self.get_regularized_loss(loss, eigen_regularization)
+        return loss, acc, eigen_regularization
         # if eigen_regularization is None:
         #     return loss, acc
         # else:
@@ -212,3 +213,6 @@ class DCDMUSIC(SubspaceNet):
     def __set_angle_extractor_requires_grad(self, requires_grad: bool):
         for param in self.angle_extractor.parameters():
             param.requires_grad = requires_grad
+
+    def _get_name(self):
+        return "DCDMUSIC"

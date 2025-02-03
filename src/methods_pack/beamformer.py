@@ -253,7 +253,7 @@ class Beamformer(Module):
 
     def __find_peaks_far_field(self, spectrum: torch.Tensor, known_number_of_sources):
         source_number = self.system_model.params.M
-        if source_number is None:
+        if isinstance(source_number, tuple):
             source_number = known_number_of_sources
         batch_size = spectrum.shape[0]
 
@@ -275,14 +275,11 @@ class Beamformer(Module):
         return peaks
 
     def __find_peaks_near_field(self, spectrum: torch.Tensor, known_number_of_sources: int):
-        source_number = self.system_model.params.M
-        if source_number is None:
-            source_number = known_number_of_sources
         batch_size = spectrum.shape[0]
 
-        max_row = torch.zeros((batch_size, source_number)
+        max_row = torch.zeros((batch_size, known_number_of_sources)
                               , dtype=torch.int64, device=device)
-        max_col = torch.zeros((batch_size, source_number)
+        max_col = torch.zeros((batch_size, known_number_of_sources)
                               , dtype=torch.int64, device=device)
         for batch in range(batch_size):
             elem_spectrum = spectrum[batch].detach().cpu().numpy().squeeze()
@@ -294,11 +291,11 @@ class Beamformer(Module):
             sorted_peaks = peaks[np.argsort(spectrum_flatten[peaks])[::-1]]
             # convert the peaks to 2d indices
             original_idx = torch.from_numpy(np.column_stack(np.unravel_index(sorted_peaks, elem_spectrum.shape))).T
-            if source_number > 1:
+            if known_number_of_sources > 1:
                 # pass
-                original_idx = keep_far_enough_points(original_idx, source_number, 10)
-            max_row[batch] = original_idx[0][0: source_number]
-            max_col[batch] = original_idx[1][0: source_number]
+                original_idx = keep_far_enough_points(original_idx, known_number_of_sources, 10)
+            max_row[batch] = original_idx[0][0: known_number_of_sources]
+            max_col[batch] = original_idx[1][0: known_number_of_sources]
         # if the model is not in training mode, return the peaks.
         peaks = torch.cat((max_row, max_col), dim=1)
         return peaks
