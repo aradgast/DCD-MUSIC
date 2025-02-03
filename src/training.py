@@ -109,13 +109,12 @@ class Trainer:
         self.__init_metrics()
         self.__configure_model()
 
-        if load_model:
-            self.__load_model()
+        self.__load_model(load_model)
         # Set initial time for start training
         since = time.time()
-        if use_wandb:
-            # init wandb
-            self.__init_wandb()
+
+        # init wandb
+        self.__init_wandb(use_wandb)
         epochs = self.training_params.get("epochs", 10)
         
 
@@ -160,7 +159,9 @@ class Trainer:
 
                     train_length += data[0].shape[0]
                     epoch_train_acc += acc
-                    epoch_eigenregularization += eigen_regularization.item()
+                    if eigen_regularization is not None:
+                        epoch_eigenregularization += eigen_regularization.item()
+
                 else:
                     raise NotImplementedError(
                         f"train_model: Training for model {self.model.get_model_name()} is not implemented")
@@ -228,6 +229,8 @@ class Trainer:
         self.__plot_res()
         if save_final:
             self.__save_final_model()
+        # close wandb connection
+        self.__finish_wandb()
         return self.model
 
     def __report_results(self, epoch, epoch_train_loss, epoch_train_acc, valid_loss, eigenregularization=None):
@@ -247,6 +250,7 @@ class Trainer:
             eigenregularization_weight_tmp = None
         if eigenregularization_weight_tmp is not None:
             result_txt += f", Eigenregularization weight = {eigenregularization_weight_tmp}"
+            result_txt += f", Eigenregularization = {eigenregularization}"
 
         print(result_txt)
 
@@ -276,12 +280,13 @@ class Trainer:
         self.model.load_state_dict(self.best_model_wts)
         torch.save(self.model.state_dict(), str(self.final_model_checkpoint) + ".pt")
 
-    def __load_model(self):
-        try:
-            self.model.load_state_dict(torch.load(str(self.final_model_checkpoint) + ".pt"))
-            print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
-        except FileNotFoundError:
-            print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
+    def __load_model(self, load_model: bool):
+        if load_model:
+            try:
+                self.model.load_state_dict(torch.load(str(self.final_model_checkpoint) + ".pt"))
+                print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+            except FileNotFoundError:
+                print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
 
 
     def __plot_res(self):
@@ -347,7 +352,7 @@ class Trainer:
                                        gamma=self.training_params["gamma"])
         elif scheduler == "ReduceLROnPlateau":
             return lr_scheduler.ReduceLROnPlateau(self.optimizer, mode="min", factor=self.training_params["gamma"],
-                                                  patience=20, verbose=True)
+                                                  patience=10, verbose=True)
         else:
             raise ValueError(f"Scheduler {scheduler} is not defined.")
 
@@ -363,20 +368,28 @@ class Trainer:
         else:
             raise ValueError(f"Training objective {self.training_params['training_objective']} is not defined.")
 
-    def __init_wandb(self):
-        try:
-            wandb.init(entity="gast", project="dcd_music",
-                       name=self.training_params.get('simulation_name'),
-                       config=self.training_params,
-                       allow_val_change=True)
+    def __init_wandb(self, use_wandb: bool):
+        if use_wandb:
             try:
-                wandb.config.update(self.model.system_model.params)
-            except AttributeError:
+                wandb.init(entity="gast", project="dcd_music",
+                           name=self.training_params.get('simulation_name'),
+                           config=self.training_params,
+                           allow_val_change=True)
+                try:
+                    wandb.config.update(self.model.system_model.params)
+                except AttributeError:
+                    pass
+                wandb.watch(self.model, log="all")
+                self.is_wandb = True
+            except Exception:
+                print("Error initializing wandb")
+
+    def __finish_wandb(self):
+        if self.is_wandb:
+            try:
+                wandb.finish(exit_code=0)
+            except Exception:
                 pass
-            wandb.watch(self.model, log="all")
-            self.is_wandb = True
-        except Exception:
-            print("Error initializing wandb")
 
     def __init_metrics(self):
         self.loss_train_list = []

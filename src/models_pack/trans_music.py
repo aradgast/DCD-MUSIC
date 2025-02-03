@@ -60,13 +60,15 @@ class TransMUSIC(ParentModel):
         self.N = self.params.N
         self.estimation_params = None
         self.train_mode = "subspace_train"
-        if self.params.field_type == "Far":
+        if self.params.field_type == "far":
             self.estimation_params = "angle"
             self.rmspe_loss = RMSPELoss()
-        elif self.params.field_type == "Near":
+        elif self.params.field_type == "near":
             self.estimation_params = "angle, range"
             self.rmspe_loss = CartesianLoss()
             self.separated_test_loss = RMSPELoss(1.0)
+        else:
+            raise ValueError(f"TransMUSIC.__init__: Unrecognized field type {self.params.field_type}")
         self.music = MUSIC(system_model=self.system_model, estimation_parameter=self.estimation_params)
         self.ce_loss = nn.CrossEntropyLoss(reduction="sum")
 
@@ -98,16 +100,16 @@ class TransMUSIC(ParentModel):
         self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
         if self.estimation_params == "angle":
             self.input_dim = self.music.angles_dict.shape[0]
-            if self.music.system_model.params.M is not None:
-                output_dim = self.music.system_model.params.M
+            if isinstance(self.music.system_model.params.M, tuple):
+                output_dim = self.music.system_model.params.M[1]
             else:
-                output_dim = self.music.system_model.params.N - 1
+                output_dim = self.music.system_model.params.M
         elif self.estimation_params == "angle, range":
             self.input_dim = self.music.angles_dict.shape[0] * self.music.ranges_dict.shape[0]
-            if self.music.system_model.params.M is not None:
-                output_dim = self.music.system_model.params.M * 2
+            if isinstance(self.music.system_model.params.M, tuple):
+                output_dim = (self.music.system_model.params.M[1] - 1) * 2
             else:
-                output_dim = (self.music.system_model.params.N - 1) * 2
+                output_dim = self.music.system_model.params.M * 2
             # self.activation = ShiftedReLU(shift=np.floor(self.music.system_model.fresnel)).to(device)
             # self.activation = nn.ReLU().to(device)
             self.activation = nn.LeakyReLU(negative_slope=0.0001).to(device)
@@ -212,15 +214,15 @@ class TransMUSIC(ParentModel):
         return {"in_dim": self.input_dim}
 
     def training_step(self, batch, batch_idx):
-        if self.params.field_type == "Far":
+        if self.params.field_type == "far":
             return self.__training_step_far_field(batch, batch_idx)
-        elif self.params.field_type == "Near":
+        elif self.params.field_type == "near":
             return self.__training_step_near_field(batch, batch_idx)
 
     def validation_step(self, batch, batch_idx, is_test: bool=False):
-        if self.params.field_type == "Far":
+        if self.params.field_type == "far":
             return self.__valid_step_far_field(batch, batch_idx)
-        elif self.params.field_type == "Near":
+        elif self.params.field_type == "near":
             return self.__valid_step_near_field(batch, batch_idx, is_test)
 
     def test_step(self, batch, batch_idx):
@@ -231,37 +233,12 @@ class TransMUSIC(ParentModel):
 
     def __training_step_far_field(self, batch, batch_idx):
         x, sources_num, angles, masks = batch
-        x = x.requires_grad_(True).to(device)
-        angles = angles.requires_grad_(True).to(device)
-        if x.dim() == 2:
-            x = x[None, :, :]
-            angles = angles[None, :, :]
-        if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__training_step_far_field: "
-                             f"Number of sources in the batch is not equal for all samples.")
-        sources_num = sources_num[0]
-        angles_pred, prob_source_number = self(x)
-        if self.train_mode == "num_source_train":
-            # calculate the cross entropy loss for the source number estimation
-            one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                   .to(device).to(torch.float32))
-            loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
-                prob_source_number.shape[0], 1)) * x.shape[0]
-        else:
-            loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles)
-        # calculate the source estimation
-        source_estimation = torch.argmax(prob_source_number, dim=1)
-        acc = self.source_estimation_accuracy(sources_num, source_estimation)
-        return loss, acc
-
-    def __training_step_far_field(self, batch, batch_idx):
-        x, sources_num, angles, masks = batch
         x = x.to(device)
         angles = angles.to(device)
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__training_step_far_field: "
+            raise ValueError(f"TransMUSIC.__training_step_far_field: "
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles_pred, prob_source_number = self(x)
@@ -277,7 +254,7 @@ class TransMUSIC(ParentModel):
         # calculate the source estimation
         source_estimation = torch.argmax(prob_source_number, dim=1)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
-        return loss, acc
+        return loss, acc, None
 
     def __training_step_near_field(self, batch, batch_idx):
         x, sources_num, labels, masks = batch
@@ -306,14 +283,14 @@ class TransMUSIC(ParentModel):
             loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
         source_estimation = torch.argmax(prob_source_number, dim=1)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
-        return loss, acc
+        return loss, acc, None
 
     def __valid_step_near_field(self, batch, batch_idx, is_test: bool=False):
         x, sources_num, labels, masks = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__training_step_near_field: "
+            raise ValueError(f"TransMUSIC.__training_step_near_field: "
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)

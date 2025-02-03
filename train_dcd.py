@@ -22,13 +22,14 @@ tau = 8
 sample_size = 4096
 train_test_ratio = 0.0
 batch_size = 128
-epochs = 100
+epochs = 2
 optimizer = "Adam"
+scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
 weight_decay = 1e-9
 step_size = 50
 gamma = 0.5
-diff_method = ("esprit", "music_1D")
+diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
 wandb_flag = False
 
@@ -133,28 +134,6 @@ def train_dcd_music(*args, **kwargs):
                            "tau": MODEL_PARAMS.get("tau"), "field_type": "far"})
         .set_model()
     )
-    # Assign the training parameters object
-    simulation_parameters = (
-        TrainingParams()
-        .set_training_objective("angle")
-        .set_batch_size(TRAINING_PARAMS["batch_size"])
-        .set_epochs(TRAINING_PARAMS["epochs"])
-        .set_model(model_gen=model_config)
-        .set_optimizer(optimizer=TRAINING_PARAMS["optimizer"],
-                       learning_rate=TRAINING_PARAMS["learning_rate"],
-                       weight_decay=TRAINING_PARAMS["weight_decay"])
-        .set_training_dataset(train_dataset)
-        .set_schedular(step_size=TRAINING_PARAMS["step_size"],
-                       gamma=TRAINING_PARAMS["gamma"])
-    )
-
-        # Print training simulation details
-    simulation_summary(
-        system_model_params=system_model_params,
-        model_type=model_config.model_type,
-        parameters=simulation_parameters,
-        phase="training",
-    )
 
     trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
                                        weight_decay=TRAINING_PARAMS["weight_decay"],
@@ -164,6 +143,7 @@ def train_dcd_music(*args, **kwargs):
                                        gamma=TRAINING_PARAMS["gamma"],
                                        training_objective="angle",
                                        scheduler=TRAINING_PARAMS["scheduler"],
+                                       batch_size=TRAINING_PARAMS["batch_size"],
                                        )
     train_dataloader, valid_dataloader = train_dataset.get_dataloaders(batch_size=TRAINING_PARAMS["batch_size"])
     trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
@@ -174,7 +154,7 @@ def train_dcd_music(*args, **kwargs):
     print("END OF TRAINING - Step 1: angle branch training.")
 
     # Update model configuration
-    model_config.set_model_type("DCD-MUSIC")
+    model_config = model_config.set_model_type("DCD-MUSIC")
     model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
                                    "diff_method": diff_method,
                                    "train_loss_type": train_loss_type,
@@ -183,15 +163,6 @@ def train_dcd_music(*args, **kwargs):
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})
 
-    if load_model:
-        try:
-            simulation_parameters.load_model(
-                loading_path=saving_path / "final_models" / model_config.model.get_model_file_name())
-        except Exception as e:
-            print("#############################################")
-            print(e)
-            print("simulation_parameters.load_model: Error loading model")
-            print("#############################################")
     trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                             use_wandb=TRAINING_PARAMS["use_wandb"],
@@ -200,14 +171,13 @@ def train_dcd_music(*args, **kwargs):
     print("END OF TRAINING - Step 2: distance branch training.")
 
     # Assign the training parameters object
-    simulation_parameters.set_model(model_gen=model)
     trainingparams.update({"training_objective": "angle, range",
                            "learning_rate": TRAINING_PARAMS["learning_rate"] / 10})
-    simulation_parameters.model.init_model_train_params(0.0)
+    model.init_model_train_params(init_eigenregularization_weight=1e-3)
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                           use_wandb=TRAINING_PARAMS["use_wandb"],
-                          save_final=save_model, load_model=load_model)
+                          save_final=save_model, load_model=True)
     print("END OF TRAINING - Step 3: adaption by position.")
     if save_to_file:
         sys.stdout = orig_stdout
@@ -231,12 +201,12 @@ def parse_arguments():
     parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=batch_size)
     parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=epochs)
     parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default=optimizer)
-    parser.add_argument('-sch', "--scheduler", type=str, help='Scheduler type', default="StepLR")
+    parser.add_argument('-sch', "--scheduler", type=str, help='Scheduler type', default=scheduler)
     parser.add_argument('-lr', "--learning_rate", type=float, help='Learning rate', default=learning_rate)
     parser.add_argument('-wd', "--weight_decay", type=float, help='Weight decay for optimizer', default=weight_decay)
     parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=step_size)
     parser.add_argument('-gm', "--gamma", type=float, help='Gamma value for schedular', default=gamma)
-    parser.add_argument('-w', "--wandb", type=bool, help='Use wandb', default=wandb_flag)
+    parser.add_argument('-w', "--wandb", action="store_true", help='Use wandb', default=wandb_flag)
 
     return parser.parse_args()
 

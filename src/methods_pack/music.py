@@ -115,27 +115,24 @@ class MUSIC(SubspaceMethod):
         Returns:
             tuple: the predicted parameters, the source estimation and the eigen regularization value.
         """
-        sources_num = self.system_model.params.M
-        if sources_num is None:
-            sources_num = number_of_sources
         # single param estimation: the search grid should be updated for each batch, else, it's the same search grid.
         if self.system_model.params.field_type.startswith("near") and self.estimation_params in ["range"]:
             if known_angles.shape[-1] == 1:
                 self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
             else:
-                params = torch.zeros((cov.shape[0], sources_num), dtype=torch.float64, device=device)
-                for source in range(sources_num):
-                    params_source, _, _ = self.forward(cov, number_of_sources=sources_num,
+                params = torch.zeros((cov.shape[0], number_of_sources), dtype=torch.float64, device=device)
+                for source in range(number_of_sources):
+                    params_source, _, _ = self.forward(cov, number_of_sources=number_of_sources,
                                                        known_angles=known_angles[:, source][:, None])
                     params[:, source] = params_source.squeeze()
                 return params
-        _, noise_subspace, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), sources_num)
+        _, noise_subspace, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), number_of_sources)
         inverse_spectrum = self.get_inverse_spectrum(noise_subspace.to(device)).to(device)
         if self._get_name() == "TOPS":
             self.music_spectrum = torch.sum(1 / (inverse_spectrum + 1e-10), dim=-1)
         else:
             self.music_spectrum = 1 / (inverse_spectrum + 1e-10)
-        params = self.peak_finder(sources_num)
+        params = self.peak_finder(number_of_sources)
         return params, source_estimation, eigen_regularization
 
     def get_music_spectrum_from_noise_subspace(self, noise_subspace: torch.Tensor) -> torch.Tensor:
@@ -210,10 +207,12 @@ class MUSIC(SubspaceMethod):
                         del var1
                 
             elif self.estimation_params.endswith("angle"):
+                steering_dict = self.steering_dict.to(device)
                 var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1).T
             elif self.estimation_params.startswith("range"):
+                steering_dict = self.steering_dict.to(device)
                 var1 = torch.einsum("dbn, nbm -> bdm", steering_dict.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1)
@@ -228,7 +227,7 @@ class MUSIC(SubspaceMethod):
             pass
         return inverse_spectrum
 
-    def peak_finder(self, source_number: int = None):
+    def peak_finder(self, source_number: int):
         """
 
         Parameters
@@ -240,7 +239,7 @@ class MUSIC(SubspaceMethod):
         -------
         the predicted param(torch.Tensor) or params(tuple)
         """
-        if self.system_model.params.field_type.startswith("Far"):
+        if self.system_model.params.field_type.lower().startswith("far"):
             return self._peak_finder_1d(self.angles_dict, source_number)
         else:
             if self.estimation_params.startswith("angle, range"):
@@ -309,9 +308,7 @@ class MUSIC(SubspaceMethod):
 
         return rmspe, acc, test_length
 
-    def _peak_finder_1d(self, search_space, source_number: int = None):
-        if source_number is None:
-            source_number = self.system_model.params.M
+    def _peak_finder_1d(self, search_space, source_number: int):
         if self.estimation_params == "range":
             source_number = 1  # for the range estimation, only one source is expected.
 
@@ -341,9 +338,7 @@ class MUSIC(SubspaceMethod):
         else:
             return self.__maskpeak_1d(peaks, search_space, source_number)
 
-    def _peak_finder_2d(self, source_number: int = None):
-        if source_number is None:
-            source_number = self.system_model.params.M
+    def _peak_finder_2d(self, source_number: int):
         batch_size = self.music_spectrum.shape[0]
 
         max_row = torch.zeros((batch_size, source_number)
@@ -402,7 +397,7 @@ class MUSIC(SubspaceMethod):
             metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1,
                                       cell_idx).requires_grad_(True)
             soft_max = torch.softmax(metrix_thr, dim=1)
-            soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx], soft_max).to(
+            soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx.cpu()].to(device), soft_max).to(
                 device)
 
         return soft_decision

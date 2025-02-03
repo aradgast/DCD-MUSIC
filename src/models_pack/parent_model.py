@@ -131,8 +131,11 @@ class ParentModel(nn.Module):
                 self.under_estimation_counter += sum(sources_num > source_estimation).item()
         return torch.sum(source_estimation == sources_num * torch.ones_like(source_estimation).float()).item()
 
-    def get_regularized_loss(self, loss, l_eig):
-        loss_r = loss + self.eigenregularization_weight * l_eig
+    def get_regularized_loss(self, loss, l_eig=None):
+        if l_eig is not None:
+            loss_r = loss + self.eigenregularization_weight * l_eig
+        else:
+            loss_r = loss
         return torch.sum(loss_r)
 
 

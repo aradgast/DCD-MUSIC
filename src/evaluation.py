@@ -135,9 +135,9 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
     overall_loss_distance = None
     overall_accuracy = None
     test_length = 0
-    if isinstance(model, DCDMUSIC):
-        model.train_angle_extractor = False
-        model.update_criterion()
+    # if isinstance(model, DCDMUSIC):
+    #     model.train_angle_extractor = False
+    #     model.update_criterion()
     # Set model to eval mode
     model.eval()
     # Gradients calculation isn't required for evaluation
@@ -266,6 +266,7 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
         if system_model.params.signal_nature.lower() == "non-coherent":
             crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
             return crb
+    system_model.create_array()
     model_based = get_model_based_method(algorithm, system_model)
     if isinstance(model_based, nn.Module):
         model_based = model_based.to(device)
