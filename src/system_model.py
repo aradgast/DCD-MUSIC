@@ -63,7 +63,7 @@ class SystemModelParams:
     sv_noise_var = 0
     doa_range = 55
     doa_resolution = 1
-    max_range_ratio_to_limit = 0.4
+    max_range_ratio_to_limit = 0.5
     range_resolution = 1
 
     def set_parameter(self, name: str, value):

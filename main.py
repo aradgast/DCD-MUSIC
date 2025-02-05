@@ -151,6 +151,7 @@ def parse_arguments():
     parser.add_argument('-eta', "--sv_error_var", type=float, help='Steering vector uniform error variance', default=None)
     parser.add_argument('-ft', '--field_type', type=str, help='Field type, far or near field.', default=None)
     parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature; non-coherent or coherent', default=None)
+    parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength of the signal in meters', default=None)
 
     parser.add_argument('-mt', '--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
 
@@ -197,6 +198,8 @@ if __name__ == "__main__":
         system_model_params["field_type"] = args.field_type
     if args.signal_nature is not None:
         system_model_params["signal_nature"] = args.signal_nature
+    if args.wavelength is not None:
+        system_model_params["wavelength"] = args.wavelength
 
     if args.model_type is not None:
         warnings.warn("Please make sure to configure the model parameters in the script.")

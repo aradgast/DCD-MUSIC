@@ -18,6 +18,7 @@ field_type = "Near"
 signal_type = "narrowband"
 signal_nature = "non-coherent"
 err_loc_sv = 0.0
+wavelength = 1
 tau = 8
 sample_size = 4096
 train_test_ratio = 0.0
@@ -193,6 +194,7 @@ def parse_arguments():
     parser.add_argument('-st', '--signal_type', type=str, help='Signal type', default=signal_type)
     parser.add_argument('-sn', '--signal_nature', type=str, help='Signal nature', default=signal_nature)
     parser.add_argument('-eta', '--err_loc_sv', type=float, help="Error in sensors' locations", default=err_loc_sv)
+    parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength', default=wavelength)
 
     parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default=tau)
 
@@ -227,7 +229,8 @@ if __name__ == "__main__":
         "signal_nature": args.signal_nature,  # if defined, values in scenario_dict will be ignored
         "eta": args.err_loc_sv,  # steering vector error
         "bias": 0,
-        "sv_noise_var": 0.0
+        "sv_noise_var": 0.0,
+        "wavelength": args.wavelength
     }
     model_params = {
         "tau": args.tau
