@@ -231,8 +231,8 @@ def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_
             plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc)
         else:
             plot_test_results(scenario, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
-            plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=False)
-            plot_test_results(scenario, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=False)
+            # plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=False)
+            # plot_test_results(scenario, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=False)
     return
 
 

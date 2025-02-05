@@ -96,11 +96,8 @@ class Trainer:
         self.optimizer = self.__init_optimizer()
         self.scheduler = self.__init_scheduler()
         self.training_objective = self.__extract_training_objective()
-        
-
         self.is_wandb = False
         self.__init_paths()
-
         self.show_plots = show_plots
 
     def train(self, train_dataloader, valid_dataloader, use_wandb:bool=False, save_final:bool=False,
@@ -108,31 +105,27 @@ class Trainer:
         self.model = self.model.to(device)
         self.__init_metrics()
         self.__configure_model()
-
-        self.__load_model(load_model)
-        # Set initial time for start training
-        since = time.time()
-
-        # init wandb
         self.__init_wandb(use_wandb)
-        epochs = self.training_params.get("epochs", 10)
-        
+        self.__load_model(load_model)
 
+        epochs = self.training_params.get("epochs", 10)
         print("\n---Start Training Stage ---\n")
         print(f"Training Objective: {self.training_objective}")
         print(f"Model: {self.model.get_model_name()}")
         print(f"Device: {device}")
-        print(f"Optimizer: {self.optimizer}")
-        print(f"Scheduler: {self.scheduler}")
+        print(f"Optimizer: {self.training_params.get('optimizer')}")
+        print(f"Scheduler: {self.training_params.get('scheduler')}")
         print(f"Learning Rate: {self.training_params['learning_rate']}")
         print(f"Weight Decay: {self.training_params['weight_decay']}")
         print(f"Batch Size: {self.training_params['batch_size']}")
         print(f"Epochs: {epochs}")
+        print(f"Model Checkpoint Name: {self.model.get_model_file_name()}")
         print(f"Number of trainable parameters: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
         print("\n--- Training ---\n")
 
         # Run over all epochs
 
+        since = time.time()
         for epoch in range(epochs):
             if epoch == 40:
                 pass
@@ -142,7 +135,6 @@ class Trainer:
             epoch_train_acc = 0.0
             epoch_eigenregularization = 0.0
             # init tmp loss values
-            train_loss, train_loss_angle, train_loss_distance = None, None, None
             # Set model to train mode
             self.model.train()
             train_length = 0

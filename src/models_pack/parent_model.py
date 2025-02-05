@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch
 from src.system_model import SystemModel
 
-EIGEN_REGULARIZATION_WEIGHT = 1e-3
+EIGEN_REGULARIZATION_WEIGHT = 1e-2
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(ParentModel, self).__init__()
@@ -123,7 +123,9 @@ class ParentModel(nn.Module):
         #     print(f"\nEigenregularization weight updated to {self.eigenregularization_weight}")
         # self.schedular_counter += 1
 
-    def source_estimation_accuracy(self, sources_num, source_estimation):
+    def source_estimation_accuracy(self, sources_num, source_estimation=None):
+        if source_estimation is None:
+            return 0
         if not self.training:
             if (sources_num < source_estimation).any():
                 self.over_estimation_counter += sum(sources_num < source_estimation).item()

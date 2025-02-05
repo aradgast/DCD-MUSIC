@@ -11,11 +11,12 @@ class SubspaceMethod(nn.Module):
 
     """
 
-    def __init__(self, system_model: SystemModel):
+    def __init__(self, system_model: SystemModel, model_order_estimation: str = None):
         super(SubspaceMethod, self).__init__()
         self.system_model = system_model
         self.eigen_threshold = nn.Parameter(torch.tensor(.5, requires_grad=False))
         self.normalized_eigenvals = None
+        self.model_order_estimation = model_order_estimation
 
     def subspace_separation(self,
                             covariance: torch.Tensor,
@@ -35,7 +36,7 @@ class SubspaceMethod(nn.Module):
         sorted_eigvectors = torch.gather(eigenvectors, 2,
                                          sorted_idx.unsqueeze(-1).expand(-1, -1, covariance.shape[-1]).transpose(1, 2))
         # number of sources estimation
-        source_estimation, l_eig = self.estimate_number_of_sources(eigenvalues, method="aic",
+        source_estimation, l_eig = self.estimate_number_of_sources(eigenvalues,
                                                                    number_of_sources=number_of_sources)
         if number_of_sources is None:
             warnings.warn("Number of sources is not defined, using the number of sources estimation.")
@@ -49,7 +50,7 @@ class SubspaceMethod(nn.Module):
 
         return signal_subspace.to(device), noise_subspace.to(device), source_estimation, l_eig
 
-    def estimate_number_of_sources(self, eigenvalues, method:str="threshold", number_of_sources: int = None):
+    def estimate_number_of_sources(self, eigenvalues, number_of_sources: int = None):
         """
 
         Args:
@@ -60,7 +61,9 @@ class SubspaceMethod(nn.Module):
         """
         sorted_eigenvals = torch.sort(torch.real(eigenvalues), descending=True, dim=1).values
         l_eig = None
-        if method == "threshold":
+        if self.model_order_estimation is None:
+            return None, None
+        elif self.model_order_estimation.lower().startswith("threshold"):
             self.normalized_eigenvals = sorted_eigenvals / sorted_eigenvals[:, 0][:, None]
             source_estimation = torch.linalg.norm(
                 nn.functional.relu(
@@ -69,7 +72,7 @@ class SubspaceMethod(nn.Module):
             # return regularization term if training
             if self.training:
                 l_eig = self.eigen_regularization(number_of_sources)
-        elif method in ["mdl", "aic"]:
+        elif self.model_order_estimation.lower() in ["mdl", "aic"]:
             # mdl -> calculate the value of the mdl test for each number of sources
             # and choose the number of sources that minimizes the mdl test
             optimal_test = torch.ones(eigenvalues.shape[0], device=device) * float("inf")
@@ -77,7 +80,7 @@ class SubspaceMethod(nn.Module):
             for m in range(1, eigenvalues.shape[1]):
                 m = torch.tensor(m, device=device)
                 # calculate the test
-                test = self.hypothesis_testing(sorted_eigenvals, m, method=method)
+                test = self.hypothesis_testing(sorted_eigenvals, m)
                 # update the optimal number of sources by masking the current number of sources
                 optimal_m = torch.where(test < optimal_test, m, optimal_m)
                 # update the optimal mdl value
@@ -88,27 +91,27 @@ class SubspaceMethod(nn.Module):
             source_estimation = optimal_m
 
         else:
-            raise ValueError(f"SubspaceMethod.estimate_number_of_sources: method {method} is not recognized.")
+            raise ValueError(f"SubspaceMethod.estimate_number_of_sources: method {self.model_order_estimation.lower()} is not recognized.")
         return source_estimation, l_eig
 
-    def hypothesis_testing(self, eigenvalues, number_of_sources, method="mdl"):
+    def hypothesis_testing(self, eigenvalues, number_of_sources):
         # extract the number of snapshots and the number of antennas
         T = self.system_model.params.T
         N = self.system_model.params.N
         M = number_of_sources
         # calculate the number of degrees of freedom
-        dof = 2 * N * M - M ** 2 + 1
-        if method.lower().startswith("mdl"):
+        # dof = (2 * M) * (N - M)
+        dof = (2 * N * M - M ** 2 + 1) / 2
+        if self.model_order_estimation.lower().startswith("mdl"):
             penalty = dof * np.log(T)
-        elif method.lower().startswith("aic"):
-            penalty = 2 * dof
-        else:
-            raise ValueError(f"SubspaceMethod.hypothesis_testing: method {method} is not recognized.")
-        if method.lower().endswith("snr"):
-            snr = self.snr_estimation(eigenvalues, M)
-            # snr = self.system_model.params.snr
-            penalty = penalty * (1 + 0.1 * torch.exp(-snr))
-            # penalty = penalty*(1 + 2*np.exp(-snr))
+            # penalty = dof * np.log(T)
+        else: # self.model_order_estimation.lower().startswith("aic"):
+            penalty = dof * 2
+        # if method.lower().endswith("snr"):
+        #     snr = self.snr_estimation(eigenvalues, M)
+        #     # snr = self.system_model.params.snr
+        #     penalty = penalty * (1 + 0.1 * torch.exp(-snr))
+        #     # penalty = penalty*(1 + 2*np.exp(-snr))
         # calculate the ll
         ll = self.get_ll(eigenvalues, M)
         mdl = ll + penalty

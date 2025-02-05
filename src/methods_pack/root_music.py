@@ -9,8 +9,8 @@ from src.criterions import RMSPELoss
 
 
 class RootMusic(SubspaceMethod):
-    def __init__(self, system_model: SystemModel):
-        super(RootMusic, self).__init__(system_model)
+    def __init__(self, system_model: SystemModel, model_order_estimation: str = "threshold"):
+        super(RootMusic, self).__init__(system_model, model_order_estimation)
         self.__init_criteria()
         self.all_predictions_angles = None
         self.all_predictions_roots = None

@@ -227,6 +227,11 @@ class ModelGenerator(object):
             raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                              f"train_loss_type has to be a str and the possible values are rmspe or music_spectrum.")
 
+        regularization = model_params.get("regularization")
+        if not isinstance(regularization, str) or not (regularization.lower() in ["threshold", "mdl", "aic"]) or not None:
+            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
+                             f"regularization has to be a str and the possible values are threshold, mdl or aic. or None")
+
 
     def __verify_dcdmuisc_params(self, model_params):
         """
@@ -255,6 +260,10 @@ class ModelGenerator(object):
                 train_loss_type[1].lower() in ["rmspe", "music_spectrum"]):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" train_loss_type has to be rmspe or music_spectrum")
+        regularization = model_params.get("regularization")
+        if not isinstance(regularization, str) or not (regularization.lower() in ["threshold", "mdl", "aic"]) or not None:
+            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
+                             f"regularization has to be a str and the possible values are threshold, mdl or aic. or None")
 
     def __str__(self):
         return f"{self.model.get_model_name()}"

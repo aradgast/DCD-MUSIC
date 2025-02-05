@@ -17,8 +17,10 @@ import numpy as np
 from dataclasses import dataclass
 
 import torch
+from scipy.linalg import polar
 from torch.cuda import device
 from src.utils import *
+import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -389,5 +391,51 @@ class SystemModel(object):
         if torch.isnan(steering_matrix).any():
             raise ValueError("SystemModel.steering_vec_near_field: steering matrix contains NaN values")
         return steering_matrix
+
+    def plot_system(self):
+        """
+        Plot the system model.
+        if far field, plot the array of sensors, and the doa range.
+        if near field, plot the array of sensors, the doa range, the fresnel and fraunhofer distances.
+
+        """
+        if self.params.field_type.lower().startswith("far"):
+            plt.figure(figsize=(8, 8))
+            ax = plt.subplot(111, polar=True)
+            ax.set_theta_zero_location("N")
+            ax.set_theta_direction(-1)
+            ax.set_xlim(-self.params.doa_range, self.params.doa_range)  # Angle range
+            ax.set_title("Array of Sensors")
+            ax.plot(self.array, np.ones(self.array.shape), "o")
+            ax.set_ylim(0, 1.5)
+            ax.set_yticks([])
+
+        elif self.params.field_type.lower().startswith("near"):
+            plt.figure(figsize=(8, 8))
+            ax = plt.subplot(111, polar=True)
+            ax.set_theta_zero_location("N")
+            ax.set_theta_direction(-1)
+            ax.set_xlim(-np.pi / 2, np.pi / 2)  # Angle range
+
+            # Define angles for plotting Fraunhofer and Fresnel regions
+            angle_values = np.linspace(-self.params.doa_range, self.params.doa_range, 180)
+            angle_values_rad = np.radians(angle_values)  # Convert to radians
+
+            sensor_positions = self.array * self.params.wavelength / 2
+            angles = np.zeros_like(sensor_positions)
+            angles[self.array > 0] = np.radians(np.full_like(angles[self.array > 0], 90))
+            angles[self.array < 0] = np.radians(np.full_like(angles[self.array < 0], -90))
+            ax.plot(angles, np.abs(sensor_positions), "o", markersize=4, label="ULA Elements")
+            ax.plot(angle_values_rad, np.ones_like(angle_values_rad) *  self.fraunhofer, label="Fraunhofer")
+            ax.plot(angle_values_rad, np.ones_like(angle_values_rad) *  self.fresnel, label="Fresnel")
+
+            ax.legend()
+            ax.set_yticks([self.fresnel, self.fraunhofer])  # Hide radial ticks
+            ax.set_title("Array of Sensors")
+        else:
+            raise Exception(f"SystemModel.plot_system: field type {self.params.field_type} is not defined")
+        plt.show()
+
+
 
 

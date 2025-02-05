@@ -69,14 +69,14 @@ class MUSIC(SubspaceMethod):
     For Near field - "angle", "range" and "angle, range" are the possible options.
     """
 
-    def __init__(self, system_model: SystemModel, estimation_parameter: str):
+    def __init__(self, system_model: SystemModel, estimation_parameter: str, model_order_estimation: str = "threshold"):
         """
 
         Args:
             system_model:
             estimation_parameter:
         """
-        super().__init__(system_model)
+        super().__init__(system_model, model_order_estimation=model_order_estimation)
         self.estimation_params = estimation_parameter
         self.angles_dict = None
         self.ranges_dict = None
@@ -89,19 +89,10 @@ class MUSIC(SubspaceMethod):
         self.criterion = None
         self.separated_criterion = None
 
-
         self.__init_grid_params()
         self.__init_cells()
         self.__init_criteria()
-
-        # if this is the music 2D case, the search grid is constant and can be calculated once.
-        if self.system_model.params.field_type.startswith("near"):
-            if self.angles_dict is not None and self.ranges_dict is not None:
-                self.set_search_grid()
-            elif self.angles_dict is not None:  # Near field case with Far field inference
-                self.__set_search_grid_far_field()
-        else:
-            self.set_search_grid()
+        self.__init_search_grid()
 
     def forward(self, cov: torch.Tensor, number_of_sources: int, known_angles=None, known_distances=None):
         """
@@ -473,6 +464,16 @@ class MUSIC(SubspaceMethod):
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
+
+    def __init_search_grid(self):
+        # if this is the music 2D case, the search grid is constant and can be calculated once.
+        if self.system_model.params.field_type.startswith("near"):
+            if self.angles_dict is not None and self.ranges_dict is not None:
+                self.set_search_grid()
+            elif self.angles_dict is not None:  # Near field case with Far field inference
+                self.__set_search_grid_far_field()
+        else:
+            self.set_search_grid()
 
     def __init_cells(self, coeff: float = 0.2):
 

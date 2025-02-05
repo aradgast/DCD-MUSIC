@@ -18,9 +18,9 @@ class DCDMUSIC(SubspaceNet):
     """
 
     def __init__(self, tau: int, system_model: SystemModel,diff_method: tuple = ("esprit", "music_1d"),
-                 train_loss_type: str=("rmspe", "rmspe"),
+                 train_loss_type: str=("rmspe", "rmspe"), regularization: str = None,
                  state_path: str = None, angle_extractor: SubspaceNet = None, train_angle_extractor: bool = False):
-        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near")
+        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near", regularization=regularization)
         self.angle_extractor = None
         self.angle_extractor_diff_method = diff_method[0]
         self.angle_extractor_train_loss_type = train_loss_type[0]
@@ -106,7 +106,10 @@ class DCDMUSIC(SubspaceNet):
 
     def print_model_params(self):
         params = self.get_model_params()
-        return f"tau={params.get('tau')}_diff_methods={params.get('diff_methods')[0]}_{params.get('diff_methods')[1]}"
+        name = f"tau={params.get('tau')}_diff_methods={params.get('diff_methods')[0]}_{params.get('diff_methods')[1]}"
+        if self.regularization is not None:
+            name += f"_reg={self.regularization}"
+        return name
 
     def get_model_params(self):
         if str(self.angle_extractor.diff_method).startswith("music"):

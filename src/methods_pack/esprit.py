@@ -7,8 +7,8 @@ from src.system_model import SystemModel
 from src.utils import device
 
 class ESPRIT(SubspaceMethod):
-    def __init__(self, system_model: SystemModel):
-        super().__init__(system_model)
+    def __init__(self, system_model: SystemModel, model_order_estimation: str = "threshold"):
+        super().__init__(system_model, model_order_estimation)
         self.__init_criteria()
 
     def forward(self, cov: torch.Tensor, sources_num: torch.tensor = None):

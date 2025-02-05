@@ -5,7 +5,7 @@ SubspaceNet: model-based deep learning algorithm as described in:
 import torch
 import torch.nn as nn
 
-from src.criterions import RMSPELoss, CartesianLoss, MusicSpectrumLoss
+from src.criterions import RMSPELoss, CartesianLoss, MusicSpectrumLoss, BeamFromingLoss
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
 from src.utils import *
@@ -13,6 +13,7 @@ from src.utils import *
 from src.methods_pack.music import MUSIC, SubspaceMethod
 from src.methods_pack.esprit import ESPRIT
 from src.methods_pack.root_music import RootMusic, root_music
+from src.methods_pack.beamformer import Beamformer
 import wandb
 
 class SubspaceNet(ParentModel):
@@ -44,7 +45,7 @@ class SubspaceNet(ParentModel):
     """
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
-                 system_model: SystemModel = None, field_type: str = "far"):
+                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -60,6 +61,7 @@ class SubspaceNet(ParentModel):
         self.train_loss_type = train_loss_type
         self.field_type = field_type.lower()
         self.p = 0.2
+        self.regularization = regularization
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
@@ -75,13 +77,13 @@ class SubspaceNet(ParentModel):
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
         self.set_eigenregularization_schedular()
-        self.reshaper_target_size = 150
-        self.reshaper = self.__init_reshaper()
+        self.reshaper_target_size = 1500
+        # self.reshaper = self.__init_reshaper()
 
     def _get_name(self):
         if self.field_type == "far":
             return super(SubspaceNet, self)._get_name()
-        elif self.field_type == "near" and self.train_loss_type == "music_spectrum":
+        elif self.field_type == "near" and self.train_loss_type.lower() in ["music_spectrum"]:
             return "NF" + super(SubspaceNet, self)._get_name()
 
 
@@ -161,10 +163,10 @@ class SubspaceNet(ParentModel):
         """
         Rz = self.get_surrogate_covariance(x)
 
-        if self.field_type == "far":
-            if self.train_loss_type == "music_spectrum" and self.training:
-                    _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
-                    return noise_subspace, source_estimation, eigen_regularization
+        if self.field_type.lower().startswith("far"):
+            if isinstance(self.train_loss, MusicSpectrumLoss) and self.training:
+                _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
+                return noise_subspace, source_estimation, eigen_regularization
             else:
                 method_output = self.diff_method(Rz, sources_num)
                 if isinstance(self.diff_method, RootMusic):
@@ -182,14 +184,23 @@ class SubspaceNet(ParentModel):
                     raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
         elif self.field_type == "near":
-            if self.training and self.train_loss_type == "music_spectrum":
+            if self.training and isinstance(self.train_loss, MusicSpectrumLoss):
                 _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
                 return noise_subspace, source_estimation, eigen_regularization
+
             if known_angles is None:
-                predictions, sources_estimation, eigen_regularization = self.diff_method(
-                    Rz, number_of_sources=sources_num)
-                doa_prediction, distance_prediction = predictions
-                return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
+                if isinstance(self.diff_method, MUSIC):
+                    predictions, sources_estimation, eigen_regularization = self.diff_method(
+                        Rz, number_of_sources=sources_num)
+                    doa_prediction, distance_prediction = predictions
+                    return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
+                elif isinstance(self.diff_method, Beamformer):
+                    predictions = self.diff_method(
+                        Rz, sources_num=sources_num)
+                    doa_prediction, distance_prediction = predictions
+                    return doa_prediction, distance_prediction, None, None
+                else:
+                    raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
             else:  # the angles are known
                 distance_prediction = self.diff_method(
                     cov=Rz, number_of_sources=sources_num, known_angles=known_angles)
@@ -257,6 +268,8 @@ class SubspaceNet(ParentModel):
         diff_method = self.diff_method
         field_type = self.field_type.lower()
         train_loss_type = self.train_loss_type
+        if self.regularization is not None:
+            train_loss_type += f"_{self.regularization}"
         return f"tau={tau}_diff_method={diff_method}_field_type={field_type}_train_loss_type={train_loss_type}"
 
     def get_model_params(self):
@@ -361,7 +374,7 @@ class SubspaceNet(ParentModel):
         x = x.requires_grad_(True).to(device)
         angles = angles.requires_grad_(True).to(device)
         ranges = ranges.requires_grad_(True).to(device)
-        if self.train_loss_type == "music_spectrum":
+        if isinstance(self.train_loss, MusicSpectrumLoss):
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num, angles)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
         else:
@@ -422,18 +435,20 @@ class SubspaceNet(ParentModel):
             if diff_method.startswith("root_music"):
                 self.diff_method = root_music
             elif diff_method.startswith("esprit"):
-                self.diff_method = ESPRIT(system_model=system_model)
+                self.diff_method = ESPRIT(system_model=system_model, model_order_estimation=self.regularization)
             elif diff_method.endswith("music_1d"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle")
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle", model_order_estimation=self.regularization)
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
                                 f"{self.field_type} scenario")
         elif self.field_type == "near":
             if diff_method.endswith("music_2D"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation=self.regularization)
             elif diff_method.endswith("music_1d"):
                 self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
+            elif diff_method.endswith("beamformer"):
+                self.diff_method = Beamformer(system_model=system_model)
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "

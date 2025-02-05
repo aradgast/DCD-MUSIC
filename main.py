@@ -43,7 +43,7 @@ simulation_commands = {
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
     "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
@@ -53,7 +53,7 @@ simulation_commands = {
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": (2, 8),  # number of sources
+    "M": 2,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
@@ -73,10 +73,11 @@ model_config = {
     "model_params": {}
 }
 if model_config.get("model_type") == "SubspaceNet":
-    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D
-    model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe
+    model_config["model_params"]["diff_method"] = "music_2D"  # esprit, music_1D, music_2D, beamformer
+    model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe, beamformerloss
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Near"  # Far, Near
+    model_config["model_params"]["regularization"] = "aic"  # aic, mdl, threshold, None
 
 elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["tau"] = 8
@@ -91,8 +92,8 @@ training_params = {
     "samples_size": 4096,
     "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 128,
-    "epochs": 100,
+    "batch_size": 256,
+    "epochs": 2,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -170,7 +171,7 @@ def parse_arguments():
 
     parser.add_argument('-t', '--train', action="store_true", help='Train model', default=True)
     parser.add_argument('-no_t', "--no_train", action="store_false", help='Do not train model', dest='train')
-    parser.add_argument('-e', '--eval', action="store_true", help='Evaluate model', default=False)
+    parser.add_argument('-e', '--eval', action="store_true", help='Evaluate model', default=simulation_commands["EVALUATE_MODE"])
 
     return parser.parse_args()
 

@@ -342,3 +342,6 @@ class Beamformer(Module):
         else:
             self.criterion = CartesianLoss()
             self.separated_criterion = RMSPELoss(1.0)
+
+    def __str__(self):
+        return "Beamformer"

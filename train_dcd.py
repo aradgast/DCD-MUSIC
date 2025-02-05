@@ -32,6 +32,7 @@ step_size = 50
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
+regularization = None
 wandb_flag = False
 
 
@@ -84,6 +85,7 @@ def train_dcd_music(*args, **kwargs):
         .set_parameter("eta", SYSTEM_MODEL_PARAMS["eta"])
         .set_parameter("bias", SYSTEM_MODEL_PARAMS["bias"])
         .set_parameter("sv_noise_var", SYSTEM_MODEL_PARAMS["sv_noise_var"])
+        .set_parameter("wavelength", SYSTEM_MODEL_PARAMS["wavelength"])
     )
     system_model = SystemModel(system_model_params)
 
@@ -132,7 +134,7 @@ def train_dcd_music(*args, **kwargs):
         .set_model_type("SubspaceNet")
         .set_system_model(system_model)
         .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
-                           "tau": MODEL_PARAMS.get("tau"), "field_type": "far"})
+                           "tau": MODEL_PARAMS.get("tau"), "field_type": "far", "regularization": regularization})
         .set_model()
     )
 
@@ -159,7 +161,8 @@ def train_dcd_music(*args, **kwargs):
     model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
                                    "diff_method": diff_method,
                                    "train_loss_type": train_loss_type,
-                                   "angle_extractor": model})
+                                   "angle_extractor": model,
+                                   "regularization": regularization})
     model_config.set_model()
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})
