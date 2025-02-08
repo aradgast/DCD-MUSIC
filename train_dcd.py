@@ -134,7 +134,8 @@ def train_dcd_music(*args, **kwargs):
         .set_model_type("SubspaceNet")
         .set_system_model(system_model)
         .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
-                           "tau": MODEL_PARAMS.get("tau"), "field_type": "far", "regularization": regularization})
+                           "tau": MODEL_PARAMS.get("tau"), "field_type": "far",
+                           "regularization": MODEL_PARAMS.get("regularization")})
         .set_model()
     )
 
@@ -162,7 +163,7 @@ def train_dcd_music(*args, **kwargs):
                                    "diff_method": diff_method,
                                    "train_loss_type": train_loss_type,
                                    "angle_extractor": model,
-                                   "regularization": regularization})
+                                   "regularization": MODEL_PARAMS.get("regularization")})
     model_config.set_model()
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})
@@ -200,6 +201,7 @@ def parse_arguments():
     parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength', default=wavelength)
 
     parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default=tau)
+    parser.add_argument("-reg", "--regularization", type=str, help="Regularization method", default=regularization)
 
     parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=sample_size)
     parser.add_argument('-ratio', type=float, help='Train test ratio', default=train_test_ratio)
@@ -236,7 +238,8 @@ if __name__ == "__main__":
         "wavelength": args.wavelength
     }
     model_params = {
-        "tau": args.tau
+        "tau": args.tau,
+        "regularization": args.regularization
     }
     training_params = {
         "samples_size": args.sample_size,

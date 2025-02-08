@@ -32,7 +32,7 @@ os.system("cls||clear")
 plt.close("all")
 
 scenario_dict = {
-    # "SNR": [-10, -5,0,5, 10],
+    # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 50, 70, 100],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
     # "M": [2, 3, 4, 5, 6, 7],
@@ -41,28 +41,28 @@ scenario_dict = {
 simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
-    "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
+    "LOAD_MODEL": True,
+    "TRAIN_MODEL": False,
     "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": 2,  # number of sources
+    "M": (2,8),  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 0,  # if defined, values in scenario_dict will be ignored
+    "snr": 4,  # if defined, values in scenario_dict will be ignored
     "field_type": "Near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
-    "doa_range": 55, # The range of the DOA values [-doa_range, doa_range]
+    "doa_range": 60, # The range of the DOA values [-doa_range, doa_range]
     "doa_resolution": 1, # The resolution of the DOA values in degrees
     "max_range_ratio_to_limit": 0.5, # The ratio of the maximum range in respect to the Fraunhofer distance
     "range_resolution": 1, # The resolution of the range values in meters
@@ -77,7 +77,7 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe, beamformerloss
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Near"  # Far, Near
-    model_config["model_params"]["regularization"] = "aic"  # aic, mdl, threshold, None
+    model_config["model_params"]["regularization"] = None  # aic, mdl, threshold, None
 
 elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["tau"] = 8
@@ -89,11 +89,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 4096,
-    "train_test_ratio": .1,
+    "samples_size": 1000,
+    "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 2,
+    "epochs": 20,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -110,8 +110,9 @@ training_params = {
 evaluation_params = {
     "models": {
         # "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
-        #              "diff_method": ("esprit", "music_1d"),
-        #              "train_loss_type": ("rmspe", "rmspe")},
+        #                                 "diff_method": ("esprit", "music_1d"),
+        #                                 "train_loss_type": ("rmspe", "rmspe"),
+        #                                 "regularization": None},
         # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("music_spectrum", "rmspe")},
@@ -121,7 +122,8 @@ evaluation_params = {
         # "SubspaceNet": {"tau": 8,
         #                 "diff_method": "music_2D",
         #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "near"},
+        #                 "field_type": "near",
+        #                 "regularization": "threshold"},
         # "TransMUSIC": {},
     },
     "augmented_methods": [
@@ -133,7 +135,7 @@ evaluation_params = {
         # "ESPRIT",
         # "1D-MUSIC",
         # "Root-MUSIC",
-        # "2D-MUSIC",
+        "2D-MUSIC",
         # "Beamformer",
         # "TOPS",
         # "CS_Estimator",
@@ -155,6 +157,7 @@ def parse_arguments():
     parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength of the signal in meters', default=None)
 
     parser.add_argument('-mt', '--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
+    parser.add_argument('-reg', '--regularization', type=str, help='Regularization method for SubspaceNet of DCD', default=None)
 
     parser.add_argument('-ss', '--samples_size', type=int, help='Samples size', default=None)
     parser.add_argument('-ttr', '--train_test_ratio', type=float, help='Train test ratio', default=None)
@@ -169,7 +172,7 @@ def parse_arguments():
     parser.add_argument('-g', '--gamma', type=float, help='Gamma', default=None)
     parser.add_argument('-w', '--wandb', action="store_true", help='Use wandb', default=False)
 
-    parser.add_argument('-t', '--train', action="store_true", help='Train model', default=True)
+    parser.add_argument('-t', '--train', action="store_true", help='Train model', default=simulation_commands["TRAIN_MODEL"])
     parser.add_argument('-no_t', "--no_train", action="store_false", help='Do not train model', dest='train')
     parser.add_argument('-e', '--eval', action="store_true", help='Evaluate model', default=simulation_commands["EVALUATE_MODE"])
 
@@ -205,6 +208,8 @@ if __name__ == "__main__":
     if args.model_type is not None:
         warnings.warn("Please make sure to configure the model parameters in the script.")
         model_config["model_type"] = args.model_type
+    if model_config["model_type"] == "SubspaceNet":
+        model_config["model_params"]["regularization"] = args.regularization
 
     if args.samples_size is not None:
         training_params["samples_size"] = args.samples_size
