@@ -11,13 +11,7 @@ Edited: 29/05/24
 import warnings
 # Internal Imports
 from src.system_model import SystemModel, SystemModelParams
-from src.models_pack.trans_music import TransMUSIC
-from src.models_pack.subspacenet import SubspaceNet
-from src.models_pack.dcd_music import DCDMUSIC
-from src.models_pack.deep_augmented_music import DeepAugmentedMUSIC
-from src.models_pack.deep_cnn import DeepCNN
-from src.models_pack.deep_root_music import DeepRootMUSIC
-from train_dcd import train_loss_type
+from src.models_pack import TransMUSIC, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC, DeepCNN, DeepRootMUSIC
 
 
 class ModelGenerator(object):
@@ -228,7 +222,7 @@ class ModelGenerator(object):
                              f"train_loss_type has to be a str and the possible values are rmspe or music_spectrum.")
 
         regularization = model_params.get("regularization")
-        if not isinstance(regularization, str) or not (regularization.lower() in ["threshold", "mdl", "aic"]) or not None:
+        if (not isinstance(regularization, str)) or (not (regularization.lower() in ["threshold", "mdl", "aic"])) or (not None):
             raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                              f"regularization has to be a str and the possible values are threshold, mdl or aic. or None")
 

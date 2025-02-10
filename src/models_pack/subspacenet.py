@@ -5,7 +5,7 @@ SubspaceNet: model-based deep learning algorithm as described in:
 import torch
 import torch.nn as nn
 
-from src.criterions import RMSPELoss, CartesianLoss, MusicSpectrumLoss, BeamFromingLoss
+from src.metrics import RMSPELoss, CartesianLoss, MusicSpectrumLoss, BeamFromingLoss
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
 from src.utils import *

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
 from src.utils import *
-from src.criterions import RMSPELoss
+from src.metrics import RMSPELoss
 
 
 class RootMusic(SubspaceMethod):

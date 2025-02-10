@@ -68,7 +68,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower().endswith("1d-music"):
         method = MUSIC(system_model=system_model, estimation_parameter="angle")
     elif method_name.lower().endswith("2d-music"):
-        method = MUSIC(system_model=system_model, estimation_parameter="angle, range")
+        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation="threshold")
     elif method_name.lower() == "root-music":
         method = RootMusic(system_model)
     elif method_name.lower().endswith("esprit"):

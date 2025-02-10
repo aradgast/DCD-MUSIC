@@ -19,7 +19,7 @@ from src.system_model import SystemModel
 from src.utils import *
 from src.methods_pack.music import MUSIC
 from src.models_pack.parent_model import ParentModel
-from src.criterions import RMSPELoss, CartesianLoss
+from src.metrics import RMSPELoss, CartesianLoss
 
 
 class ShiftedReLU(nn.ReLU):

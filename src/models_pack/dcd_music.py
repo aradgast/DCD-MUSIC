@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sympy.physics.vector.printing import params
 
-from src.criterions import CartesianLoss, RMSPELoss, MusicSpectrumLoss
+from src.metrics import CartesianLoss, RMSPELoss, MusicSpectrumLoss
 from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
 from src.utils import *
@@ -64,7 +64,8 @@ class DCDMUSIC(SubspaceNet):
                                                diff_method=self.angle_extractor_diff_method,
                                                train_loss_type=self.angle_extractor_train_loss_type,
                                                system_model=self.system_model,
-                                               field_type="far")
+                                               field_type="far",
+                                               regularization=self.regularization)
             if path is None:
                 path = self.angle_extractor.get_model_file_name()
             self._load_state_for_angle_extractor(path)

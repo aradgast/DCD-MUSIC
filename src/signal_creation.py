@@ -14,9 +14,6 @@ This class is used for defining the samples model.
 
 # Imports
 from random import sample
-
-import torch
-
 from src.system_model import SystemModel, SystemModelParams
 from src.utils import *
 
@@ -210,6 +207,10 @@ class Samples(SystemModel):
                 samples = torch.einsum("nmk, mk -> nk", A, signal) + noise
             else:
                 samples = (A @ signal) + noise
+        elif self.params.field_type.startswith("full"):
+            A = self.steering_vec_full_model(angles=self.doa,
+                                             ranges=self.distances)
+            samples = (A @ signal) + noise
         else:
             raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")
         if self.params.signal_type.startswith("broadband"):

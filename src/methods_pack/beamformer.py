@@ -1,17 +1,14 @@
 """
 This file contain an implementation for a Beamformer to use for Far field(DOA) and Near field(DOA and Range) scenarios.
 """
-import numpy as np
 import torch
-from sympy.functions.special.beta_functions import betainc_mpmath_fix
 from torch.nn import Module
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 
-from src.criterions import CartesianLoss
 from src.system_model import SystemModel
 from src.utils import *
-from src.criterions import CartesianLoss, RMSPELoss
+from src.metrics import CartesianLoss, RMSPELoss
 
 
 class Beamformer(Module):
@@ -331,9 +328,9 @@ class Beamformer(Module):
             None.
         """
         if self.ranges_dict is None:
-            self.steering_dict = self.system_model.steering_vec(self.angles_dict, nominal=True)
+            self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict, nominal=True)
         else:
-            self.steering_dict = self.system_model.steering_vec(self.angles_dict, self.ranges_dict,
+            self.steering_dict = self.system_model.steering_vec_near_field(self.angles_dict, self.ranges_dict,
                                                                 nominal=True, generate_search_grid=True)
 
     def __init_criteria(self):

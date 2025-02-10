@@ -33,8 +33,8 @@ plt.close("all")
 
 scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 50, 70, 100],
-    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    # "T": [10, 20, 30, 50, 70, 100],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04, 0.05],
     # "M": [2, 3, 4, 5, 6, 7],
 }
 
@@ -47,18 +47,18 @@ simulation_commands = {
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": (2,8),  # number of sources
+    "M": 2,  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 4,  # if defined, values in scenario_dict will be ignored
-    "field_type": "Near",  # Near, Far
+    "snr": 10,  # if defined, values in scenario_dict will be ignored
+    "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
@@ -77,7 +77,7 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe, beamformerloss
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Near"  # Far, Near
-    model_config["model_params"]["regularization"] = None  # aic, mdl, threshold, None
+    model_config["model_params"]["regularization"] = "aic"  # aic, mdl, threshold, None
 
 elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["tau"] = 8
@@ -89,14 +89,14 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 1000,
+    "samples_size": 100,
     "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 256,
-    "epochs": 20,
+    "epochs": 50,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
-    "learning_rate": 0.001,
+    "learning_rate": 0.0001,
     "weight_decay": 1e-9,
     "step_size": 20,
     "gamma": 0.5,
@@ -109,21 +109,21 @@ training_params = {
 }
 evaluation_params = {
     "models": {
-        # "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
-        #                                 "diff_method": ("esprit", "music_1d"),
-        #                                 "train_loss_type": ("rmspe", "rmspe"),
-        #                                 "regularization": None},
+        "DCD-MUSIC(RMSPE, diffMUSIC)": {"tau": 8,
+                                        "diff_method": ("esprit", "music_1d"),
+                                        "train_loss_type": ("rmspe", "rmspe"),
+                                        "regularization": None},
         # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("music_spectrum", "rmspe")},
         # "DCD-MUSIC(RMSPE, MusicSpec)": {"tau": 8,
         #                    "diff_method": ("esprit", "music_1D"),
         #                    "train_loss_type": ("rmspe", "music_spectrum")},
-        # "SubspaceNet": {"tau": 8,
-        #                 "diff_method": "music_2D",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "near",
-        #                 "regularization": "threshold"},
+        "SubspaceNet": {"tau": 8,
+                        "diff_method": "music_2D",
+                        "train_loss_type": "music_spectrum",
+                        "field_type": "near",
+                        "regularization": None},
         # "TransMUSIC": {},
     },
     "augmented_methods": [
@@ -157,7 +157,7 @@ def parse_arguments():
     parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength of the signal in meters', default=None)
 
     parser.add_argument('-mt', '--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
-    parser.add_argument('-reg', '--regularization', type=str, help='Regularization method for SubspaceNet of DCD', default=None)
+    parser.add_argument('-reg', '--regularization', type=str, help='Regularization method for SubspaceNet of DCD', default=model_config["model_params"]["regularization"])
 
     parser.add_argument('-ss', '--samples_size', type=int, help='Samples size', default=None)
     parser.add_argument('-ttr', '--train_test_ratio', type=float, help='Train test ratio', default=None)

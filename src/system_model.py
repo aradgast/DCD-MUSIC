@@ -17,7 +17,6 @@ import numpy as np
 from dataclasses import dataclass
 
 import torch
-from scipy.linalg import polar
 from torch.cuda import device
 from src.utils import *
 import matplotlib.pyplot as plt
@@ -139,7 +138,7 @@ class SystemModel(object):
         self.max_freq = {"narrowband": None, "broadband": max_frq}
         # Frequency range of interest
         self.f_rng = {
-            "narrowband": 1,
+            "narrowband": self.params.carrier_frequency,
             "broadband": np.linspace(
                 start=self.min_freq["broadband"],
                 stop=self.max_freq["broadband"],
@@ -161,7 +160,7 @@ class SystemModel(object):
         #     self.params.T = len(self.time_axis["broadband"])
         # distance between array elements
         self.dist_array_elems = {
-            "narrowband": 1 / 2,
+            "narrowband": self.params.wavelength / 2,
             "broadband": 1 / 2,
             # "broadband": 1
             #              / (2 * (self.max_freq["broadband"] - self.min_freq["broadband"])),
@@ -175,10 +174,11 @@ class SystemModel(object):
             N = self.params.N
         if N % 2 == 0:
             warnings.warn("SystemModel.create_array: Number of sensors is even, it's better to use odd number of sensors")
-            self.array = np.linspace(0, N, N, endpoint=False)
-        else:
-            semi_n = N // 2
-            self.array = np.linspace(-semi_n, semi_n, N, endpoint=True)
+        self.array = np.linspace(0, N, N, endpoint=False)
+        # else:
+        #     semi_n = N // 2
+        #     self.array = np.linspace(-semi_n, semi_n, N, endpoint=True)
+            # self.array = np.linspace(0, N, N, endpoint=False)
 
 
     def calc_fresnel_fraunhofer_distance(self) -> tuple:
@@ -283,7 +283,7 @@ class SystemModel(object):
         else:
             mis_geometry_noise = 0.0
 
-        steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay) + mis_geometry_noise
+        steering_matrix = torch.exp(-2 * 1j * torch.pi * self.params.wavelength * time_delay) + mis_geometry_noise
 
         return steering_matrix
 
@@ -337,8 +337,6 @@ class SystemModel(object):
         if isinstance(dist_array_elems, float):
             dist_array_elems = dist_array_elems * torch.ones(N, 1, device=local_device, dtype=torch.float64)
 
-
-
         if self.params.signal_type.startswith("narrowband"):
             first_order = torch.einsum("nm, na -> na",
                                       array * dist_array_elems,
@@ -387,9 +385,46 @@ class SystemModel(object):
         else:
             mis_geometry_noise = 0.0
 
-        steering_matrix = torch.exp(2 * -1j * torch.pi * time_delay) + mis_geometry_noise
+        steering_matrix = torch.exp(-2 * 1j * torch.pi * self.params.wavelength * time_delay) + mis_geometry_noise
         if torch.isnan(steering_matrix).any():
             raise ValueError("SystemModel.steering_vec_near_field: steering matrix contains NaN values")
+        return steering_matrix
+
+    def steering_vec_full_model(self, angles: np.ndarray, ranges: np.ndarray) -> torch.Tensor:
+        """
+
+        Args:
+            angles: the angles of the sources from origin.
+            ranges: the ranges of the sources from origin.
+            f_c: the carrier frequency, in case of narrowband, the value is always 1.
+            nominal: a flag that suggest if there is any kind of calibration errors.
+            generate_search_grid (bool): weather to generate a grid to search on,
+             create all combination of angles and ranges, or just create the steering matrix of sources.
+
+        Returns:
+            torch.Tensor: the steering matrix.
+        """
+        if isinstance(angles, np.ndarray):
+            angles = torch.from_numpy(angles[:, None])
+            local_device = "cpu"  # when creating the data, it's done element-wise, better not to use GPU
+            theta = angles.to(torch.float64).to(local_device)
+
+        if isinstance(ranges, np.ndarray):
+            ranges = torch.from_numpy(ranges[:, None])
+            distances = ranges.to(torch.float64).to(local_device)
+
+        array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(local_device)
+        N = array.shape[0]
+
+        dist_array_elems = self.dist_array_elems["narrowband"]
+        if isinstance(dist_array_elems, float):
+            dist_array_elems = dist_array_elems * torch.ones(N, 1, device=local_device, dtype=torch.float64)
+
+        sensor_dist_ratio = torch.div(dist_array_elems * torch.abs(array), distances.squeeze())
+        sqrt_delay = torch.sqrt(1 + torch.pow(sensor_dist_ratio, 2) - 2 * sensor_dist_ratio * torch.sin(theta).transpose(0, 1))
+        time_delay = distances.transpose(0,1) * (1 - sqrt_delay)
+
+        steering_matrix = torch.exp(-2 * 1j * self.params.wavelength * torch.pi * time_delay)
         return steering_matrix
 
     def plot_system(self):

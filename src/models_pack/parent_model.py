@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch
 from src.system_model import SystemModel
 
-EIGEN_REGULARIZATION_WEIGHT = 1e-2
+EIGEN_REGULARIZATION_WEIGHT = 1e-3
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(ParentModel, self).__init__()
@@ -32,13 +32,17 @@ class ParentModel(nn.Module):
             snr = "rand"
         else:
             snr = self.system_model.params.snr
+
+        field_type = self.system_model.params.field_type
+        if field_type == "full":
+            field_type = "near"
         return f"{self.get_model_name()}_" + \
             f"N={self.N}_" + \
             f"M={M}_" + \
             f"T={self.system_model.params.T}_" + \
             f"{self.system_model.params.signal_type}_" + \
             f"SNR={snr}_" + \
-            f"{self.system_model.params.field_type}_field_" + \
+            f"{field_type}_field_" + \
             f"{self.system_model.params.signal_nature}_" + \
             f"eta={self.system_model.params.eta}_" + \
             f"sv_var={self.system_model.params.sv_noise_var}"

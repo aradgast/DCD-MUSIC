@@ -85,7 +85,7 @@ def create_dataset(
             M = system_model_params.M
         # Samples model creation
         samples_model.set_doa(true_doa, M)
-        if system_model_params.field_type.lower().endswith("near"):
+        if system_model_params.field_type.lower() in ["near", "full"]:
             samples_model.set_range(true_range, M)
         # Observations matrix creation
         X = samples_model.samples_creation(
@@ -93,7 +93,7 @@ def create_dataset(
             )[0]
         # Ground-truth creation
         Y = torch.tensor(samples_model.doa, dtype=torch.float32)
-        if system_model_params.field_type.endswith("near"):
+        if system_model_params.field_type.lower() in ["near", "full"]:
             Y1 = torch.tensor(samples_model.distances, dtype=torch.float32)
             Y = torch.cat((Y, Y1), dim=0)
         time_series.append(X)

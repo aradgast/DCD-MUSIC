@@ -9,13 +9,10 @@ import numpy as np
 
 from src.system_model import SystemModel
 from src.utils import device
-from src.criterions import CartesianLoss, RMSPELoss
+from src.metrics import CartesianLoss, RMSPELoss
 
 from sklearn.linear_model import Lasso
-# from sklearn.decomposition import TruncatedSVD
 from scipy.signal import find_peaks
-from scipy.ndimage.filters import maximum_filter
-from scipy.ndimage.morphology import generate_binary_structure, binary_erosion
 import matplotlib.pyplot as plt
 
 

@@ -8,6 +8,7 @@ import sys
 from src.training import *
 from src.data_handler import *
 import argparse
+from src.system_model import SystemModel, SystemModelParams
 
 # default values for the argparse
 number_sensors = 15
@@ -117,17 +118,16 @@ def train_dcd_music(*args, **kwargs):
     if create_data and not load_data:
         # Define which datasets to generate
         print("Creating Data...")
-        if train_model:
-            # Generate training dataset
-            train_dataset, _ = create_dataset(
-                system_model_params=system_model_params,
-                samples_size=samples_size,
-                save_datasets=True,
-                datasets_path=datasets_path,
-                true_doa=TRAINING_PARAMS["true_doa_train"],
-                true_range=TRAINING_PARAMS["true_range_train"],
-                phase="train",
-            )
+        # Generate training dataset
+        train_dataset, _ = create_dataset(
+            system_model_params=system_model_params,
+            samples_size=samples_size,
+            save_datasets=True,
+            datasets_path=datasets_path,
+            true_doa=TRAINING_PARAMS["true_doa_train"],
+            true_range=TRAINING_PARAMS["true_range_train"],
+            phase="train",
+        )
     # Generate model configuration
     model_config = (
         ModelGenerator()

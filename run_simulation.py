@@ -19,6 +19,7 @@ from src.evaluation import evaluate
 from src.plotting import initialize_figures
 from pathlib import Path
 from src.models import ModelGenerator
+from src.system_model import SystemModel, SystemModelParams
 
 
 def __run_simulation(**kwargs):

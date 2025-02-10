@@ -5,12 +5,11 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import scipy as sc
-from numpy import dtype
 
 from src.system_model import SystemModel
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.utils import *
-from src.criterions import RMSPELoss, CartesianLoss
+from src.metrics import RMSPELoss, CartesianLoss
 
 
 from scipy.ndimage import maximum_filter
@@ -107,7 +106,7 @@ class MUSIC(SubspaceMethod):
             tuple: the predicted parameters, the source estimation and the eigen regularization value.
         """
         # single param estimation: the search grid should be updated for each batch, else, it's the same search grid.
-        if self.system_model.params.field_type.startswith("near") and self.estimation_params in ["range"]:
+        if self.system_model.params.field_type in ["near", "full"] and self.estimation_params in ["range"]:
             if known_angles.shape[-1] == 1:
                 self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
             else:
@@ -243,7 +242,7 @@ class MUSIC(SubspaceMethod):
     def set_search_grid(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         if self.system_model.params.field_type.startswith("far"):
             self.__set_search_grid_far_field()
-        elif self.system_model.params.field_type.startswith("near"):
+        elif self.system_model.params.field_type in ["near", "full"]:
             self.__set_search_grid_near_field(known_angles=known_angles, known_distances=known_distances)
         else:
             raise ValueError(f"MUSIC.set_search_grid: Unrecognized field type: {self.system_model.params.field_type}")
@@ -445,7 +444,7 @@ class MUSIC(SubspaceMethod):
             self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
                                             dtype=torch.float64).to(torch.float64).requires_grad_(False)
             self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
-        elif self.system_model.params.field_type.startswith("near"):
+        elif self.system_model.params.field_type in ["near", "full"]:
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
@@ -458,8 +457,9 @@ class MUSIC(SubspaceMethod):
             if self.estimation_params.endswith("range"):
                 fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
                 distance_resolution = self.system_model.params.range_resolution / 2
+                max_distance = min(self.system_model.fraunhofer, fraunhofer * fraunhofer_ratio + distance_resolution)
                 self.ranges_dict = torch.arange(np.ceil(fresnel),
-                                                fraunhofer * fraunhofer_ratio + distance_resolution,
+                                                max_distance,
                                                 distance_resolution, dtype=torch.float64).requires_grad_(False)
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
@@ -467,7 +467,7 @@ class MUSIC(SubspaceMethod):
 
     def __init_search_grid(self):
         # if this is the music 2D case, the search grid is constant and can be calculated once.
-        if self.system_model.params.field_type.startswith("near"):
+        if self.system_model.params.field_type in ["near", "full"]:
             if self.angles_dict is not None and self.ranges_dict is not None:
                 self.set_search_grid()
             elif self.angles_dict is not None:  # Near field case with Far field inference
@@ -618,7 +618,7 @@ class MUSIC(SubspaceMethod):
             known_angles = self.angles_dict
         if known_distances is None:
             known_distances = self.ranges_dict
-        self.steering_dict = self.system_model.steering_vec(angles=known_angles, ranges=known_distances,
+        self.steering_dict = self.system_model.steering_vec_near_field(angles=known_angles, ranges=known_distances,
                                                                        generate_search_grid=True, nominal=True,
                                                             f_c=None).squeeze(-1).cpu()
         if torch.isnan(self.steering_dict).any():
