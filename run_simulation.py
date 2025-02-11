@@ -11,12 +11,10 @@ The type of the run is based on the scenrio_dict. the avialble scrorios are:
 """
 # Imports
 import sys
-import os
 from src.data_handler import *
 from src.training import *
 from src.plotting import *
 from src.evaluation import evaluate
-from src.plotting import initialize_figures
 from pathlib import Path
 from src.models import ModelGenerator
 from src.system_model import SystemModel, SystemModelParams

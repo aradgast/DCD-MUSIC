@@ -45,7 +45,7 @@ class SubspaceNet(ParentModel):
     """
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
-                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None):
+                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "big"):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -65,11 +65,14 @@ class SubspaceNet(ParentModel):
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
+        self.extra_conv4 = nn.Identity() # initialize as identity, set up in the __setup_big_ssn
+        self.extra_deconv1 = nn.Identity() # initialize as identity, set up in the __setup_big_ssn
         self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
         self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2)
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
         self.DropOut = nn.Dropout(self.p)
-        self.ReLU = nn.ReLU()
+        self.antirectifier = AntiRectifier()
+        self.__setupt_big_ssn(variant)
         # self.layer_norm = nn.LayerNorm([32, 2 * self.N - 1, self.N - 1])
 
         # Set the subspace method for training
@@ -80,55 +83,43 @@ class SubspaceNet(ParentModel):
         self.reshaper_target_size = 1500
         # self.reshaper = self.__init_reshaper()
 
-    def _get_name(self):
-        if self.field_type == "far":
-            return super(SubspaceNet, self)._get_name()
-        elif self.field_type == "near" and self.train_loss_type.lower() in ["music_spectrum"]:
-            return "NF" + super(SubspaceNet, self)._get_name()
-
-
-    def __init_reshaper(self):
-        h_dim = 2 * (self.N - self.reshaper_target_size) + 1
-        w_dim = self.N - self.reshaper_target_size + 1
-        if self.N > self.reshaper_target_size:
-            conv = nn.Conv2d(in_channels=self.tau,
-                            out_channels=self.tau,
-                            kernel_size=(h_dim, w_dim),
-                            stride=(1, 1), padding=0).to(device)
-            self.reshaper = nn.Sequential(conv, nn.ReLU())
-            # count the number of parameters
-            print(f"Number of parameters in the reshaper: {sum(p.numel() for p in self.reshaper.parameters())}")
-            print(f"Number of parameters in the model: {sum(p.numel() for p in self.parameters())}")
-            # update the number of sensors of the diff method
-            self.diff_method.update_number_of_sensors(self.reshaper_target_size)
-        else:
-            self.reshaper = nn.Identity()
-        return self.reshaper
-
     def get_surrogate_covariance(self, x: torch.Tensor):
-        x = self.pre_processing(x)
+        """
+        This function is the "real" forward pass of the SubspaceNet.
+        It receives the input tensor and returns the surrogate covariance matrix.
+        Args:
+            x: the input tensor of shape [Batch size, N, T]
+
+        Returns:
+            Rz: the surrogate covariance matrix of shape [Batch size, N, N]
+        """
+        x0 = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
         # N = x.shape[-1]
-        self.batch_size, _, _, N = x.shape
+        self.batch_size, _, _, N = x0.shape
         ############################
         ## Architecture flow ##
         # CNN block #1
-        x = self.conv1(x) # Shape: [Batch size, 16, 2N-1, N-1]
-        x = self.anti_rectifier(x) # Shape: [Batch size, 32, 2N-1, N-1]
+        x1 = self.conv1(x0) # Shape: [Batch size, 16, 2N-1, N-1]
+        x = self.antirectifier(x1) # Shape: [Batch size, 32, 2N-1, N-1]
         # CNN block #2
-        x = self.conv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
-        x = self.anti_rectifier(x) # Shape: [Batch size, 64, 2N-2, N-2]
+        x2 = self.conv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
+        x = self.antirectifier(x2) # Shape: [Batch size, 64, 2N-2, N-2]
         # CNN block #3
         x = self.conv3(x) # Shape: [Batch size, 64, 2N-3, N-3]
-        x = self.anti_rectifier(x) # Shape: [Batch size, 128, 2N-3, N-3]
+        x = self.antirectifier(x) # Shape: [Batch size, 128, 2N-3, N-3]
+
+        x = self.extra_conv4(x) # Shape: [Batch size, 128, 2N-4, N-4]
+        x = self.extra_deconv1(x) # Shape: [Batch size, 64, 2N-3, N-3]
+
         x = self.deconv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
-        x = self.anti_rectifier(x) # Shape: [Batch size, 64, 2N-2, N-2]
+        x = self.antirectifier(x + x2) # Shape: [Batch size, 64, 2N-2, N-2]
         # DCNN block #3
         x = self.deconv3(x)     # Shape: [Batch size, 16, 2N-1, N-1]
-        x = self.anti_rectifier(x) # Shape: [Batch size, 32, 2N-1, N-1]
+        x = self.antirectifier(x + x1) # Shape: [Batch size, 32, 2N-1, N-1]
         # DCNN block #4
         x = self.DropOut(x)
-        Rx = self.deconv4(x) # Shape: [Batch size, 1, 2N, N]
+        Rx = self.deconv4(x)  # Shape: [Batch size, 1, 2N, N]  + x0[:, 0].unsqueeze(1)
 
         # Reshape Output shape: [Batch size, 2N, N]
         Rx_View = Rx.view(Rx.size(0), Rx.size(2), Rx.size(3))
@@ -235,19 +226,39 @@ class SubspaceNet(ParentModel):
 
         return Rx_tau
 
-    def anti_rectifier(self, X):
-        """Applies the anti-rectifier operation to the input tensor.
+    def _get_name(self):
+        if self.field_type == "far":
+            return super(SubspaceNet, self)._get_name()
+        elif self.field_type == "near" and self.train_loss_type.lower() in ["music_spectrum"]:
+            return "NF" + super(SubspaceNet, self)._get_name()
 
-        Args:
-        -----
-            X (torch.Tensor): Input tensor.
+    def __setup_big_ssn(self, variant: str):
+        if variant == "big":
+            self.extra_conv4 = nn.Sequential(
+                nn.Conv2d(128, 128, kernel_size=2),
+                AntiRectifier(),
+                nn.Dropout(self.p))
+            self.extra_deconv1 = nn.Sequential(
+                nn.ConvTranspose2d(256, 64, kernel_size=2),
+                AntiRectifier())
 
-        Returns:
-        --------
-            torch.Tensor: Output tensor after applying the anti-rectifier operation.
-
-        """
-        return torch.cat((self.ReLU(X), self.ReLU(-X)), 1)
+    def __init_reshaper(self):
+        h_dim = 2 * (self.N - self.reshaper_target_size) + 1
+        w_dim = self.N - self.reshaper_target_size + 1
+        if self.N > self.reshaper_target_size:
+            conv = nn.Conv2d(in_channels=self.tau,
+                             out_channels=self.tau,
+                             kernel_size=(h_dim, w_dim),
+                             stride=(1, 1), padding=0).to(device)
+            self.reshaper = nn.Sequential(conv, nn.ReLU())
+            # count the number of parameters
+            print(f"Number of parameters in the reshaper: {sum(p.numel() for p in self.reshaper.parameters())}")
+            print(f"Number of parameters in the model: {sum(p.numel() for p in self.parameters())}")
+            # update the number of sensors of the diff method
+            self.diff_method.update_number_of_sensors(self.reshaper_target_size)
+        else:
+            self.reshaper = nn.Identity()
+        return self.reshaper
 
     def adjust_diff_method_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
@@ -478,8 +489,13 @@ class SubspaceNet(ParentModel):
             self.test_loss = CartesianLoss()
             self.test_loss_separated = RMSPELoss(1.0)
 
+class AntiRectifier(nn.Module):
+    def __init__(self, relu_inplace=False):
+        super(AntiRectifier, self).__init__()
+        self.relu = nn.ReLU(inplace=relu_inplace)
 
-
+    def forward(self, x):
+        return torch.cat((self.relu(x), self.relu(-x)), 1)
 
 
     # def loss(self, loss_type:str="orthogonality", **kwargs):

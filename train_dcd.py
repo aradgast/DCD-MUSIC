@@ -147,7 +147,7 @@ def train_dcd_music(*args, **kwargs):
                                        gamma=TRAINING_PARAMS["gamma"],
                                        training_objective="angle",
                                        scheduler=TRAINING_PARAMS["scheduler"],
-                                       batch_size=TRAINING_PARAMS["batch_size"],
+                                       batch_size=TRAINING_PARAMS["batch_size"]
                                        )
     train_dataloader, valid_dataloader = train_dataset.get_dataloaders(batch_size=TRAINING_PARAMS["batch_size"])
     trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)

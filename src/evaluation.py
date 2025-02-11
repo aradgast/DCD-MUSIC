@@ -38,8 +38,6 @@ from pathlib import Path
 
 # Internal imports
 from src.utils import *
-# from src.criterions import (RMSPELoss, RMSELoss, CartesianLoss)
-from src.methods import MVDR
 from src.methods_pack.music import MUSIC
 from src.methods_pack.root_music import RootMusic, root_music
 from src.methods_pack.esprit import ESPRIT
@@ -49,7 +47,6 @@ from src.methods_pack.music_tops import TOPS
 from src.methods_pack.csestimator import CsEstimator
 from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC,
                         DeepCNN, DeepRootMUSIC, TransMUSIC)
-from src.plotting import plot_spectrum
 from src.system_model import SystemModel, SystemModelParams
 
 
@@ -266,6 +263,8 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
         if system_model.params.signal_nature.lower() == "non-coherent":
             crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
             return crb
+        else:
+            return None
     system_model.create_array()
     model_based = get_model_based_method(algorithm, system_model)
     if isinstance(model_based, nn.Module):
@@ -451,6 +450,10 @@ def evaluate(
         start = time.time()
         model_test_loss = evaluate_dnn_model(model=model, dataset=generic_test_dataset, mode="test")
         print(f"{model_name} evaluation time: {time.time() - start}")
+        try:
+            model_name = model._get_name()
+        except AttributeError:
+            pass
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
     system_model.create_array()
@@ -469,7 +472,8 @@ def evaluate(
         if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "root-music", "esprit"]:
             algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")
-        res[algorithm] = loss
+        if loss is not None:
+            res[algorithm] = loss
     # MLE
     # mle_loss = evaluate_mle(generic_test_dataset, system_model, criterion)
     # res["MLE"] = mle_loss
