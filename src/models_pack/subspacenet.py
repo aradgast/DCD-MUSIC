@@ -45,7 +45,7 @@ class SubspaceNet(ParentModel):
     """
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
-                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "big"):
+                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small"):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -113,10 +113,16 @@ class SubspaceNet(ParentModel):
         x = self.extra_deconv1(x) # Shape: [Batch size, 64, 2N-3, N-3]
 
         x = self.deconv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
-        x = self.antirectifier(x + x2) # Shape: [Batch size, 64, 2N-2, N-2]
+        if self.variant == "big":
+            x = self.antirectifier(x + x2) # Shape: [Batch size, 64, 2N-2, N-2]
+        else:
+            x = self.antirectifier(x) # Shape: [Batch size, 32, 2N-2, N-2]
         # DCNN block #3
         x = self.deconv3(x)     # Shape: [Batch size, 16, 2N-1, N-1]
-        x = self.antirectifier(x + x1) # Shape: [Batch size, 32, 2N-1, N-1]
+        if self.variant == "big":
+            x = self.antirectifier(x + x1) # Shape: [Batch size, 32, 2N-1, N-1]
+        else:
+            x = self.antirectifier(x) # Shape: [Batch size, 32, 2N-1, N-1]
         # DCNN block #4
         x = self.DropOut(x)
         Rx = self.deconv4(x)  # Shape: [Batch size, 1, 2N, N]  + x0[:, 0].unsqueeze(1)
@@ -228,11 +234,14 @@ class SubspaceNet(ParentModel):
 
     def _get_name(self):
         if self.field_type == "far":
-            return super(SubspaceNet, self)._get_name()
+            name = super(SubspaceNet, self)._get_name()
         elif self.field_type == "near" and self.train_loss_type.lower() in ["music_spectrum"]:
-            return "NF" + super(SubspaceNet, self)._get_name()
+            name = "NF" + super(SubspaceNet, self)._get_name()
+        if self.variant:
+            name += f"_{self.variant}"
+        return name
 
-    def __setup_big_ssn(self, variant: str):
+    def __setupt_big_ssn(self, variant: str):
         if variant == "big":
             self.extra_conv4 = nn.Sequential(
                 nn.Conv2d(128, 128, kernel_size=2),
@@ -241,6 +250,9 @@ class SubspaceNet(ParentModel):
             self.extra_deconv1 = nn.Sequential(
                 nn.ConvTranspose2d(256, 64, kernel_size=2),
                 AntiRectifier())
+            self.variant = variant
+        else:
+            self.variant = ""
 
     def __init_reshaper(self):
         h_dim = 2 * (self.N - self.reshaper_target_size) + 1
@@ -410,7 +422,7 @@ class SubspaceNet(ParentModel):
         angles = angles.to(device)
         ranges = ranges.to(device)
 
-        angles_pred, ranges_pred, source_estimation, eigen_regularization = self(x, sources_num)
+        angles_pred, ranges_pred, source_estimation, _ = self(x, sources_num)
         loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
 
