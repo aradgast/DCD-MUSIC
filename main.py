@@ -112,10 +112,10 @@ training_params = {
 evaluation_params = {
     "models": {
         # "TransMUSIC": {},
-        "DCD-MUSIC": {"tau": 8,
-                    "diff_method": ("esprit", "music_1d"),
-                    "train_loss_type": ("rmspe", "rmspe"),
-                    "regularization": None},
+        # "DCD-MUSIC": {"tau": 8,
+                    # "diff_method": ("esprit", "music_1d"),
+                    # "train_loss_type": ("rmspe", "rmspe"),
+                    # "regularization": None},
         # "DCD-MUSIC(MusicSpec, diffMUSIC)": {"tau": 8,
         #                    "diff_method": ("music_1D", "music_1D"),
         #                    "train_loss_type": ("music_spectrum", "rmspe")},
@@ -241,7 +241,7 @@ if __name__ == "__main__":
         warnings.warn("Please make sure to configure the model parameters in the script.")
         model_config["model_type"] = args.model_type
     if model_config["model_type"] == "SubspaceNet":
-        model_config["model_params"]["regularization"] = args.regularization
+        model_config["model_params"]["regularization"] = None if args.regularization == "None" else args.regularization
         model_config["model_params"]["tau"] = args.tau
         model_config["model_params"]["variant"] = args.variant
 

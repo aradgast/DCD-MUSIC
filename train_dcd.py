@@ -205,6 +205,7 @@ def parse_arguments():
 
     parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default=tau)
     parser.add_argument("-reg", "--regularization", type=str, help="Regularization method", default=regularization)
+    parser.add_argument("-v", "--variant", type=str, help="Model variant", default=variant)
 
     parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=sample_size)
     parser.add_argument('-ratio', type=float, help='Train test ratio', default=train_test_ratio)
@@ -242,7 +243,8 @@ if __name__ == "__main__":
     }
     model_params = {
         "tau": args.tau,
-        "regularization": args.regularization
+        "regularization": None if args.regularization == "None" else args.regularization,
+        "variant": args.variant
     }
     training_params = {
         "samples_size": args.sample_size,
