@@ -454,6 +454,10 @@ def evaluate(
             model_name = model._get_name()
         except AttributeError:
             pass
+        # try:
+        #     model_name += f"{model.tau}"
+        # except AttributeError:
+        #     pass
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
     system_model.create_array()

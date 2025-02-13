@@ -24,7 +24,7 @@ tau = 8
 sample_size = 4096
 train_test_ratio = 0.0
 batch_size = 128
-epochs = 2
+epochs = 100
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
@@ -34,6 +34,7 @@ gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
 regularization = None
+variant = "small"
 wandb_flag = False
 
 
@@ -135,7 +136,8 @@ def train_dcd_music(*args, **kwargs):
         .set_system_model(system_model)
         .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
                            "tau": MODEL_PARAMS.get("tau"), "field_type": "far",
-                           "regularization": MODEL_PARAMS.get("regularization")})
+                           "regularization": MODEL_PARAMS.get("regularization"),
+                           "variant": MODEL_PARAMS.get("variant")})
         .set_model()
     )
 
@@ -163,7 +165,8 @@ def train_dcd_music(*args, **kwargs):
                                    "diff_method": diff_method,
                                    "train_loss_type": train_loss_type,
                                    "angle_extractor": model,
-                                   "regularization": MODEL_PARAMS.get("regularization")})
+                                   "regularization": MODEL_PARAMS.get("regularization"),
+                                   "variant": MODEL_PARAMS.get("variant")})
     model_config.set_model()
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})

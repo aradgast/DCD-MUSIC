@@ -45,7 +45,8 @@ class SubspaceNet(ParentModel):
     """
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
-                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small"):
+                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small",
+                  norm_layer: bool=True):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -73,15 +74,13 @@ class SubspaceNet(ParentModel):
         self.DropOut = nn.Dropout(self.p)
         self.antirectifier = AntiRectifier()
         self.__setupt_big_ssn(variant)
-        # self.layer_norm = nn.LayerNorm([32, 2 * self.N - 1, self.N - 1])
+        self.__setup_norm_layer(norm_layer)
 
         # Set the subspace method for training
         self.train_loss, self.validation_loss, self.test_loss = None, None, None
         self.__set_diff_method(diff_method, system_model)
         self.__set_criterion()
         self.set_eigenregularization_schedular()
-        self.reshaper_target_size = 1500
-        # self.reshaper = self.__init_reshaper()
 
     def get_surrogate_covariance(self, x: torch.Tensor):
         """
@@ -113,16 +112,10 @@ class SubspaceNet(ParentModel):
         x = self.extra_deconv1(x) # Shape: [Batch size, 64, 2N-3, N-3]
 
         x = self.deconv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
-        if self.variant == "big":
-            x = self.antirectifier(x + x2) # Shape: [Batch size, 64, 2N-2, N-2]
-        else:
-            x = self.antirectifier(x) # Shape: [Batch size, 32, 2N-2, N-2]
+        x = self.antirectifier(x + x2 if self.variant == "big" else x) # Shape: [Batch size, 64, 2N-2, N-2]
         # DCNN block #3
         x = self.deconv3(x)     # Shape: [Batch size, 16, 2N-1, N-1]
-        if self.variant == "big":
-            x = self.antirectifier(x + x1) # Shape: [Batch size, 32, 2N-1, N-1]
-        else:
-            x = self.antirectifier(x) # Shape: [Batch size, 32, 2N-1, N-1]
+        x = self.antirectifier(x + x1 if self.variant == "big" else x) # Shape: [Batch size, 32, 2N-1, N-1]
         # DCNN block #4
         x = self.DropOut(x)
         Rx = self.deconv4(x)  # Shape: [Batch size, 1, 2N, N]  + x0[:, 0].unsqueeze(1)
@@ -138,6 +131,7 @@ class SubspaceNet(ParentModel):
             Kx=Kx_tag, eps=1, batch_size=self.batch_size
         )  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
+        Rz = self.norm_layer(Rz)
         return Rz
 
     def forward(self, x: torch.Tensor, sources_num: torch.tensor = None, known_angles: torch.tensor = None):
@@ -224,10 +218,10 @@ class SubspaceNet(ParentModel):
             Rx_lag = torch.cat((torch.real(Rx_lag), torch.imag(Rx_lag)), dim=1)
             Rx_tau[:, i, :, :] = Rx_lag
 
-        if N > self.reshaper_target_size:
-            b, t, n, m = Rx_tau.shape
-            Rx_tau = self.reshaper(Rx_tau)
-            Rx_tau = Rx_tau.view(b, t, Rx_tau.shape[-2], Rx_tau.shape[-1])
+        # if N > self.reshaper_target_size:
+        #     b, t, n, m = Rx_tau.shape
+        #     Rx_tau = self.reshaper(Rx_tau)
+        #     Rx_tau = Rx_tau.view(b, t, Rx_tau.shape[-2], Rx_tau.shape[-1])
 
 
         return Rx_tau
@@ -242,7 +236,7 @@ class SubspaceNet(ParentModel):
         return name
 
     def __setupt_big_ssn(self, variant: str):
-        if variant == "big":
+        if variant != "small":
             self.extra_conv4 = nn.Sequential(
                 nn.Conv2d(128, 128, kernel_size=2),
                 AntiRectifier(),
@@ -250,9 +244,15 @@ class SubspaceNet(ParentModel):
             self.extra_deconv1 = nn.Sequential(
                 nn.ConvTranspose2d(256, 64, kernel_size=2),
                 AntiRectifier())
-            self.variant = variant
+            self.variant = "V2"
         else:
             self.variant = ""
+
+    def __setup_norm_layer(self, norm_layer: bool):
+        if norm_layer:
+            self.norm_layer = L2NormLayer()
+        else:
+            self.norm_layer = nn.Identity()
 
     def __init_reshaper(self):
         h_dim = 2 * (self.N - self.reshaper_target_size) + 1
@@ -508,6 +508,15 @@ class AntiRectifier(nn.Module):
 
     def forward(self, x):
         return torch.cat((self.relu(x), self.relu(-x)), 1)
+
+class L2NormLayer(nn.Module):
+    def __init__(self, dim=(1, 2), eps=1e-12):
+        super(L2NormLayer, self).__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def forward(self, x):
+        return torch.nn.functional.normalize(x, p=2, dim=self.dim, eps=self.eps)
 
 
     # def loss(self, loss_type:str="orthogonality", **kwargs):
