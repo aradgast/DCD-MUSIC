@@ -285,6 +285,7 @@ class MUSIC(SubspaceMethod):
                 Rx = self.pre_processing(x, mode="sample")
             else:
                 Rx = self.pre_processing(x, mode="sps")
+                # Rx = self.pre_processing(x, mode="sample")
         predictions, sources_num_estimation, _ = self(Rx, number_of_sources=sources_num)
         if self.estimation_params == "angle, range":
             angles_prediction, ranges_prediction = predictions
@@ -577,7 +578,7 @@ class MUSIC(SubspaceMethod):
                 for idx, dot in enumerate(highlight_coordinates):
                     x = self.ranges_dict.cpu().detach().numpy()[dot[1]]
                     y = np.rad2deg(self.angles_dict.cpu().detach().numpy()[dot[0]])
-                    plt.plot(x, y, label="Ground Truth", marker='o', markerfacecolor='none',
+                    plt.plot(x, y, label=f"{x:.1f} [m], {y:.1f} [deg]", marker='o', markerfacecolor='none',
                              markeredgecolor='white', linestyle='-', color='white', markersize=10)
                     # plt.plot(x, y, marker='x', linestyle='', color='green', markersize=8)
                 plt.legend()

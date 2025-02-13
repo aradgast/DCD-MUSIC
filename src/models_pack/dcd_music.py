@@ -18,9 +18,10 @@ class DCDMUSIC(SubspaceNet):
     """
 
     def __init__(self, tau: int, system_model: SystemModel,diff_method: tuple = ("esprit", "music_1d"),
-                 train_loss_type: str=("rmspe", "rmspe"), regularization: str = None,
+                 train_loss_type: str=("rmspe", "rmspe"), regularization: str = None, variant: str = "small", norm_layer: bool = True,
                  state_path: str = None, angle_extractor: SubspaceNet = None, train_angle_extractor: bool = False):
-        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near", regularization=regularization)
+        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near",
+                                       regularization=regularization, variant=variant, norm_layer=norm_layer)
         self.angle_extractor = None
         self.angle_extractor_diff_method = diff_method[0]
         self.angle_extractor_train_loss_type = train_loss_type[0]
@@ -65,7 +66,9 @@ class DCDMUSIC(SubspaceNet):
                                                train_loss_type=self.angle_extractor_train_loss_type,
                                                system_model=self.system_model,
                                                field_type="far",
-                                               regularization=self.regularization)
+                                               regularization=self.regularization,
+                                               variant=self.variant,
+                                               norm_layer=self.norm_layer)
             if path is None:
                 path = self.angle_extractor.get_model_file_name()
             self._load_state_for_angle_extractor(path)
@@ -74,7 +77,7 @@ class DCDMUSIC(SubspaceNet):
         cwd = Path(__file__).parent.parent.parent
         if path is None or path == "":
             path = self.angle_extractor.get_model_file_name()
-        ref_path = os.path.join(cwd, "data", "weights", "final_models", path)
+        ref_path = os.path.join(cwd, "data", "weights", self.angle_extractor._get_name(), "final_models", path)
         try:
             self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
         except FileNotFoundError as e:
@@ -219,4 +222,7 @@ class DCDMUSIC(SubspaceNet):
             param.requires_grad = requires_grad
 
     def _get_name(self):
-        return "DCDMUSIC"
+        name = "DCDMUSIC"
+        if self.variant != "small":
+            name += f"_V2"
+        return name
