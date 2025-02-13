@@ -223,6 +223,6 @@ class DCDMUSIC(SubspaceNet):
 
     def _get_name(self):
         name = "DCDMUSIC"
-        if self.variant != "small":
+        if self.variant == "V2":
             name += f"_V2"
         return name

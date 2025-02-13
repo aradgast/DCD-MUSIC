@@ -112,10 +112,10 @@ class SubspaceNet(ParentModel):
         x = self.extra_deconv1(x) # Shape: [Batch size, 64, 2N-3, N-3]
 
         x = self.deconv2(x) # Shape: [Batch size, 32, 2N-2, N-2]
-        x = self.antirectifier(x + x2 if self.variant == "big" else x) # Shape: [Batch size, 64, 2N-2, N-2]
+        x = self.antirectifier(x + x2 if self.variant == "V2" else x) # Shape: [Batch size, 64, 2N-2, N-2]
         # DCNN block #3
         x = self.deconv3(x)     # Shape: [Batch size, 16, 2N-1, N-1]
-        x = self.antirectifier(x + x1 if self.variant == "big" else x) # Shape: [Batch size, 32, 2N-1, N-1]
+        x = self.antirectifier(x + x1 if self.variant == "V2" else x) # Shape: [Batch size, 32, 2N-1, N-1]
         # DCNN block #4
         x = self.DropOut(x)
         Rx = self.deconv4(x)  # Shape: [Batch size, 1, 2N, N]  + x0[:, 0].unsqueeze(1)
@@ -236,7 +236,7 @@ class SubspaceNet(ParentModel):
         return name
 
     def __setupt_big_ssn(self, variant: str):
-        if variant != "small":
+        if variant in ["big", "V2"]:
             self.extra_conv4 = nn.Sequential(
                 nn.Conv2d(128, 128, kernel_size=2),
                 AntiRectifier(),
