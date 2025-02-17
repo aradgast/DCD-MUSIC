@@ -267,7 +267,7 @@ class Samples(SystemModel):
         """
         M = source_number
         if self.params.snr is None:
-            snr = np.random.uniform(-10, 10)
+            snr = np.random.uniform(-5, 5)
         else:
             snr = self.params.snr
         amplitude = 10 ** (snr / 10)

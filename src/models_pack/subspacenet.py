@@ -46,7 +46,7 @@ class SubspaceNet(ParentModel):
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
                  system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small",
-                  norm_layer: bool=True):
+                  norm_layer: bool=True, psd_epsilon: float=1):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -63,6 +63,7 @@ class SubspaceNet(ParentModel):
         self.field_type = field_type.lower()
         self.p = 0.2
         self.regularization = regularization
+        self.psd_epsilon = psd_epsilon
         self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
@@ -95,7 +96,7 @@ class SubspaceNet(ParentModel):
         x0 = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
         # N = x.shape[-1]
-        self.batch_size, _, _, N = x0.shape
+        batch_size, _, _, N = x0.shape
         ############################
         ## Architecture flow ##
         # CNN block #1
@@ -127,9 +128,7 @@ class SubspaceNet(ParentModel):
         Rx_imag = Rx_View[:, N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag).to(torch.complex128)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(
-            Kx=Kx_tag, eps=1, batch_size=self.batch_size
-        )  # Shape: [Batch size, N, N]
+        Rz = gram_diagonal_overload(Kx=Kx_tag, eps=self.psd_epsilon)  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
         Rz = self.norm_layer(Rz)
         return Rz

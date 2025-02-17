@@ -29,7 +29,7 @@ class ParentModel(nn.Module):
             M = self.system_model.params.M
 
         if self.system_model.params.snr is None:
-            snr = "rand"
+            snr = "rand_-5_5"
         else:
             snr = self.system_model.params.snr
 

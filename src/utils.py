@@ -396,7 +396,7 @@ def get_k_peaks(grid_size: int, k: int, prediction: torch.Tensor):
 
 
 # def gram_diagonal_overload(Kx: torch.Tensor, eps: float) -> torch.Tensor:
-def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
+def gram_diagonal_overload(Kx: torch.Tensor, eps: float):
     """Multiply a matrix Kx with its Hermitian conjecture (gram matrix),
         and adds eps to the diagonal values of the matrix,
         ensuring a Hermitian and PSD (Positive Semi-Definite) matrix.
@@ -405,8 +405,7 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
     -----
         Kx (torch.Tensor): Complex matrix with shape [BS, N, N],
             where BS is the batch size and N is the matrix size.
-        eps (float): Constant multiplier added to each diagonal element.
-        batch_size(int): The number of batches
+        eps (float): Constant added to each diagonal element.
 
     Returns:
     --------
@@ -423,11 +422,10 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float, batch_size: int):
     eps_addition = (eps * torch.diag(torch.ones(Kx_garm.shape[-1]))).to(device)
     Kx_Out = Kx_garm + eps_addition
 
-    # check if the matrix is PSD - eigenvalues should be positive and real
-    eigvals = torch.linalg.eigvals(Kx_Out)
-    if not torch.all(eigvals.real > 0):
+    # check if the matrix is Hermitian - A^H = A
+    if not (torch.abs(Kx_Out - Kx_Out.conj().transpose(1, 2)) < 1e-10).all():
         warnings.warn("gram_diagonal_overload: The matrix is not PSD, adding more eps to the diagonal elements.")
-        Kx_Out = Kx_Out + 1e-6 * torch.eye(Kx_Out.shape[-1]).to(device)
+        Kx_Out = Kx_Out + eps_addition * torch.eye(Kx_Out.shape[-1]).to(device)
 
     return Kx_Out
 

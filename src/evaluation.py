@@ -65,7 +65,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower().endswith("1d-music"):
         method = MUSIC(system_model=system_model, estimation_parameter="angle")
     elif method_name.lower().endswith("2d-music"):
-        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation="threshold")
+        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation="mdl")
     elif method_name.lower() == "root-music":
         method = RootMusic(system_model)
     elif method_name.lower().endswith("esprit"):
@@ -83,7 +83,11 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     return method
 
 
-def get_model(model_name: str, params: dict, system_model: SystemModel):
+def get_model(params: dict, system_model: SystemModel, model_name: str = ""):
+    try:
+        model_name = params.pop("model_name")
+    except KeyError:
+        pass
     model_config = (
         ModelGenerator()
         .set_model_type(model_name)
@@ -198,9 +202,9 @@ def evaluate_augmented_model(augmented_method: tuple[str, str],
     algorithm = augmented_method[1].lower()
     model_params = augmented_method[2]
 
-    model = get_model(model_name,
-                model_params,
-                system_model)
+    model = get_model(model_name=model_name,
+                params=model_params,
+                system_model=system_model)
     # Initialize instances of subspace methods
     method = get_model_based_method(algorithm, system_model)
     over_all_loss = 0.0
@@ -443,17 +447,17 @@ def evaluate(
         res[model_name + "_tmp"] = model_test_loss
     # Evaluate DNN models
     for model_name, params in models.items():
-        model = get_model(model_name, params, system_model)
+        model = get_model(model_name=model_name, params=params, system_model=system_model)
         # num_of_params = sum(p.numel() for p in model.parameters())
         # total_size = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
         # print(f"Number of parameters in {model_name}: {num_of_params} with total size: {total_size} bytes")
         start = time.time()
         model_test_loss = evaluate_dnn_model(model=model, dataset=generic_test_dataset, mode="test")
         print(f"{model_name} evaluation time: {time.time() - start}")
-        try:
-            model_name = model._get_name()
-        except AttributeError:
-            pass
+        # try:
+        #     model_name = model._get_name()
+        # except AttributeError:
+        #     pass
         # try:
         #     model_name += f"{model.tau}"
         # except AttributeError:
