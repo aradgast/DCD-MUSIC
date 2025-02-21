@@ -113,7 +113,7 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         label = method
         if not np.isnan((loss_.get(tested_param))).any():
             try:
-                ax.plot(test_values, loss_[tested_param], **plot_styles[method.split("_")[0]], label=label)
+                ax.plot(test_values, loss_[tested_param], **plot_styles[method], label=label)
             except KeyError:
                 print(f"{method} does not have plot style")
                 ax.plot(test_values, loss_[tested_param], label=label)
@@ -150,7 +150,7 @@ def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     for method, loss_ in plt_res.items():
         if loss_.get("Accuracy") is not None:
-            ax.plot(test_values, loss_["Accuracy"], label=method, **plot_styles[method.split("_")[0]])
+            ax.plot(test_values, loss_["Accuracy"], label=method, **plot_styles[method])
     ax.legend()
     ax.grid()
     if test == "SNR":

@@ -12,7 +12,7 @@ from src.system_model import SystemModel, SystemModelParams
 
 # default values for the argparse
 number_sensors = 15
-number_sources = "2"
+number_sources = "2,8"
 number_snapshots = 100
 snr = 10
 field_type = "Near"
@@ -21,7 +21,7 @@ signal_nature = "non-coherent"
 err_loc_sv = 0.0
 wavelength = 1
 tau = 8
-sample_size = 4096
+sample_size = 20000
 train_test_ratio = 0.0
 batch_size = 128
 epochs = 100
@@ -33,7 +33,7 @@ step_size = 50
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
-regularization = None
+regularization = "aic"
 variant = "small"
 wandb_flag = False
 
@@ -185,7 +185,7 @@ def train_dcd_music(*args, **kwargs):
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                           use_wandb=TRAINING_PARAMS["use_wandb"],
-                          save_final=save_model, load_model=True)
+                          save_final=save_model, load_model=False)
     print("END OF TRAINING - Step 3: adaption by position.")
     if save_to_file:
         sys.stdout = orig_stdout
@@ -266,7 +266,7 @@ if __name__ == "__main__":
     simulation_commands = {
         "SAVE_TO_FILE": False,
         "CREATE_DATA": True,
-        "LOAD_MODEL": False,
+        "LOAD_MODEL": True,
         "SAVE_MODEL": True,
     }
     train_dcd_music(simulation_commands=simulation_commands,

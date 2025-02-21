@@ -265,10 +265,26 @@ class Trainer:
     def __load_model(self, load_model: bool):
         if load_model:
             try:
-                self.model.load_state_dict(torch.load(str(self.final_model_checkpoint) + ".pt"))
-                print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+                state_dict = torch.load(str(self.final_model_checkpoint) + ".pt")
             except FileNotFoundError:
                 print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
+                return None
+
+            # don't load angle extractor weights
+            if isinstance(self.model, DCDMUSIC):
+                state_dict = {k: v for k, v in state_dict.items() if not k.startswith("angle_extractor")}
+                model_dict = self.model.state_dict()
+                model_dict.update(state_dict)
+            else:
+                model_dict = state_dict
+
+            try:
+                self.model.load_state_dict(model_dict)
+                print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+            except Exception as e:
+                print("Error loading model from ", str(self.final_model_checkpoint) + ".pt")
+                print(e)
+                return None
 
 
     def __plot_res(self):

@@ -36,22 +36,20 @@ R2D = 180 / np.pi
 D2R = 1 / R2D
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 plot_styles = {
-    'CCRB': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 10},
-    'Beamformer': {'color': 'r', 'linestyle': '--', 'marker': 's', "markersize": 10},
-    'DCDMUSIC': {'color': 'g', 'linestyle': 'solid', 'marker': 's', "markersize": 10},
-    'DCD-MUSIC(RMSPE, diffMUSIC)': {'color': 'g', 'linestyle': 'solid', 'marker': 's', "markersize": 10},
-    'DCD-MUSIC(MusicSpec, diffMUSIC)': {'color': 'b', 'linestyle': '--', 'marker': 's', "markersize": 10},
-    'DCD-MUSIC(RMSPE, MusicSpec)': {'color': 'k', 'linestyle': ':', 'marker': '^', "markersize": 10},
-    'DCDMUSIC2Ortho': {'color': 'c', 'linestyle': '-.', 'marker': 's', "markersize": 10},
-    'TransMUSIC': {'color': 'm', 'linestyle': '-.', 'marker': 'd', "markersize": 10},
-    '2D-MUSIC': {'color': 'y', 'linestyle': ':', 'marker': '^', "markersize": 10},
-    '2D-MUSIC(SPS)': {'color': 'y', 'linestyle': ':', 'marker': '^', "markersize": 10},
-    'SubspaceNet': {'color': 'k', 'linestyle': '--', 'marker': 'p', "markersize": 10},
-    'NFSubspaceNet': {'color': 'k', 'linestyle': '--', 'marker': 'p', "markersize": 10},
-    'esprit': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 10},
-    'esprit(SPS)': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 10},
-    'music': {'color': 'y', 'linestyle': '--', 'marker': 's', "markersize": 10},
-    'music(SPS)': {'color': 'y', 'linestyle': '--', 'marker': 's', "markersize": 10},
+    'CCRB': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 8},
+    'Beamformer': {'color': 'r', 'linestyle': '--', 'marker': 's', "markersize": 8},
+    'DCD-MUSIC': {'color': 'g', 'linestyle': '-', 'marker': 'D', "markersize": 8},
+    'DCD-MUSIC_V2': {'color': 'g', 'linestyle': '--', 'marker': 'd', "markersize": 8},
+    'TransMUSIC': {'color': 'm', 'linestyle': '-.', 'marker': 'P', "markersize": 8},
+    '2D-MUSIC': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 8},
+    '2D-MUSIC(SPS)': {'color': 'c', 'linestyle': '--', 'marker': 'v', "markersize": 8},
+    'SubspaceNet': {'color': 'k', 'linestyle': '-', 'marker': 'X', "markersize": 8},
+    'NFSubspaceNet': {'color': 'k', 'linestyle': '--', 'marker': 'p', "markersize": 8},
+    'NFSubspaceNet_V2': {'color': 'b', 'linestyle': '-.', 'marker': 'h', "markersize": 8},
+    'esprit': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 8},
+    'esprit(SPS)': {'color': 'r', 'linestyle': '--', 'marker': 'v', "markersize": 8},
+    'music': {'color': 'y', 'linestyle': '-.', 'marker': 's', "markersize": 8},
+    'music(SPS)': {'color': 'y', 'linestyle': ':', 'marker': 's', "markersize": 8},
 }
 # device = "cpu"
 print("Running on device: ", device)

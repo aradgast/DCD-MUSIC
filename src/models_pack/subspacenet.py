@@ -46,7 +46,7 @@ class SubspaceNet(ParentModel):
 
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
                  system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small",
-                  norm_layer: bool=True, psd_epsilon: float=1):
+                  norm_layer: bool=True, psd_epsilon: float=.1, batch_norm: bool=False):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -64,14 +64,26 @@ class SubspaceNet(ParentModel):
         self.p = 0.2
         self.regularization = regularization
         self.psd_epsilon = psd_epsilon
-        self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
+        self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2) if not batch_norm else nn.Sequential(
+            nn.Conv2d(self.tau, 16, kernel_size=2),
+            nn.BatchNorm2d(16))
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=2) if not batch_norm else nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=2),
+            nn.BatchNorm2d(32))
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=2) if not batch_norm else nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=2),
+            nn.BatchNorm2d(64))
         self.extra_conv4 = nn.Identity() # initialize as identity, set up in the __setup_big_ssn
         self.extra_deconv1 = nn.Identity() # initialize as identity, set up in the __setup_big_ssn
-        self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
-        self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2)
-        self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
+        self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2) if not batch_norm else nn.Sequential(
+            nn.ConvTranspose2d(128, 32, kernel_size=2),
+            nn.BatchNorm2d(32))
+        self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2) if not batch_norm else nn.Sequential(
+            nn.ConvTranspose2d(64, 16, kernel_size=2),
+            nn.BatchNorm2d(16))
+        self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2) if not batch_norm else nn.Sequential(
+            nn.ConvTranspose2d(32, 1, kernel_size=2),
+            nn.BatchNorm2d(1))
         self.DropOut = nn.Dropout(self.p)
         self.antirectifier = AntiRectifier()
         self.__setupt_big_ssn(variant)
@@ -128,10 +140,40 @@ class SubspaceNet(ParentModel):
         Rx_imag = Rx_View[:, N:, :]  # Shape: [Batch size, N, N])
         Kx_tag = torch.complex(Rx_real, Rx_imag).to(torch.complex128)  # Shape: [Batch size, N, N])
         # Apply Gram operation diagonal loading
-        Rz = gram_diagonal_overload(Kx=Kx_tag, eps=self.psd_epsilon)  # Shape: [Batch size, N, N]
+        eps = self.__adjust_psd_eps()
+        Rz = gram_diagonal_overload(Kx=Kx_tag, eps=eps)  # Shape: [Batch size, N, N]
         # Feed surrogate covariance to the differentiable subspace algorithm
         Rz = self.norm_layer(Rz)
         return Rz
+
+    def __adjust_psd_eps(self):
+        if self.training: #
+            return self.psd_epsilon
+        else:
+            return self.psd_epsilon
+
+        snr = self.system_model.params.snr
+        is_nf = self._get_name().startswith("NF")
+        is_v2 = self.variant == "V2"
+
+        if self.system_model.params.signal_nature == "non-coherent":
+            snr_mapping = {
+                10: self.psd_epsilon * (
+                    1e6 if is_v2 and is_nf else 5e7 if is_nf else 1e11 if is_v2 else 5e8
+                ),
+                5: self.psd_epsilon * (1e5 if is_v2 and is_nf else 1 / 1.5),
+                0: self.psd_epsilon / (1.5 if is_nf else 2),
+                -5: self.psd_epsilon / (20 if is_nf else 1.5),
+                -10: self.psd_epsilon / 1.5,
+            }
+        else:  # Coherent case
+            snr_mapping = {
+                10: self.psd_epsilon * (5e10 if is_v2 and not is_nf else 1e8),
+                5: self.psd_epsilon * 1/ 10,
+                0: self.psd_epsilon * (5e5 if is_v2 else 1 / 5 if is_nf else 1 / 10),
+            }
+
+        return snr_mapping.get(snr, self.psd_epsilon / (2 if is_v2 else 10))
 
     def forward(self, x: torch.Tensor, sources_num: torch.tensor = None, known_angles: torch.tensor = None):
         """

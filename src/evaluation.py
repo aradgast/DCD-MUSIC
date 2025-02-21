@@ -65,7 +65,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     if method_name.lower().endswith("1d-music"):
         method = MUSIC(system_model=system_model, estimation_parameter="angle")
     elif method_name.lower().endswith("2d-music"):
-        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation="mdl")
+        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation="aic")
     elif method_name.lower() == "root-music":
         method = RootMusic(system_model)
     elif method_name.lower().endswith("esprit"):
@@ -85,14 +85,14 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
 
 def get_model(params: dict, system_model: SystemModel, model_name: str = ""):
     try:
-        model_name = params.pop("model_name")
+        model_name = params.get("model_name")
     except KeyError:
         pass
     model_config = (
         ModelGenerator()
         .set_model_type(model_name)
         .set_system_model(system_model)
-        .set_model_params(params)
+        .set_model_params({x: params[x] for x in params if x != "model_name"})
         .set_model()
     )
     model = model_config.model
