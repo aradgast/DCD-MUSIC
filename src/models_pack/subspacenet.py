@@ -523,8 +523,7 @@ class SubspaceNet(ParentModel):
             if self.train_loss_type == "rmspe":
                 self.train_loss = RMSPELoss()
             elif self.train_loss_type == "music_spectrum":
-                self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                    sensors_distance=self.system_model.dist_array_elems["narrowband"])
+                self.train_loss = MusicSpectrumLoss(system_model=self.system_model)
             else:
                 raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.loss_type}")
             self.validation_loss = RMSPELoss()
@@ -534,8 +533,7 @@ class SubspaceNet(ParentModel):
             if self.train_loss_type == "rmspe":
                 self.train_loss = CartesianLoss()
             elif self.train_loss_type == "music_spectrum":
-                self.train_loss = MusicSpectrumLoss(array=torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device),
-                                                    sensors_distance=self.system_model.dist_array_elems["narrowband"])
+                self.train_loss = MusicSpectrumLoss(system_model=self.system_model)
             else:
                 raise ValueError(f"SubspaceNet.set_criterion: Unrecognized loss type: {self.train_loss_type}")
             self.validation_loss = CartesianLoss()

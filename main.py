@@ -42,8 +42,8 @@ simulation_commands = {
     "SAVE_TO_FILE": False,
     "CREATE_DATA": True,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": False,
-    "SAVE_MODEL": False,
+    "TRAIN_MODEL": True,
+    "SAVE_MODEL": True,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
@@ -58,7 +58,7 @@ system_model_params = {
     "snr": 10,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
@@ -66,7 +66,7 @@ system_model_params = {
     "doa_resolution": 1, # The resolution of the DOA values in degrees
     "max_range_ratio_to_limit": 0.5, # The ratio of the maximum range in respect to the Fraunhofer distance
     "range_resolution": 1, # The resolution of the range values in meters
-    "wavelength": 1, # The carrier wavelength of the signal in meters
+    "wavelength": 0.06, # The carrier wavelength of the signal in meters
 }
 model_config = {
     "model_type": "SubspaceNet",  # SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC
@@ -77,9 +77,10 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["train_loss_type"] = "music_spectrum"  # music_spectrum, rmspe, beamformerloss
     model_config["model_params"]["tau"] = 8
     model_config["model_params"]["field_type"] = "Near"  # Far, Near
-    model_config["model_params"]["regularization"] = "aic" # aic, mdl, threshold, None
+    model_config["model_params"]["regularization"] = None # aic, mdl, threshold, None
     model_config["model_params"]["variant"] = "small"  # big, small
     model_config["model_params"]["norm_layer"] = True
+    model_config["model_params"]["batch_norm"] = False
 
 elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["tau"] = 8
@@ -91,10 +92,10 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 100,
-    "train_test_ratio": 1,
+    "samples_size": 4096,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 128,
+    "batch_size": 64,
     "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
@@ -129,14 +130,14 @@ evaluation_params = {
         #             "regularization": "aic",
         #             "variant": "big"
         #               },
-        "NFSubspaceNet": {
-                        "model_name": "SubspaceNet",
-                        "tau": 8,
-                        "diff_method": "music_2D",
-                        "train_loss_type": "music_spectrum",
-                        "field_type": "near",
+        # "NFSubspaceNet": {
+                        # "model_name": "SubspaceNet",
+                        # "tau": 8,
+                        # "diff_method": "music_2D",
+                        # "train_loss_type": "music_spectrum",
+                        # "field_type": "near",
                         # "regularization": "aic",
-                        },
+                        # },
         # "NFSubspaceNet_V2": {
         #                 "model_name": "SubspaceNet",
         #                 "tau": 8,

@@ -11,20 +11,20 @@ import argparse
 from src.system_model import SystemModel, SystemModelParams
 
 # default values for the argparse
-number_sensors = 15
-number_sources = "2,8"
+number_sensors = 127
+number_sources = "2"
 number_snapshots = 100
 snr = 10
 field_type = "Near"
 signal_type = "narrowband"
 signal_nature = "non-coherent"
 err_loc_sv = 0.0
-wavelength = 1
+wavelength = 0.06
 tau = 8
-sample_size = 20000
+sample_size = 4096
 train_test_ratio = 0.0
-batch_size = 128
-epochs = 100
+batch_size = 64
+epochs = 50
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
@@ -33,7 +33,7 @@ step_size = 50
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
-regularization = "aic"
+regularization = None
 variant = "small"
 wandb_flag = False
 

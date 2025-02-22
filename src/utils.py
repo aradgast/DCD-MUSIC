@@ -421,7 +421,7 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float):
     Kx_Out = Kx_garm + eps_addition
 
     # check if the matrix is Hermitian - A^H = A
-    if not (torch.abs(Kx_Out - Kx_Out.conj().transpose(1, 2)) < 1e-10).all():
+    if not (torch.abs(Kx_Out - Kx_Out.conj().transpose(1, 2)) < 1e-6).all():
         warnings.warn("gram_diagonal_overload: The matrix is not PSD, adding more eps to the diagonal elements.")
         Kx_Out = Kx_Out + eps_addition * torch.eye(Kx_Out.shape[-1]).to(device)
 

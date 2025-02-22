@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
 from src.utils import device
+from src.system_model import SystemModel
 
 class MusicSpectrumLoss(nn.Module):
-    def __init__(self, array: torch.Tensor, sensors_distance: float, mode:str = "inverse_spectrum",
+    def __init__(self, system_model: SystemModel, mode:str = "inverse_spectrum",
                  aggregate: str = "sum"):
         super(MusicSpectrumLoss, self).__init__()
-        self.array = array
-        self.sensors_distance = sensors_distance
-        self.number_sensors = array.shape[0]
+        self.system_model = system_model
+        self.array = torch.from_numpy(system_model.array).to(torch.float32).to(device).unsqueeze(-1)
+        self.number_sensors = system_model.params.N
+        self.sensors_distance = system_model.params.wavelength / 2
         if mode not in ["spectrum", "inverse_spectrum"]:
             raise Exception(f"MusicSpectrumLoss: mode {mode} is not defined")
         self.mode = mode
@@ -26,7 +28,7 @@ class MusicSpectrumLoss(nn.Module):
         time_delay = torch.einsum("nm, ban -> ban",
                                   self.array,
                                   torch.sin(angles).repeat(1, 1, self.number_sensors) * self.sensors_distance)
-        search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
+        search_grid = torch.exp(-2 * 1j * torch.pi * time_delay / self.system_model.params.wavelength)
         var1 = torch.bmm(search_grid.conj(), kwargs["noise_subspace"].to(torch.complex128))
         inverse_spectrum = torch.norm(var1, dim=-1)
         if self.mode == "inverse_spectrum":
@@ -51,7 +53,7 @@ class MusicSpectrumLoss(nn.Module):
 
         time_delay = first_order + second_order
 
-        search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
+        search_grid = torch.exp(2 * -1j * torch.pi * time_delay / self.system_model.params.wavelength)
         var1 = torch.einsum("bak, bkl -> bal",
                             search_grid.conj().transpose(1, 2)[:, :, :noise_subspace.shape[1]],
                             noise_subspace)

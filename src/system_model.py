@@ -24,7 +24,8 @@ import matplotlib.pyplot as plt
 
 @dataclass
 class SystemModelParams:
-    """Class for setting parameters of a system model.
+    """
+    Class for setting parameters of a system model.
     Initialize the SystemModelParams object.
 
     Parameters:
@@ -62,7 +63,7 @@ class SystemModelParams:
     eta = 0
     bias = 0
     sv_noise_var = 0
-    doa_range = 55
+    doa_range = 60
     doa_resolution = 1
     max_range_ratio_to_limit = 0.5
     range_resolution = 1
@@ -119,6 +120,7 @@ class SystemModel(object):
         self.min_freq = None
         self.f_rng = None
         self.params = system_model_params
+        self.params.carrier_frequency = 3e8 / self.params.wavelength
         # Assign signal type parameters
         self.define_scenario_params()
         # Define array indices
@@ -283,7 +285,7 @@ class SystemModel(object):
         else:
             mis_geometry_noise = 0.0
 
-        steering_matrix = torch.exp(-2 * 1j * torch.pi * self.params.wavelength * time_delay) + mis_geometry_noise
+        steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay / self.params.wavelength) + mis_geometry_noise
 
         return steering_matrix
 
@@ -385,7 +387,7 @@ class SystemModel(object):
         else:
             mis_geometry_noise = 0.0
 
-        steering_matrix = torch.exp(-2 * 1j * torch.pi * self.params.wavelength * time_delay) + mis_geometry_noise
+        steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay / self.params.wavelength) + mis_geometry_noise
         if torch.isnan(steering_matrix).any():
             raise ValueError("SystemModel.steering_vec_near_field: steering matrix contains NaN values")
         return steering_matrix
@@ -424,7 +426,7 @@ class SystemModel(object):
         sqrt_delay = torch.sqrt(1 + torch.pow(sensor_dist_ratio, 2) - 2 * sensor_dist_ratio * torch.sin(theta).transpose(0, 1))
         time_delay = distances.transpose(0,1) * (1 - sqrt_delay)
 
-        steering_matrix = torch.exp(-2 * 1j * self.params.wavelength * torch.pi * time_delay)
+        steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay / self.params.wavelength)
         return steering_matrix
 
     def plot_system(self):
