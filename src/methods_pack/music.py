@@ -171,13 +171,13 @@ class MUSIC(SubspaceMethod):
         """
         # steering_dict = self.steering_dict.to(device)
         if self.system_model.params.field_type.startswith("far"):
-            steering_dict = self.steering_dict.to(device)
+            steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
             var1 = torch.einsum("an, bnm -> bam", steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
                                 noise_subspace)
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
-                steering_dict = self.steering_dict.conj().transpose(0, 2).transpose(0, 1).to(device)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].conj().transpose(0, 2).transpose(0, 1).to(device)
                 try:
                     var1 = torch.einsum("adk, bkl -> badl",
                                         steering_dict,
@@ -197,12 +197,12 @@ class MUSIC(SubspaceMethod):
                         del var1
                 
             elif self.estimation_params.endswith("angle"):
-                steering_dict = self.steering_dict.to(device)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
                 var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1).T
             elif self.estimation_params.startswith("range"):
-                steering_dict = self.steering_dict.to(device)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
                 var1 = torch.einsum("dbn, nbm -> bdm", steering_dict.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1)

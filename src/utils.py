@@ -110,14 +110,9 @@ def spatial_smoothing_covariance(x: torch.Tensor):
     number_of_sub_arrays = sensor_number - sub_array_size + 1
     # Initialize covariance matrix
     Rx_smoothed = torch.zeros(batch_size, sub_array_size, sub_array_size, dtype=torch.complex128, device=device)
-
+    Rx = sample_covariance(x)
     for j in range(number_of_sub_arrays):
-        # Run over all sub-arrays
-        x_sub = x[:, j:j + sub_array_size, :]
-        # Calculate sample covariance matrix for each sub-array
-        sub_covariance = torch.einsum("bmt, btl -> bml", x_sub, torch.conj(x_sub).transpose(1, 2)) / (samples_number-1)
-        # Aggregate sub-arrays covariances
-        Rx_smoothed += sub_covariance.to(device) / number_of_sub_arrays
+        Rx_smoothed += Rx[:, j:j + sub_array_size, j:j + sub_array_size] / number_of_sub_arrays
     # Divide overall matrix by the number of sources
     return Rx_smoothed
 
