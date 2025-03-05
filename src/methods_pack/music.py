@@ -249,11 +249,11 @@ class MUSIC(SubspaceMethod):
 
 
 
-    def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0, method: str = "heatmap", music_spectrum = None):
+    def plot_spectrum(self, highlight_corrdinates=None, batch: int = 0, method: str = "heatmap", music_spectrum = None, add_title: bool = False, save: bool = False):
         if self.estimation_params == "angle, range":
-            self._plot_3d_spectrum(highlight_corrdinates, batch, method, music_spectrum=music_spectrum)
+            self._plot_3d_spectrum(highlight_corrdinates, batch, method, music_spectrum=music_spectrum, add_title=add_title, save=save)
         else:
-            self._plot_1d_spectrum(highlight_corrdinates, batch)
+            self._plot_1d_spectrum(highlight_corrdinates, batch, add_title=add_title, save=save)
 
     def test_step(self, batch, batch_idx, model: nn.Module=None):
         x, sources_num, label, masks = batch
@@ -284,8 +284,8 @@ class MUSIC(SubspaceMethod):
             if self.system_model.params.signal_nature == "non-coherent":
                 Rx = self.pre_processing(x, mode="sample")
             else:
-                Rx = self.pre_processing(x, mode="sps")
-                # Rx = self.pre_processing(x, mode="sample")
+                # Rx = self.pre_processing(x, mode="sps")
+                Rx = self.pre_processing(x, mode="sample")
         predictions, sources_num_estimation, _ = self(Rx, number_of_sources=sources_num)
         if self.estimation_params == "angle, range":
             angles_prediction, ranges_prediction = predictions
@@ -499,7 +499,7 @@ class MUSIC(SubspaceMethod):
     def init_cells(self, coeff: float = 0.3):
         self.__init_cells(coeff)
 
-    def _plot_1d_spectrum(self, highlight_corrdinates, batch):
+    def _plot_1d_spectrum(self, highlight_corrdinates, batch, add_title: bool = False, save: bool = False):
         if self.estimation_params == "angle":
             x = np.rad2deg(self.angles_dict.detach().cpu().numpy())
             x_label = "angle [deg]"
@@ -514,14 +514,18 @@ class MUSIC(SubspaceMethod):
         if highlight_corrdinates is not None:
             for idx, dot in enumerate(highlight_corrdinates):
                 plt.vlines(dot, np.min(y), np.max(y), colors='r', linestyles='dashed', label=f"Ground Truth")
-        plt.title("MUSIC SPECTRUM")
+        if add_title:
+            plt.title("MUSIC SPECTRUM")
         plt.grid()
         plt.ylabel("Spectrum power")
         plt.xlabel(x_label)
         plt.legend()
+        plt.tight_layout()
+        if save:
+            plt.savefig("1d_music_spectrum.pdf")
         plt.show()
 
-    def _plot_3d_spectrum(self, highlight_coordinates, batch, method, music_spectrum=None):
+    def _plot_3d_spectrum(self, highlight_coordinates, batch, method, music_spectrum=None, add_title: bool = False, save: bool = False):
         """
         Plot the MUSIC 2D spectrum.
 
@@ -551,7 +555,8 @@ class MUSIC(SubspaceMethod):
                     label='Ground Truth',
                     marker="x"
                 )
-            ax.set_title('MUSIC spectrum')
+            if add_title:
+                ax.set_title('MUSIC spectrum')
             ax.set_xlim(distances[0], distances[-1])
             ax.set_ylim(np.rad2deg(angles[0]), np.rad2deg(angles[-1]))
             # Adding labels
@@ -564,6 +569,9 @@ class MUSIC(SubspaceMethod):
                 ax.legend()  # Adding a legend
 
             # Display the plot
+            plt.tight_layout()
+            if save:
+                plt.savefig("3d_music_spectrum.pdf")
             plt.show()
         elif method == "heatmap":
             xmin, xmax = np.min(self.ranges_dict.cpu().detach().numpy()), np.max(self.ranges_dict.cpu().detach().numpy())
@@ -583,12 +591,15 @@ class MUSIC(SubspaceMethod):
                     # plt.plot(x, y, marker='x', linestyle='', color='green', markersize=8)
                 plt.legend()
             plt.colorbar()
-            plt.title("MUSIC Spectrum heatmap")
+            if add_title:
+                plt.title("MUSIC Spectrum heatmap")
             plt.xlabel("Distances [m]")
             plt.ylabel("Angles [deg]")
 
             plt.figaspect(2)
-            plt.savefig("music_spectrum.png")
+            plt.tight_layout()
+            if save:
+                plt.savefig("heatmap_music_spectrum.pdf")
             plt.show()
         elif method == "slice":
             x = self.ranges_dict.detach().cpu().numpy()
@@ -599,11 +610,15 @@ class MUSIC(SubspaceMethod):
             if highlight_coordinates is not None:
                 for idx, dot in enumerate(highlight_coordinates[1:]):
                     plt.vlines(dot, np.min(y), np.max(y), colors='r', linestyles='dashed', label=f"Ground Truth")
-            plt.title(f"MUSIC SPECTRUM Slice at {torch.round(torch.rad2deg(self.angles_dict[highlight_coordinates[0]]))}")
+            if add_title:
+                plt.title(f"MUSIC SPECTRUM Slice at {torch.round(torch.rad2deg(self.angles_dict[highlight_coordinates[0]]))}")
             plt.grid()
             plt.ylabel("Spectrum power")
             plt.xlabel(x_label)
             plt.legend()
+            plt.tight_layout()
+            if save:
+                plt.savefig("slice_music_spectrum.pdf")
             plt.show()
 
     def __set_search_grid_far_field(self):
