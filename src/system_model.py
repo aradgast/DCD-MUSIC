@@ -261,8 +261,9 @@ class SystemModel(object):
         dist_array_elems = self.dist_array_elems["narrowband"]
 
         if not nominal:
+            eta = self.params.eta * self.params.wavelength
             dist_array_elems += torch.from_numpy(
-                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=self.params.N))
+                np.random.uniform(low=-1 * eta, high=eta, size=self.params.N))
             dist_array_elems = dist_array_elems.unsqueeze(-1).to(local_device)
 
 
@@ -333,8 +334,9 @@ class SystemModel(object):
 
         dist_array_elems = self.dist_array_elems["narrowband"]
         if not nominal:
+            eta = self.params.eta * self.params.wavelength
             dist_array_elems += torch.from_numpy(
-                np.random.uniform(low=-1 * self.params.eta, high=self.params.eta, size=N)).to(local_device)
+                np.random.uniform(low=-1 * eta, high=eta, size=N)).to(local_device)
             dist_array_elems = dist_array_elems.unsqueeze(-1)
         if isinstance(dist_array_elems, float):
             dist_array_elems = dist_array_elems * torch.ones(N, 1, device=local_device, dtype=torch.float64)
