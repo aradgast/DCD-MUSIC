@@ -47,9 +47,29 @@ class Samples(SystemModel):
 
         """
         super().__init__(system_model_params)
+        self.angles = None
         self.distances = None
 
-    def set_doa(self, doa, M):
+    def set_labels(self, number_of_sources: int, angles: list, distances: list):
+        if self.params.field_type.lower() == "far":
+            self.set_angles(angles, number_of_sources)
+        elif self.params.field_type.lower() in {"near", "full"}:
+            self.set_angles(angles, number_of_sources)
+            self.set_distances(distances, number_of_sources)
+        else:
+            raise ValueError(f"Samples.set_labels: Field type {self.params.field_type} is not defined")
+
+    def get_labels(self):
+        if self.params.field_type.lower() == "far":
+            return torch.tensor(self.angles, dtype=torch.float32)
+        elif self.params.field_type.lower() in {"near", "full"}:
+            labels = torch.cat((torch.tensor(self.angles, dtype=torch.float32), torch.tensor(self.distances, dtype=torch.float32)), dim=0)
+            return labels
+        else:
+            raise ValueError(f"Samples.get_labels: Field type {self.params.field_type} is not defined")
+
+
+    def set_angles(self, doa: list, M: int):
         """
         Sets the direction of arrival (DOA) for the signals.
 
@@ -59,7 +79,7 @@ class Samples(SystemModel):
 
         """
 
-        def create_doa_with_gap(gap: float, M):
+        def create_doa_with_gap(gap: float, M: int):
             """Create angles with a value gap.
 
             Args:
@@ -125,12 +145,12 @@ class Samples(SystemModel):
 
         if doa == None:
             # Generate angels with gap greater than 0.2 rad (nominal case)
-            self.doa = np.array(create_doa_with_gap(gap=10, M=M)) * D2R
+            self.angles = np.array(create_doa_with_gap(gap=10, M=M)) * D2R
         else:
             # Generate
-            self.doa = np.deg2rad(doa)
+            self.angles = np.deg2rad(doa)
 
-    def set_range(self, distance: list | np.ndarray, M) -> np.ndarray:
+    def set_distances(self, distance: list | np.ndarray, M: int) -> np.ndarray:
         """
 
         Args:
@@ -194,28 +214,21 @@ class Samples(SystemModel):
         # Generate noise matrix
         noise = self.noise_creation(noise_mean, noise_variance)
         noise = torch.from_numpy(noise)
+        if self.params.signal_type.startswith("broadband"):
+            raise Exception("Samples.samples_creation: Broadband signal type is not defined for far field")
         if self.params.field_type.startswith("far"):
-            A = self.steering_vec(self.doa, f_c=self.f_rng[self.params.signal_type])
-            if self.params.signal_type.startswith("broadband"):
-                samples = torch.einsum("nmk, mk -> nk", A, signal)
-            else:
-                samples = (A @ signal) + noise
+            A = self.steering_vec(self.angles, f_c=self.f_rng[self.params.signal_type])
+            samples = (A @ signal) + noise
         elif self.params.field_type.startswith("near"):
-            A = self.steering_vec(angles=self.doa, ranges=self.distances, nominal=False, generate_search_grid=False,
+            A = self.steering_vec(angles=self.angles, ranges=self.distances, nominal=False, generate_search_grid=False,
                                   f_c=self.f_rng[self.params.signal_type])
-            if self.params.signal_type.startswith("broadband"):
-                samples = torch.einsum("nmk, mk -> nk", A, signal) + noise
-            else:
-                samples = (A @ signal) + noise
+            samples = (A @ signal) + noise
         elif self.params.field_type.startswith("full"):
-            A = self.steering_vec_full_model(angles=self.doa,
+            A = self.steering_vec_full_model(angles=self.angles,
                                              ranges=self.distances)
             samples = (A @ signal) + noise
         else:
             raise Exception(f"Samples.params.field_type: Field type {self.params.field_type} is not defined")
-        if self.params.signal_type.startswith("broadband"):
-            # transform the signal to the time domain in broadband settings
-            samples = torch.fft.ifft(samples, n=self.params.T, dim=1) + noise
         return samples, signal, A, noise
 
     def noise_creation(self, noise_mean, noise_variance):
@@ -241,10 +254,6 @@ class Samples(SystemModel):
             )
             + noise_mean
         )
-        # for Broadband signal_type Noise represented in the frequency domain
-        # if self.params.signal_type.startswith("broadband"):
-            # noise  = np.fft.fft(noise,axis=1)
-            # noise  = np.fft.fft(noise, n=self.params.number_subcarriers,axis=1)
         return noise
 
     def signal_creation(self, signal_mean: float = 0, signal_variance: float = 1, source_number: int = None):
@@ -299,41 +308,6 @@ class Samples(SystemModel):
                     + signal_mean
                 )
                 return np.repeat(sig, M, axis=0)
-
-        # OFDM Broadband signal creation
-        elif self.params.signal_type.startswith("broadband"):
-            if self.params.signal_nature == "non-coherent":
-                # create M non-coherent broadband signals
-                # each source, has K subcarriers which are generated as a complex number.
-                # the symbols are of size M x K
-                symbols = (amplitude
-                           * (
-                                   np.random.randn(M, self.params.number_subcarriers)
-                                   + 1j * np.random.randn(M, self.params.number_subcarriers)))
-            elif self.params.signal_nature == "coherent":
-                # Coherent signals: same amplitude and phase for all signals
-                symbols = (amplitude
-                            * (
-                                      np.random.randn(1, self.params.number_subcarriers)
-                                      + 1j * np.random.randn(1, self.params.number_subcarriers)))
-                symbols = np.repeat(symbols, M, axis=0)
-            # each symbol is multiplied by the phase shift of the subcarrier
-            # the phase shift is a function of the subcarrier frequency and the time
-            # the phase shift is of size K x T
-            phase_shift = np.exp(
-                1j * 2 * np.pi
-                * (np.arange(self.params.number_subcarriers)[:, None] - self.params.number_subcarriers // 2) @ self.time_axis["broadband"][:, None].T
-                * self.params.signal_bandwidth
-                / (self.params.number_subcarriers)
-            )
-            # the signal is the product of the symbols and the phase shift normalized by the number of subcarriers
-            # the signal is of size M x T
-            signal = symbols @ phase_shift / self.params.number_subcarriers
-            # the creation of this signal is in the time domain, if we want to multiply it by the steering vector
-            # we need to transform it to the frequency domain
-            signal_frq = np.fft.fft(signal, n=self.params.number_subcarriers, axis=1)
-            # signal_frq = np.fft.fft(signal, axis=1)
-            return signal_frq
 
         else:
             raise Exception(f"signal type {self.params.signal_type} is not defined")

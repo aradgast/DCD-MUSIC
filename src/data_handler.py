@@ -67,35 +67,27 @@ def create_dataset(
         tuple: A tuple containing the desired dataset and the samples model.
 
     """
-    time_series = []
-    labels = []
-    sources_num = []
+    time_series, labels, sources_num = [], [], []
     samples_model = Samples(system_model_params)
 
-    for i in tqdm(range(samples_size), desc="Creating dataset"):
-        if isinstance(system_model_params.M, tuple):
+    M_is_tuple = isinstance(system_model_params.M, tuple)
+
+    for _ in tqdm(range(samples_size), desc="Creating dataset"):
+        if M_is_tuple:
             low_M, high_M = system_model_params.M
             high_M = min(high_M, system_model_params.N-1)
-            if low_M >= high_M:
-                warnings.warn("create_dataset: low_M should be less than high_M")
-                M = low_M
-            else:
-                M = np.random.randint(low_M, high_M)
+            # make sure that low_M is less than high_M, otherwise, the randint function will raise an error
+            M = low_M if low_M >= high_M else random.randint(low_M, high_M)
         else:
             M = system_model_params.M
         # Samples model creation
-        samples_model.set_doa(true_doa, M)
-        if system_model_params.field_type.lower() in ["near", "full"]:
-            samples_model.set_range(true_range, M)
+        samples_model.set_labels(M, true_doa, true_range)
         # Observations matrix creation
         X = samples_model.samples_creation(
                 noise_mean=0, noise_variance=1, signal_mean=0, signal_variance=1, source_number=M
             )[0]
         # Ground-truth creation
-        Y = torch.tensor(samples_model.doa, dtype=torch.float32)
-        if system_model_params.field_type.lower() in ["near", "full"]:
-            Y1 = torch.tensor(samples_model.distances, dtype=torch.float32)
-            Y = torch.cat((Y, Y1), dim=0)
+        Y = samples_model.get_labels()
         time_series.append(X)
         labels.append(Y)
         sources_num.append(M)

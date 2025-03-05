@@ -64,26 +64,15 @@ class SubspaceNet(ParentModel):
         self.p = 0.2
         self.regularization = regularization
         self.psd_epsilon = psd_epsilon
-        self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2) if not batch_norm else nn.Sequential(
-            nn.Conv2d(self.tau, 16, kernel_size=2),
-            nn.BatchNorm2d(16))
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=2) if not batch_norm else nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=2),
-            nn.BatchNorm2d(32))
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=2) if not batch_norm else nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=2),
-            nn.BatchNorm2d(64))
+        self.conv1 = nn.Conv2d(self.tau, 16, kernel_size=2)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=2)
         self.extra_conv4 = nn.Identity() # initialize as identity, set up in the __setup_big_ssn
         self.extra_deconv1 = nn.Identity() # initialize as identity, set up in the __setup_big_ssn
-        self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2) if not batch_norm else nn.Sequential(
-            nn.ConvTranspose2d(128, 32, kernel_size=2),
-            nn.BatchNorm2d(32))
-        self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2) if not batch_norm else nn.Sequential(
-            nn.ConvTranspose2d(64, 16, kernel_size=2),
-            nn.BatchNorm2d(16))
-        self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2) if not batch_norm else nn.Sequential(
-            nn.ConvTranspose2d(32, 1, kernel_size=2),
-            nn.BatchNorm2d(1))
+        self.deconv2 = nn.ConvTranspose2d(128, 32, kernel_size=2)
+        self.deconv3 = nn.ConvTranspose2d(64, 16, kernel_size=2)
+        self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
+        self.__setupt_batch_norm(batch_norm)
         self.DropOut = nn.Dropout(self.p)
         self.antirectifier = AntiRectifier()
         self.__setupt_big_ssn(variant)
@@ -294,6 +283,28 @@ class SubspaceNet(ParentModel):
             self.norm_layer = L2NormLayer()
         else:
             self.norm_layer = nn.Identity()
+
+    def __setupt_batch_norm(self, batch_norm: bool):
+        # update conv and deconv layer to be sequential with batch norm
+        if batch_norm:
+            self.conv1 = nn.Sequential(
+                self.conv1,
+                nn.BatchNorm2d(16))
+            self.conv2 = nn.Sequential(
+                self.conv2,
+                nn.BatchNorm2d(32))
+            self.conv3 = nn.Sequential(
+                self.conv3,
+                nn.BatchNorm2d(64))
+            self.deconv2 = nn.Sequential(
+                self.deconv2,
+                nn.BatchNorm2d(32))
+            self.deconv3 = nn.Sequential(
+                self.deconv3,
+                nn.BatchNorm2d(16))
+            self.deconv4 = nn.Sequential(
+                self.deconv4,
+                nn.BatchNorm2d(1))
 
     def __init_reshaper(self):
         h_dim = 2 * (self.N - self.reshaper_target_size) + 1

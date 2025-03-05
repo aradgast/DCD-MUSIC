@@ -179,7 +179,7 @@ class ModelGenerator(object):
         elif self.model_type.lower() == "transmusic":
             self.__verify_transmusic_params(model_params)
         else:
-            raise ValueError(f"ModelGenerator.__verify_model_params:"
+            warnings.warn(f"ModelGenerator.__verify_model_params:"
                              f" currently there is no verification support for {self.model_type}")
 
     def __verify_transmusic_params(self, model_params):
@@ -222,7 +222,7 @@ class ModelGenerator(object):
                              f"train_loss_type has to be a str and the possible values are rmspe or music_spectrum.")
 
         regularization = model_params.get("regularization")
-        if (not isinstance(regularization, str)) or (not (regularization.lower() in ["threshold", "mdl", "aic"])) or (not None):
+        if (not isinstance(regularization, str)) or (not (regularization.lower() in ["threshold", "mdl", "aic"])) or (regularization is not None):
             raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                              f"regularization has to be a str and the possible values are threshold, mdl or aic. or None")
 
