@@ -371,6 +371,7 @@ class Trainer:
             try:
                 wandb.init(entity="gast", project="dcd_music",
                            name=self.training_params.get('simulation_name'),
+                           tags=[self.model._get_name()],
                            config=self.training_params,
                            allow_val_change=True)
                 try:

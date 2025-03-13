@@ -22,7 +22,6 @@ err_loc_sv = 0.0
 wavelength = 0.06
 tau = 8
 sample_size = 4096
-train_test_ratio = 0.0
 batch_size = 64
 epochs = 50
 optimizer = "Adam"
@@ -89,11 +88,9 @@ def train_dcd_music(*args, **kwargs):
         .set_parameter("sv_noise_var", SYSTEM_MODEL_PARAMS["sv_noise_var"])
         .set_parameter("wavelength", SYSTEM_MODEL_PARAMS["wavelength"])
     )
-    system_model = SystemModel(system_model_params)
 
     # Define samples size
     samples_size = TRAINING_PARAMS["samples_size"]  # Overall dateset size
-    train_test_ratio = TRAINING_PARAMS["train_test_ratio"]  # training and testing datasets ratio
 
     # Print new simulation intro
     print("------------------------------------")
@@ -103,12 +100,11 @@ def train_dcd_music(*args, **kwargs):
     if load_data:
         try:
             train_dataset = load_datasets(
-                system_model_params=system_model_params,
-                samples_size=samples_size,
-                datasets_path=datasets_path,
-                train_test_ratio=train_test_ratio,
-                is_training=True,
-            )
+                    system_model_params=system_model_params,
+                    samples_size=samples_size,
+                    datasets_path=datasets_path,
+                    is_training=True,
+                )
         except Exception as e:
             print(e)
             print("#############################################")
@@ -123,7 +119,7 @@ def train_dcd_music(*args, **kwargs):
         train_dataset, _ = create_dataset(
             system_model_params=system_model_params,
             samples_size=samples_size,
-            save_datasets=True,
+            save_datasets=False,
             datasets_path=datasets_path,
             true_doa=TRAINING_PARAMS["true_doa_train"],
             true_range=TRAINING_PARAMS["true_range_train"],
@@ -133,7 +129,7 @@ def train_dcd_music(*args, **kwargs):
     model_config = (
         ModelGenerator()
         .set_model_type("SubspaceNet")
-        .set_system_model(system_model)
+        .set_system_model(system_model_params)
         .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
                            "tau": MODEL_PARAMS.get("tau"), "field_type": "far",
                            "regularization": MODEL_PARAMS.get("regularization"),
@@ -208,7 +204,6 @@ def parse_arguments():
     parser.add_argument("-v", "--variant", type=str, help="Model variant", default=variant)
 
     parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=sample_size)
-    parser.add_argument('-ratio', type=float, help='Train test ratio', default=train_test_ratio)
     parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=batch_size)
     parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=epochs)
     parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default=optimizer)
@@ -265,8 +260,8 @@ if __name__ == "__main__":
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,
-        "CREATE_DATA": True,
-        "LOAD_MODEL": True,
+        "CREATE_DATA": False,
+        "LOAD_MODEL": False,
         "SAVE_MODEL": True,
     }
     train_dcd_music(simulation_commands=simulation_commands,

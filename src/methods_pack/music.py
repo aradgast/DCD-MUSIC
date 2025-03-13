@@ -256,7 +256,7 @@ class MUSIC(SubspaceMethod):
             self._plot_1d_spectrum(highlight_corrdinates, batch, add_title=add_title, save=save)
 
     def test_step(self, batch, batch_idx, model: nn.Module=None):
-        x, sources_num, label, masks = batch
+        x, sources_num, label = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
@@ -265,7 +265,6 @@ class MUSIC(SubspaceMethod):
             angles, ranges = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(device)
             ranges = ranges.to(device)
-            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
             angles = label.to(device)  # only angles
         # Check if the sources number is the same for all samples in the batch

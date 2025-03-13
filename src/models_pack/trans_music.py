@@ -232,7 +232,7 @@ class TransMUSIC(ParentModel):
         raise NotImplementedError
 
     def __training_step_far_field(self, batch, batch_idx):
-        x, sources_num, angles, masks = batch
+        x, sources_num, angles = batch
         x = x.to(device)
         angles = angles.to(device)
         if x.dim() == 2:
@@ -257,7 +257,7 @@ class TransMUSIC(ParentModel):
         return loss, acc, None
 
     def __training_step_near_field(self, batch, batch_idx):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -265,7 +265,6 @@ class TransMUSIC(ParentModel):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
         x = x.requires_grad_(True).to(device)
         angles = angles.requires_grad_(True).to(device)
         ranges = ranges.requires_grad_(True).to(device)
@@ -286,7 +285,7 @@ class TransMUSIC(ParentModel):
         return loss, acc, None
 
     def __valid_step_near_field(self, batch, batch_idx, is_test: bool=False):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -294,7 +293,6 @@ class TransMUSIC(ParentModel):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
         x = x.to(device)
         angles = angles.to(device)
         ranges = ranges.to(device)

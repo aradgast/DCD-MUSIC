@@ -127,7 +127,7 @@ class DCDMUSIC(SubspaceNet):
         return {"tau": self.tau, "diff_methods": (angle_extractor_diff_method ,diff_method)}
 
     def training_step(self, batch, batch_idx):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -135,7 +135,6 @@ class DCDMUSIC(SubspaceNet):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
         x = x.requires_grad_(True).to(device)
         angles = angles.requires_grad_(True).to(device)
         ranges = ranges.requires_grad_(True).to(device)
@@ -163,7 +162,7 @@ class DCDMUSIC(SubspaceNet):
 
 
     def validation_step(self, batch, batch_idx, is_test: bool=False):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -171,7 +170,6 @@ class DCDMUSIC(SubspaceNet):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
         x = x.to(device)
         angles = angles.to(device)
         ranges = ranges.to(device)

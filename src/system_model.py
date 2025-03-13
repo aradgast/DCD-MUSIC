@@ -86,7 +86,7 @@ class SystemModelParams:
 
 
 class SystemModel(object):
-    def __init__(self, system_model_params: SystemModelParams):
+    def __init__(self, system_model_params: SystemModelParams, nominal: bool=False):
         """Class used for defining the settings of the system model.
 
         Attributes:
@@ -127,6 +127,36 @@ class SystemModel(object):
         self.create_array()
         # Calculation for the Fraunhofer and Fresnel
         self.fraunhofer, self.fresnel = self.calc_fresnel_fraunhofer_distance()
+        self.eta = self.__set_eta()
+        if not nominal:
+            self.location_noise = self.get_distance_noise(True)
+    
+    def __set_eta(self):
+        """
+        Set the eta value for the array of sensors.
+        Returns:
+            float: the eta value.
+        """
+        if self.params.eta == 0:
+            return 0
+        else:
+            return self.params.eta * self.params.wavelength
+    
+    def get_distance_noise(self, initial: bool = False):
+        """
+        Get the distance noise for the array of sensors.
+        Returns:
+            np.ndarray: the distance noise.
+        """
+        if initial:
+            if self.eta == 0:
+                return torch.zeros(self.params.N)
+            else:
+                noise = torch.from_numpy(np.random.uniform(low=-1 * self.eta, high=self.eta, size=self.params.N))
+                print("SV noise: ", noise)
+                return noise
+        else:
+            return self.location_noise
 
     def define_scenario_params(self):
         """Defines the signal type parameters based on the specified frequency values."""
@@ -205,7 +235,7 @@ class SystemModel(object):
 
     def steering_vec(
             self, angles: [np.ndarray, torch.Tensor], ranges: [np.ndarray, torch.Tensor] = None, array_form: str = "ula",
-            nominal: bool = True, generate_search_grid: bool = False, f_c: np.ndarray = None) -> torch.Tensor:
+            nominal: bool = True, generate_search_grid: bool = False, f_c: np.ndarray = None, fix_sv_noise: bool=False) -> torch.Tensor:
         """
         Computes the steering vector based on the specified parameters.
         Args:
@@ -222,18 +252,18 @@ class SystemModel(object):
         """
         if array_form.startswith("ula"):
             if self.params.field_type.startswith("far"):
-                return self.steering_vec_far_field(angles, nominal=nominal, f_c=f_c)
+                return self.steering_vec_far_field(angles, nominal=nominal, f_c=f_c, fix_sv_noise=fix_sv_noise)
             elif self.params.field_type.startswith("near"):
                 return self.steering_vec_near_field(angles, ranges=ranges,
                                                     nominal=nominal, generate_search_grid=generate_search_grid,
-                                                    f_c=f_c)
+                                                    f_c=f_c, fix_sv_noise=fix_sv_noise)
             else:
                 raise Exception(f"SystemModel.field_type:"
                                 f" field type of approximation {self.params.field_type} is not defined")
         else:
             raise Exception(f"SystemModel.steering_vec: array form {array_form} is not defined")
 
-    def steering_vec_far_field(self, angles: [np.ndarray, torch.Tensor], nominal: bool = False, f_c: np.ndarray=None) -> torch.Tensor:
+    def steering_vec_far_field(self, angles: [np.ndarray, torch.Tensor], nominal: bool = False, f_c: np.ndarray=None, fix_sv_noise: bool = False) -> torch.Tensor:
         """
         Computes the steering vector based on the specified parameters.
 
@@ -261,9 +291,7 @@ class SystemModel(object):
         dist_array_elems = self.dist_array_elems["narrowband"]
 
         if not nominal:
-            eta = self.params.eta * self.params.wavelength
-            dist_array_elems += torch.from_numpy(
-                np.random.uniform(low=-1 * eta, high=eta, size=self.params.N))
+            dist_array_elems += self.get_distance_noise(fix_sv_noise).to(local_device)
             dist_array_elems = dist_array_elems.unsqueeze(-1).to(local_device)
 
 
@@ -291,7 +319,7 @@ class SystemModel(object):
         return steering_matrix
 
     def steering_vec_near_field(self, angles: [np.ndarray, torch.Tensor], ranges: [np.ndarray, torch.Tensor],
-                                nominal: bool = True, generate_search_grid: bool = False, f_c: np.ndarray=None) -> torch.Tensor:
+                                nominal: bool = True, generate_search_grid: bool = False, f_c: np.ndarray=None, fix_sv_noise: bool = False) -> torch.Tensor:
         """
 
         Args:
@@ -334,9 +362,7 @@ class SystemModel(object):
 
         dist_array_elems = self.dist_array_elems["narrowband"]
         if not nominal:
-            eta = self.params.eta * self.params.wavelength
-            dist_array_elems += torch.from_numpy(
-                np.random.uniform(low=-1 * eta, high=eta, size=N)).to(local_device)
+            dist_array_elems += self.get_distance_noise(fix_sv_noise).to(local_device)
             dist_array_elems = dist_array_elems.unsqueeze(-1)
         if isinstance(dist_array_elems, float):
             dist_array_elems = dist_array_elems * torch.ones(N, 1, device=local_device, dtype=torch.float64)
