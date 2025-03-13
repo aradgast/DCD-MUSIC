@@ -50,7 +50,7 @@ from src.models import (ModelGenerator, SubspaceNet, DCDMUSIC, DeepAugmentedMUSI
 from src.system_model import SystemModel, SystemModelParams
 
 
-def get_model_based_method(method_name: str, system_model: SystemModel):
+def get_model_based_method(method_name: str, system_model_params: SystemModelParams):
     """
 
     Parameters
@@ -62,6 +62,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     -------
     an instance of the method.
     """
+    system_model = SystemModel(system_model_params, nominal=True)
     if method_name.lower().endswith("1d-music"):
         method = MUSIC(system_model=system_model, estimation_parameter="angle")
     elif method_name.lower().endswith("2d-music"):
@@ -83,7 +84,7 @@ def get_model_based_method(method_name: str, system_model: SystemModel):
     return method
 
 
-def get_model(params: dict, system_model: SystemModel, model_name: str = ""):
+def get_model(params: dict, system_model_params: SystemModelParams, model_name: str = ""):
     try:
         model_name = params.get("model_name")
     except KeyError:
@@ -91,7 +92,7 @@ def get_model(params: dict, system_model: SystemModel, model_name: str = ""):
     model_config = (
         ModelGenerator()
         .set_model_type(model_name)
-        .set_system_model(system_model)
+        .set_system_model(system_model_params)
         .set_model_params({x: params[x] for x in params if x != "model_name"})
         .set_model()
     )
@@ -99,6 +100,9 @@ def get_model(params: dict, system_model: SystemModel, model_name: str = ""):
     path = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name())
     try:
         model.load_state_dict(torch.load(path+".pt", map_location=device, weights_only=True))
+        print(f"get_model: {model._get_name()}'s weights loaded succesfully from {path}")
+        if isinstance(model, DCDMUSIC):
+            model._load_state_for_angle_extractor()
     except FileNotFoundError as e:
         print("####################################")
         raise e
@@ -185,7 +189,7 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
 
 def evaluate_augmented_model(augmented_method: tuple[str, str],
                             dataset,
-                            system_model: SystemModel):
+                            system_model_params: SystemModelParams):
     """
 
     Args:
@@ -204,9 +208,9 @@ def evaluate_augmented_model(augmented_method: tuple[str, str],
 
     model = get_model(model_name=model_name,
                 params=model_params,
-                system_model=system_model)
+                system_model_params=system_model_params)
     # Initialize instances of subspace methods
-    method = get_model_based_method(algorithm, system_model)
+    method = get_model_based_method(algorithm, system_model_params)
     over_all_loss = 0.0
     angle_loss, distance_loss, acc = None, None, None
     test_length = 0
@@ -244,7 +248,7 @@ def evaluate_augmented_model(augmented_method: tuple[str, str],
     return result
 
 
-def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorithm: str = "music"):
+def evaluate_model_based(dataset: DataLoader, system_model_params: SystemModelParams, algorithm: str = "music"):
     """
     Evaluate different model-based algorithms on a given dataset.
 
@@ -264,13 +268,12 @@ def evaluate_model_based(dataset: DataLoader, system_model: SystemModel, algorit
     angle_loss, distance_loss, acc = None, None, None
     test_length = 0
     if algorithm.lower() == "ccrb":
-        if system_model.params.signal_nature.lower() == "non-coherent":
-            crb = evaluate_crb(dataset, system_model.params, mode="cartesian")
+        if system_model_params.signal_nature.lower() == "non-coherent":
+            crb = evaluate_crb(dataset, system_model_params, mode="cartesian")
             return crb
         else:
             return None
-    system_model.create_array()
-    model_based = get_model_based_method(algorithm, system_model)
+    model_based = get_model_based_method(algorithm, system_model_params)
     if isinstance(model_based, nn.Module):
         model_based = model_based.to(device)
         # Set model to eval mode
@@ -414,7 +417,7 @@ def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
 
 def evaluate(
         generic_test_dataset: DataLoader,
-        system_model: SystemModel,
+        system_model_params: SystemModelParams,
         models: dict = None,
         augmented_methods: list = None,
         subspace_methods: list = None,
@@ -447,7 +450,7 @@ def evaluate(
         res[model_name + "_tmp"] = model_test_loss
     # Evaluate DNN models
     for model_name, params in models.items():
-        model = get_model(model_name=model_name, params=params, system_model=system_model)
+        model = get_model(model_name=model_name, params=params, system_model_params=system_model_params)
         # num_of_params = sum(p.numel() for p in model.parameters())
         # total_size = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
         # print(f"Number of parameters in {model_name}: {num_of_params} with total size: {total_size} bytes")
@@ -464,20 +467,20 @@ def evaluate(
         #     pass
         res[model_name] = model_test_loss
     # Evaluate SubspaceNet augmented methods
-    system_model.create_array()
+    # system_model.create_array()
     for algorithm in augmented_methods:
         loss = evaluate_augmented_model(
             augmented_method=algorithm,
             dataset=generic_test_dataset,
-            system_model=system_model,
+            system_model_params=system_model_params,
         )
         res["augmented" + f"_{algorithm[0]}_{algorithm[1]}"] = loss
     # Evaluate classical subspace methods
-    system_model.create_array()
+    # system_model.create_array()
     for algorithm in subspace_methods:
         start = time.time()
-        loss = evaluate_model_based(generic_test_dataset, system_model,algorithm=algorithm)
-        if system_model.params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "root-music", "esprit"]:
+        loss = evaluate_model_based(generic_test_dataset, system_model_params, algorithm=algorithm)
+        if system_model_params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "root-music", "esprit"]:
             algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")
         if loss is not None:

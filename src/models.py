@@ -52,7 +52,7 @@ class ModelGenerator(object):
         self.model_type = model_type
         return self
 
-    def set_system_model(self, system_model: SystemModel):
+    def set_system_model(self, system_model_params: SystemModelParams):
         """
         Set the system model.
 
@@ -65,11 +65,11 @@ class ModelGenerator(object):
         Raises:
             ValueError: If system_model is not provided.
         """
-        if not isinstance(system_model, SystemModel):
+        if not isinstance(system_model_params, SystemModelParams):
             raise ValueError(
                 "ModelGenerator.set_system_model: system model params has not been provided"
             )
-        self.system_model = system_model
+        self.system_model = SystemModel(system_model_params, nominal=True)
         return self
 
     def set_model_params(self, model_params: dict):

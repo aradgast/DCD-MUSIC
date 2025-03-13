@@ -89,7 +89,7 @@ class MUSIC(SubspaceMethod):
         self.separated_criterion = None
 
         self.__init_grid_params()
-        self.__init_cells()
+        self.__init_cells(0.2)
         self.__init_criteria()
         self.__init_search_grid()
 
@@ -136,16 +136,16 @@ class MUSIC(SubspaceMethod):
 
     def adjust_cell_size(self):
         if self.estimation_params == "range":
-            if self.cell_size > 1 and self.cell_size > int(self.ranges_dict.shape[0] * 0.02):
-                self.cell_size = int(0.95 * self.cell_size)
+            if self.cell_size > 1:
+                self.cell_size = int(0.8 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
         elif self.estimation_params == "angle, range":
-            if self.cell_size_angle > 3:
+            if self.cell_size_angle > 1:
                 self.cell_size_angle = int(0.95 * self.cell_size_angle)
                 if self.cell_size_angle % 2 == 0:
                     self.cell_size_angle -= 1
-            if self.cell_size_range > 3:
+            if self.cell_size_range > 1:
                 self.cell_size_range = int(0.95 * self.cell_size_range)
                 if self.cell_size_range % 2 == 0:
                     self.cell_size_range -= 1
@@ -174,7 +174,7 @@ class MUSIC(SubspaceMethod):
             steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
             var1 = torch.einsum("an, bnm -> bam", steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
                                 noise_subspace)
-            inverse_spectrum = torch.norm(var1, dim=2)
+            inverse_spectrum = torch.norm(var1, dim=2) ** 2
         else:
             if self.estimation_params.startswith("angle, range"):
                 steering_dict = self.steering_dict[:noise_subspace.shape[1]].conj().transpose(0, 2).transpose(0, 1).to(device)
@@ -200,12 +200,11 @@ class MUSIC(SubspaceMethod):
                 steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
                 var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
-                inverse_spectrum = torch.norm(var1, dim=-1).T
+                inverse_spectrum = torch.norm(var1, dim=-1).T ** 2
             elif self.estimation_params.startswith("range"):
                 steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
-                var1 = torch.einsum("dbn, nbm -> bdm", steering_dict.conj().transpose(0, 2),
-                                    noise_subspace.transpose(0, 1))
-                inverse_spectrum = torch.norm(var1, dim=-1)
+                var1 = torch.bmm(steering_dict.conj().transpose(0, 2).transpose(0, 1), noise_subspace)
+                inverse_spectrum = torch.norm(var1, dim=-1) ** 2
                 if torch.isnan(inverse_spectrum).any():
                     raise ValueError("Nan values in inverse spectrum")
             else:
@@ -256,7 +255,7 @@ class MUSIC(SubspaceMethod):
             self._plot_1d_spectrum(highlight_corrdinates, batch, add_title=add_title, save=save)
 
     def test_step(self, batch, batch_idx, model: nn.Module=None):
-        x, sources_num, label, masks = batch
+        x, sources_num, label = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
@@ -265,7 +264,6 @@ class MUSIC(SubspaceMethod):
             angles, ranges = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(device)
             ranges = ranges.to(device)
-            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
             angles = label.to(device)  # only angles
         # Check if the sources number is the same for all samples in the batch
@@ -383,7 +381,9 @@ class MUSIC(SubspaceMethod):
             cell_idx = (top_indxs[:, source][:, None]
                         - self.cell_size
                         + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
-            cell_idx %= self.music_spectrum.shape[1]
+            # cell_idx %= self.music_spectrum.shape[1]
+            out_of_bounds_mask = (cell_idx < 0) | (cell_idx >= self.music_spectrum.shape[1])
+            cell_idx[out_of_bounds_mask] = top_indxs[:, source].unsqueeze(1).expand_as(cell_idx)[out_of_bounds_mask]
             cell_idx = cell_idx.reshape(batch_size, -1, 1)
             metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1,
                                       cell_idx).requires_grad_(True)
@@ -443,7 +443,7 @@ class MUSIC(SubspaceMethod):
         if self.system_model.params.field_type.startswith("far"):
             # if it's the Far field case, need to init angles range.
             self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
-                                            dtype=torch.float64).to(torch.float64).requires_grad_(False)
+                                            dtype=torch.float64).to(torch.float64)
             self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
         elif self.system_model.params.field_type in ["near", "full"]:
             # if it's the Near field, there are 3 possabilities.
@@ -451,7 +451,7 @@ class MUSIC(SubspaceMethod):
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
                 self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
-                                                dtype=torch.float64).to(torch.float64).requires_grad_(False)
+                                                dtype=torch.float64).to(torch.float64)
                 # self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
 
 
@@ -461,7 +461,7 @@ class MUSIC(SubspaceMethod):
                 max_distance = min(self.system_model.fraunhofer, fraunhofer * fraunhofer_ratio + distance_resolution)
                 self.ranges_dict = torch.arange(np.ceil(fresnel),
                                                 max_distance,
-                                                distance_resolution, dtype=torch.float64).requires_grad_(False)
+                                                distance_resolution, dtype=torch.float64)
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
@@ -476,7 +476,7 @@ class MUSIC(SubspaceMethod):
         else:
             self.set_search_grid()
 
-    def __init_cells(self, coeff: float = 0.2):
+    def __init_cells(self, coeff: float = 0.1):
 
         if self.estimation_params == "range":
             self.cell_size = int(self.ranges_dict.shape[0] * coeff)
@@ -496,7 +496,7 @@ class MUSIC(SubspaceMethod):
             if self.cell_size_range % 2 == 0:
                 self.cell_size_range += 1
 
-    def init_cells(self, coeff: float = 0.3):
+    def init_cells(self, coeff: float = 0.2):
         self.__init_cells(coeff)
 
     def _plot_1d_spectrum(self, highlight_corrdinates, batch, add_title: bool = False, save: bool = False):
@@ -622,7 +622,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
     def __set_search_grid_far_field(self):
-        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict, f_c=None).squeeze(-1)
+        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict, nominal=True, f_c=None).squeeze(-1)
 
     def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         """

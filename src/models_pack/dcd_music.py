@@ -5,6 +5,7 @@ from sympy.physics.vector.printing import params
 
 from src.metrics import CartesianLoss, RMSPELoss, MusicSpectrumLoss
 from src.models_pack.subspacenet import SubspaceNet
+from src.methods_pack.music import MUSIC
 from src.system_model import SystemModel
 from src.utils import *
 
@@ -21,7 +22,7 @@ class DCDMUSIC(SubspaceNet):
                  train_loss_type: str=("rmspe", "rmspe"), regularization: str = None, variant: str = "small", norm_layer: bool = True,
                  state_path: str = None, angle_extractor: SubspaceNet = None, train_angle_extractor: bool = False):
         super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near",
-                                       regularization=regularization, variant=variant, norm_layer=norm_layer)
+                                       regularization=regularization, variant=variant, norm_layer=True)
         self.angle_extractor = None
         self.angle_extractor_diff_method = diff_method[0]
         self.angle_extractor_train_loss_type = train_loss_type[0]
@@ -31,8 +32,11 @@ class DCDMUSIC(SubspaceNet):
         self.__set_criterion()
         self.set_eigenregularization_schedular(init_value=0.0, step_size=10000, gamma=1.0)
         self.schedular_min_weight = 0.0
+        self.use_gt=True
+        if self.use_gt:
+            self.diff_method.init_cells(0.05)
 
-    def forward(self, x: torch.Tensor, number_of_sources: int = None):
+    def forward(self, x: torch.Tensor, number_of_sources: int = None, ground_truth_angles: torch.tensor=None):
         """
         Performs the forward pass of the DCD-MUSIC. Using the subspaceNet forward but,
         calling the angle extractor method first.
@@ -53,9 +57,9 @@ class DCDMUSIC(SubspaceNet):
 
         else:
             angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
-
-            _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
-            return angles, distances, sources_estimation, eigen_regularization
+            known_angles = ground_truth_angles if not self.train_angle_extractor and ground_truth_angles is not None and self.use_gt else angles
+            _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=known_angles)
+            return known_angles, distances, sources_estimation, eigen_regularization
 
     def __init_angle_extractor(self, path: str = None, model: SubspaceNet = None):
         if model is not None:
@@ -67,8 +71,7 @@ class DCDMUSIC(SubspaceNet):
                                                system_model=self.system_model,
                                                field_type="far",
                                                regularization=self.regularization,
-                                               variant=self.variant,
-                                               norm_layer=self.norm_layer)
+                                               variant=self.variant, norm_layer=True)
             if path is None:
                 path = self.angle_extractor.get_model_file_name()
             self._load_state_for_angle_extractor(path)
@@ -77,15 +80,17 @@ class DCDMUSIC(SubspaceNet):
         cwd = Path(__file__).parent.parent.parent
         if path is None or path == "":
             path = self.angle_extractor.get_model_file_name()
+        if not path.endswith(".pt"):
+            path += ".pt"
         ref_path = os.path.join(cwd, "data", "weights", self.angle_extractor._get_name(), "final_models", path)
         try:
-            self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
+            self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device, weights_only=True))
+            print(f"DCDMUSIC._load_state_for_angle_extractor: Model state loaded from {ref_path}")
         except FileNotFoundError as e:
             # raise FileNotFoundError(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
             print(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
-        print(f"DCDMUSIC._load_state_for_angle_extractor: Model state loaded from {ref_path}")
 
-    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources: int):
+    def extract_angles(self, x: torch.Tensor, number_of_sources: int):
         """
 
         Args:
@@ -101,11 +106,13 @@ class DCDMUSIC(SubspaceNet):
             if self.angle_extractor.training:
                 self.angle_extractor.eval()
             with torch.no_grad():
-                angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
+                far_rx = self.angle_extractor.get_surrogate_covariance(x)
+                angles, sources_estimation, _ = self.angle_extractor.diff_method(far_rx, number_of_sources)
         else:
             if not self.angle_extractor.training:
                 self.angle_extractor.train()
-            angles, sources_estimation, eigen_regularization = self.angle_extractor(Rx_tau, number_of_sources)
+            far_rx = self.angle_extractor.get_surrogate_covariance(x)
+            angles, sources_estimation, _ = self.angle_extractor.diff_method(far_rx, number_of_sources)
         return angles, sources_estimation, eigen_regularization
 
     def print_model_params(self):
@@ -127,7 +134,7 @@ class DCDMUSIC(SubspaceNet):
         return {"tau": self.tau, "diff_methods": (angle_extractor_diff_method ,diff_method)}
 
     def training_step(self, batch, batch_idx):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -135,10 +142,9 @@ class DCDMUSIC(SubspaceNet):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
-        x = x.requires_grad_(True).to(device)
-        angles = angles.requires_grad_(True).to(device)
-        ranges = ranges.requires_grad_(True).to(device)
+        x = x.to(device)
+        angles = angles.to(device)
+        ranges = ranges.to(device)
         if self.train_loss_type == "music_spectrum":
             if self.diff_method.estimation_params == "angle, range":
                 noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
@@ -147,8 +153,9 @@ class DCDMUSIC(SubspaceNet):
                 angles_pred, noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
                 loss = self.train_loss(noise_subspace=noise_subspace, angles=angles_pred, ranges=ranges)
         else:
-            angles_pred, distances_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss = self.train_loss(angles, angles_pred, ranges, distances_pred)
+            angles_pred, distances_pred, sources_estimation, eigen_regularization = self(x, sources_num, ground_truth_angles=angles)
+            loss = self.train_loss(angles_pred=angles_pred, angles=angles,
+                                    ranges_pred=distances_pred, ranges=ranges)
         if isinstance(loss, tuple):
             loss = loss[0]
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
@@ -163,7 +170,7 @@ class DCDMUSIC(SubspaceNet):
 
 
     def validation_step(self, batch, batch_idx, is_test: bool=False):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -171,13 +178,15 @@ class DCDMUSIC(SubspaceNet):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
         x = x.to(device)
         angles = angles.to(device)
         ranges = ranges.to(device)
 
-        angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-        loss = self.validation_loss(angles_pred, angles, ranges_pred, ranges)
+        angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num, ground_truth_angles=angles if not is_test else None)
+        loss = self.validation_loss(angles_pred=angles_pred, angles=angles,
+                                     ranges_pred=ranges_pred, ranges=ranges)
+        if isinstance(loss, tuple):
+            loss = loss[0]
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
 
         if is_test:
@@ -202,9 +211,10 @@ class DCDMUSIC(SubspaceNet):
         else:
             if self.train_angle_extractor:
                 self.train_loss = CartesianLoss()
+                self.validation_loss = CartesianLoss()
             else:
                 self.train_loss = RMSPELoss(balance_factor=0.0)
-        self.validation_loss = CartesianLoss()
+                self.validation_loss = RMSPELoss(balance_factor=0.0)
         self.test_loss = CartesianLoss()
         self.test_loss_separated = RMSPELoss(1.0)
 
@@ -224,3 +234,35 @@ class DCDMUSIC(SubspaceNet):
         if self.variant == "V2":
             name += f"_V2"
         return name
+    
+    def switch_use_gt(self):
+        self.use_gt = not self.use_gt
+        if not self.use_gt:
+            self.diff_method.init_cells(0.2)
+        if self.use_gt:
+            print("USING GT ANGLES")
+        else:
+            print("STOP USING GT ANGLES")
+
+    def adjust_diff_method_temperature(self, epoch):
+        if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
+            if epoch % 8 == 0 and epoch != 0:
+                self.diff_method.adjust_cell_size()
+                print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
+        if epoch == 20:
+                try:
+                    if not self.train_angle_extractor:
+                        self.switch_use_gt()
+                        return True
+
+                except AttributeError:
+                    pass
+        return None
+    
+    def get_diff_method_temperature(self):
+        if isinstance(self.diff_method, MUSIC):
+            if self.diff_method.estimation_params in ["angle", "range"]:
+                return self.diff_method.cell_size
+            elif self.diff_method.estimation_params == "angle, range":
+                return {"angle_cell_size": self.diff_method.cell_size_angle,
+                        "distance_cell_size": self.diff_method.cell_size_range}

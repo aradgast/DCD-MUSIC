@@ -11,32 +11,32 @@ import argparse
 from src.system_model import SystemModel, SystemModelParams
 
 # default values for the argparse
-number_sensors = 127
+number_sensors = 64
 number_sources = "2"
 number_snapshots = 100
 snr = 10
 field_type = "Near"
 signal_type = "narrowband"
-signal_nature = "non-coherent"
+signal_nature = "coherent"
 err_loc_sv = 0.0
 wavelength = 0.06
 tau = 8
-sample_size = 4096
-train_test_ratio = 0.0
-batch_size = 64
-epochs = 50
+sample_size = 10000
+batch_size = 32
+epochs = 100
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
 weight_decay = 1e-9
-step_size = 50
+step_size = 10
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
 regularization = None
 variant = "small"
 wandb_flag = False
-
+skip_first_step = True
+skip_second_step = False
 
 def train_dcd_music(*args, **kwargs):
     SIMULATION_COMMANDS = kwargs["simulation_commands"]
@@ -49,7 +49,7 @@ def train_dcd_music(*args, **kwargs):
     save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Save model after training
     load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
-    print("Training model - DCD-MUSIC, all training steps.")
+    print(f"Training model - DCD-MUSIC, {'all training steps' if not skip_first_step and not skip_second_step else 'partly training'}")
 
     now = datetime.now()
     plot_path = Path(__file__).parent / "plots"
@@ -89,11 +89,9 @@ def train_dcd_music(*args, **kwargs):
         .set_parameter("sv_noise_var", SYSTEM_MODEL_PARAMS["sv_noise_var"])
         .set_parameter("wavelength", SYSTEM_MODEL_PARAMS["wavelength"])
     )
-    system_model = SystemModel(system_model_params)
 
     # Define samples size
     samples_size = TRAINING_PARAMS["samples_size"]  # Overall dateset size
-    train_test_ratio = TRAINING_PARAMS["train_test_ratio"]  # training and testing datasets ratio
 
     # Print new simulation intro
     print("------------------------------------")
@@ -103,12 +101,11 @@ def train_dcd_music(*args, **kwargs):
     if load_data:
         try:
             train_dataset = load_datasets(
-                system_model_params=system_model_params,
-                samples_size=samples_size,
-                datasets_path=datasets_path,
-                train_test_ratio=train_test_ratio,
-                is_training=True,
-            )
+                    system_model_params=system_model_params,
+                    samples_size=samples_size,
+                    datasets_path=datasets_path,
+                    is_training=True,
+                )
         except Exception as e:
             print(e)
             print("#############################################")
@@ -119,9 +116,10 @@ def train_dcd_music(*args, **kwargs):
     if create_data and not load_data:
         # Define which datasets to generate
         print("Creating Data...")
+        samples_model = Samples(system_model_params)
         # Generate training dataset
         train_dataset, _ = create_dataset(
-            system_model_params=system_model_params,
+            samples_model=samples_model,
             samples_size=samples_size,
             save_datasets=True,
             datasets_path=datasets_path,
@@ -133,7 +131,7 @@ def train_dcd_music(*args, **kwargs):
     model_config = (
         ModelGenerator()
         .set_model_type("SubspaceNet")
-        .set_system_model(system_model)
+        .set_system_model(system_model_params)
         .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
                            "tau": MODEL_PARAMS.get("tau"), "field_type": "far",
                            "regularization": MODEL_PARAMS.get("regularization"),
@@ -143,7 +141,7 @@ def train_dcd_music(*args, **kwargs):
 
     trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
                                        weight_decay=TRAINING_PARAMS["weight_decay"],
-                                       epochs=TRAINING_PARAMS["epochs"],
+                                       epochs= 0 if skip_first_step else TRAINING_PARAMS["epochs"],
                                        optimizer=TRAINING_PARAMS["optimizer"],
                                        step_size=TRAINING_PARAMS["step_size"],
                                        gamma=TRAINING_PARAMS["gamma"],
@@ -170,17 +168,19 @@ def train_dcd_music(*args, **kwargs):
     model_config.set_model()
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})
+    trainingparams.update({"epochs": 0 if skip_second_step else TRAINING_PARAMS["epochs"]})
 
     trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                             use_wandb=TRAINING_PARAMS["use_wandb"],
-                            save_final=save_model, load_model= load_model)
+                            save_final=save_model, load_model=load_model)
 
     print("END OF TRAINING - Step 2: distance branch training.")
 
     # Assign the training parameters object
     trainingparams.update({"training_objective": "angle, range",
-                           "learning_rate": TRAINING_PARAMS["learning_rate"] / 10})
+                           "learning_rate": TRAINING_PARAMS["learning_rate"]})
+    trainingparams.update({"epochs": TRAINING_PARAMS["epochs"]} )
     model.init_model_train_params(init_eigenregularization_weight=1e-3)
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
@@ -208,7 +208,6 @@ def parse_arguments():
     parser.add_argument("-v", "--variant", type=str, help="Model variant", default=variant)
 
     parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=sample_size)
-    parser.add_argument('-ratio', type=float, help='Train test ratio', default=train_test_ratio)
     parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=batch_size)
     parser.add_argument('-ep', '--epochs', type=int, help='Number of epochs', default=epochs)
     parser.add_argument('-op', "--optimizer", type=str, help='Optimizer type', default=optimizer)
@@ -248,7 +247,7 @@ if __name__ == "__main__":
     }
     training_params = {
         "samples_size": args.sample_size,
-        "train_test_ratio": args.ratio,
+        "train_test_ratio": 0.0,
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "optimizer": args.optimizer,  # Adam, SGD
@@ -265,7 +264,7 @@ if __name__ == "__main__":
     }
     simulation_commands = {
         "SAVE_TO_FILE": False,
-        "CREATE_DATA": True,
+        "CREATE_DATA": False,
         "LOAD_MODEL": True,
         "SAVE_MODEL": True,
     }

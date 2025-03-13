@@ -38,10 +38,13 @@ from src.signal_creation import Samples
 from src.system_model import SystemModelParams
 from src.utils import *
 from sklearn.model_selection import train_test_split
-
+import h5py
+from torch.utils.data import Dataset, DataLoader, Subset
+from collections import defaultdict
+import os
 
 def create_dataset(
-        system_model_params: SystemModelParams,
+        samples_model: Samples,
         samples_size: int,
         save_datasets: bool = False,
         datasets_path: Path = None,
@@ -68,18 +71,17 @@ def create_dataset(
 
     """
     time_series, labels, sources_num = [], [], []
-    samples_model = Samples(system_model_params)
 
-    M_is_tuple = isinstance(system_model_params.M, tuple)
+    M_is_tuple = isinstance(samples_model.params.M, tuple)
 
     for _ in tqdm(range(samples_size), desc="Creating dataset"):
         if M_is_tuple:
-            low_M, high_M = system_model_params.M
-            high_M = min(high_M, system_model_params.N-1)
+            low_M, high_M = samples_model.params.M
+            high_M = min(high_M, samples_model.params.N-1)
             # make sure that low_M is less than high_M, otherwise, the randint function will raise an error
             M = low_M if low_M >= high_M else random.randint(low_M, high_M)
         else:
-            M = system_model_params.M
+            M = samples_model.params.M
         # Samples model creation
         samples_model.set_labels(M, true_doa, true_range)
         # Observations matrix creation
@@ -93,54 +95,17 @@ def create_dataset(
         sources_num.append(M)
 
 
-    generic_dataset = TimeSeriesDataset(time_series, labels, sources_num)
+    generic_dataset = TimeSeriesDataset(time_series, labels, sources_num, len(set(sources_num)) == 1)
     if save_datasets:
-        generic_dataset_filename = f"Generic_DataSet" + set_dataset_filename(
-            system_model_params, samples_size
-        )
-        samples_model_filename = f"samples_model" + set_dataset_filename(
-            system_model_params, samples_size
-        )
-
-        torch.save(obj=generic_dataset, f=datasets_path / phase / generic_dataset_filename)
-        if phase.startswith("test"):
-            torch.save(obj=samples_model, f=datasets_path / phase / samples_model_filename)
+        generic_dataset_filename = f"Generic_DataSet" + set_dataset_filename(samples_model.params, int(samples_size))
+        generic_dataset.save(datasets_path / phase / generic_dataset_filename)
 
     return generic_dataset, samples_model
 
-
-# def read_data(Data_path: str) -> torch.Tensor:
-def read_data(path: str or Path) -> torch.Tensor:
-    """
-    Reads data from a file specified by the given path.
-
-    Args:
-    -----
-        path (str): The path to the data file.
-
-    Returns:
-    --------
-        torch.Tensor: The loaded data.
-
-    Raises:
-    -------
-        None
-
-    Examples:
-    ---------
-        >>> path = "data.pt"
-        >>> read_data(path)
-
-    """
-    assert isinstance(path, (str, Path))
-    data = torch.load(path)
-    return data
-
 def load_datasets(
         system_model_params: SystemModelParams,
-        samples_size: float,
+        samples_size: int,
         datasets_path: Path,
-        train_test_ratio: float,
         is_training: bool = False,
 ):
     """
@@ -159,49 +124,18 @@ def load_datasets(
         TimeSeriesDataset or Tuple: The desired dataset, if for test, returns the generic test dataset and the samples model.
 
     """
-    # Define test set size
-    test_samples_size = int(train_test_ratio * samples_size)
     # Generate datasets filenames
-    generic_dataset_filename = f"Generic_DataSet" + set_dataset_filename(
-        system_model_params, test_samples_size
-    )
-    samples_model_filename = f"samples_model" + set_dataset_filename(
-        system_model_params, test_samples_size
-    )
-
-    # Whether to load the training dataset
-    if is_training:
-        # Load training dataset
-        try:
-            model_trainingset_filename = f"Generic_DataSet" + set_dataset_filename(
-                system_model_params, samples_size
-            )
-            train_dataset = read_data(
-                datasets_path / "train" / model_trainingset_filename
-            )
-            return train_dataset
-        except Exception as e:
-            print(e)
-            Exception(f"load_datasets: Training dataset doesn't exist")
-    else:
-        # Load generic test dataset
-        try:
-            generic_test_dataset = read_data(
-                datasets_path / "test" / generic_dataset_filename
-            )
-        except Exception as e:
-            print(e)
-            Exception(f"load_datasets: Generic test dataset doesn't exist")
-        # Load samples models
-        try:
-            samples_model = read_data(datasets_path / "test" / samples_model_filename)
-        except Exception as e:
-            print(e)
-            Exception(f"load_datasets: Samples model dataset doesn't exist")
-        return generic_test_dataset, samples_model
+    generic_dataset = TimeSeriesDataset(None, None, None)
+    model_trainingset_filename = f"Generic_DataSet" + set_dataset_filename(system_model_params, int(samples_size))
+    file_name = datasets_path / f"{'train' if is_training  else 'test'}" / model_trainingset_filename
+    try:
+        generic_dataset.load(file_name)
+        return generic_dataset
+    except Exception as e:
+        raise Exception(f"load_datasets: Error when loading {'Training' if is_training else 'Test'} dataset doesn't exist")
 
 
-def set_dataset_filename(system_model_params: SystemModelParams, samples_size: float):
+def set_dataset_filename(system_model_params: SystemModelParams, samples_size: int):
     """Returns the generic suffix of the datasets filename.
 
     Args:
@@ -237,38 +171,114 @@ class TimeSeriesDataset(Dataset):
     Y is for the labels - a list of B elements, each element is a tensor of shape (M, ) in the far field case or (2M, ) in the near field case.
     M is for the number of sources - a list of B elements, each element is an integer.
     """
-    def __init__(self, X, Y, M):
+    def __init__(self, X, Y, M, is_constant_M: bool = False):
         self.X = X
         self.Y = Y
         self.M = M
+        self.is_constant_M = is_constant_M
+        self.path = None
+        self.len = None
+        self.h5f = None
 
+    def _open_h5_file(self):
+        if self.h5f is None:
+            self.h5f = h5py.File(self.path, 'r')
 
     def __len__(self):
-        return len(self.X)
+        if self.len is None:
+            return len(self.X)
+        else:
+            return self.len
 
     def __getitem__(self, idx):
-        return self.X[idx], self.M[idx], self.Y[idx]
+        if self.path is None:
+            return self.X[idx], self.M[idx], self.Y[idx]
+        else:
+            self._open_h5_file()
+            x = torch.tensor(self.h5f[f'X/tensor_{idx}'][:])
+            y = torch.tensor(self.h5f[f'Y/label_{idx}'][:])
+            m = int(self.h5f['M'][idx])
+            return x, m, y
 
     def get_dataloaders(self, batch_size):
         # Divide into training and validation datasets
-        train_dataset, valid_dataset = train_test_split(
-            self, test_size=0.1, shuffle=True
+        train_indices, val_indices = train_test_split(
+            np.arange(len(self)), test_size=0.1, shuffle=True
         )
+        train_dataset = Subset(self, train_indices)
+        valid_dataset = Subset(self, val_indices)
+
         print("Training DataSet size", len(train_dataset))
         print("Validation DataSet size", len(valid_dataset))
+        num_workers = min(4, os.cpu_count() // 8)
+        # num_workers = 1
+        num_workers = num_workers if num_workers > 1 else 1
+        print(f"Avialble CPU cores: {os.cpu_count()}, using {num_workers}")
+        
 
-        # init sampler
-        batch_sampler_train = SameLengthBatchSampler(train_dataset, batch_size=batch_size)
-        batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32, shuffle=False)
-        # Transform datasets into DataLoader objects
-        train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_train
-        )
-        valid_dataloader = torch.utils.data.DataLoader(
-            valid_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_valid
-        )
+        if not self.is_constant_M:
+            # init sampler
+            batch_sampler_train = SameLengthBatchSampler(train_dataset, batch_size=batch_size)
+            batch_sampler_valid = SameLengthBatchSampler(valid_dataset, batch_size=32, shuffle=False)
+            # Transform datasets into DataLoader objects
+            train_dataloader = torch.utils.data.DataLoader(
+                train_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_train, num_workers=num_workers, worker_init_fn=worker_init_fn
+            )
+            valid_dataloader = torch.utils.data.DataLoader(
+                valid_dataset, collate_fn=collate_fn, batch_sampler=batch_sampler_valid, num_workers=max(num_workers // 2, 1)
+            )
+        else:
+            train_dataloader = torch.utils.data.DataLoader(
+                train_dataset, shuffle=True, batch_size=batch_size, num_workers=num_workers
+            )
+            valid_dataloader = torch.utils.data.DataLoader(
+                valid_dataset, shuffle=False, batch_size=32, num_workers=max(num_workers // 2, 1)
+            )
         return train_dataloader, valid_dataloader
+    
+    def save(self, path):
+        with h5py.File(path, 'w') as h5f:
+            X_grp = h5f.create_group('X')  # Create a group for X
+            for i, x in enumerate(self.X):
+                X_grp.create_dataset(f"tensor_{i}", data=x.numpy())  # Save each tensor separately
+            
+            Y_grp = h5f.create_group('Y')
+            for i, y in enumerate(self.Y):
+                Y_grp.create_dataset(f"label_{i}", data=np.array(y))
 
+            h5f.create_dataset('M', data=self.M)
+
+    def load(self, path):
+        self.path = path
+        self._open_h5_file()
+        M = self.h5f['M']
+        self.len = len(M)
+        self.is_constant_M = len(set(M)) == 1
+        
+        return self
+    
+    def close(self):
+        """ Close the HDF5 file if it was opened """
+        if self.h5f is not None:
+            self.h5f.close()
+            self.h5f = None
+
+    def __del__(self):
+        """ Ensure file is closed when the object is deleted """
+        self.close()
+
+def worker_init_fn(worker_id):
+    """ Ensure each worker has its own HDF5 file connection. """
+    worker_info = torch.utils.data.get_worker_info()
+    dataset = worker_info.dataset
+
+    # If dataset is a Subset, access the original dataset
+    if isinstance(dataset, torch.utils.data.Subset):
+        dataset = dataset.dataset
+
+    # Ensure the dataset has a path and open the HDF5 file
+    if dataset.path is not None:
+        dataset._open_h5_file()
 
 def collate_fn(batch):
     """
@@ -287,7 +297,6 @@ def collate_fn(batch):
 
     # Pad labels and create masks
     padded_labels = torch.zeros(len(batch), max_length, dtype=torch.float32)
-    masks = torch.zeros(len(batch), max_length, dtype=torch.float32)
 
     for i, lb in enumerate(labels):
         length = lb.size(0)
@@ -296,22 +305,16 @@ def collate_fn(batch):
             angles, distances = torch.split(lb, source_num[i], dim=0)
             lb = torch.cat((angles, torch.zeros(max_length // 2 - source_num[i], dtype=torch.float32)))
             lb = torch.cat((lb, distances, torch.zeros(max_length // 2 - source_num[i], dtype=torch.float32)))
-            mask = torch.zeros(max_length, dtype=torch.float32)
-            mask[: length // 2] = 1
-            mask[max_length // 2: max_length // 2 + length // 2] = 1
         else:
             lb = torch.cat((lb, torch.zeros(max_length - length, dtype=torch.long)))
-            mask = torch.zeros(max_length, dtype=torch.float32)
-            mask[:length] = 1
         padded_labels[i] = lb
-        masks[i] = mask
 
     # Stack labels
     time_series = torch.stack(time_series).squeeze()
     sources_num = torch.tensor(source_num)
 
 
-    return time_series, sources_num, padded_labels, masks
+    return time_series, sources_num, padded_labels
 
 
 class SameLengthBatchSampler(Sampler):
@@ -319,51 +322,40 @@ class SameLengthBatchSampler(Sampler):
     A class for creating batches contains samples with the same number of sources to allow batch wise operations.
 
     """
-    def __init__(self, data_source, batch_size, shuffle=True):
-        try:
-            super().__init__()
-        except Exception:
-            super().__init__(data_source)
-        self.data_source = data_source
+    def __init__(self, dataset, batch_size, shuffle=True):
+        super().__init__(dataset)
         self.batch_size = batch_size
         self.shuffle = shuffle
 
+        # **Preload M values efficiently**
+        self.indices = np.arange(len(dataset))
+        self.source_nums = np.array([dataset[i][1] for i in self.indices], dtype=int)  # Extract M values **once**
+        
+        # **Group by M values**
         self.batches = self._create_batches()
 
     def _create_batches(self):
-        length_to_indices = {}
-        for idx, (_, source_num, _) in enumerate(self.data_source):
-            if source_num not in length_to_indices:
-                length_to_indices[source_num] = []
-            length_to_indices[source_num].append(idx)
-        # check that there is not bais in the labels
-        max_length = 0
-        min_length = np.inf
-        for indices in length_to_indices.values():
-            if len(indices) > max_length:
-                max_length = len(indices)
-            if len(indices) < min_length:
-                min_length = len(indices)
-        if max_length * 0.4 > min_length:
-            # raise ValueError("SameLengthBatchSampler: There is a bias in the labels")
-            warnings.warn("SameLengthBatchSampler: There is a bias in the labels")
-            print(f"max_length: {max_length}, min_length: {min_length}")
+        # **Sort indices by M to ensure similar-length grouping**
+        grouped_by_sources = defaultdict(list)
+        for idx, source_num in enumerate(self.source_nums):
+            grouped_by_sources[source_num].append(idx)
 
+        # Now, split the grouped indices into batches of batch_size
         batches = []
-        for indices in length_to_indices.values():
+        for source_num, indices in grouped_by_sources.items():
+            # Split indices for each source_num into batches
             for i in range(0, len(indices), self.batch_size):
                 batches.append(indices[i:i + self.batch_size])
+        
+        # **Shuffle batches (not individual samples)**
         if self.shuffle:
-            # Shuffle the batches
             np.random.shuffle(batches)
-            # shuffle the indices in each batch
-            for batch in batches:
-                np.random.shuffle(batch)
+
         return batches
 
     def __iter__(self):
         for batch in self.batches:
-            yield batch
+            yield batch # Convert to Python list
 
     def __len__(self):
         return len(self.batches)

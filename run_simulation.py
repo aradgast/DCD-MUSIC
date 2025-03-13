@@ -84,7 +84,6 @@ def __run_simulation(**kwargs):
         .set_parameter("range_resolution", SYSTEM_MODEL_PARAMS["range_resolution"])
         .set_parameter("wavelength", SYSTEM_MODEL_PARAMS["wavelength"])
     )
-    system_model = SystemModel(system_model_params)
 
     # Define samples size
     samples_size = TRAINING_PARAMS["samples_size"]  # Overall dateset size
@@ -100,13 +99,14 @@ def __run_simulation(**kwargs):
     if load_data:
         if train_model:
             try:
+                start = time.time()
                 train_dataset = load_datasets(
                     system_model_params=system_model_params,
                     samples_size=samples_size,
                     datasets_path=datasets_path,
-                    train_test_ratio=train_test_ratio,
                     is_training=True,
                 )
+                print(f"Load the data took {time.time() - start} sec")
             except Exception as e:
                 print(e)
                 print("#############################################")
@@ -116,11 +116,10 @@ def __run_simulation(**kwargs):
                 load_data = False
         if evaluate_mode:
             try:
-                generic_test_dataset, _ = load_datasets(
+                generic_test_dataset = load_datasets(
                     system_model_params=system_model_params,
-                    samples_size=samples_size,
+                    samples_size=samples_size * train_test_ratio,
                     datasets_path=datasets_path,
-                    train_test_ratio=train_test_ratio,
                     is_training=False,
                 )
             except Exception as e:
@@ -133,23 +132,27 @@ def __run_simulation(**kwargs):
     if create_data and not load_data:
         # Define which datasets to generate
         print("Creating Data...")
+        # init sample model
+        samples_model = Samples(system_model_params)
         if train_model:
             # Generate training dataset
+            start = time.time()
             train_dataset, _ = create_dataset(
-                system_model_params=system_model_params,
+                samples_model=samples_model,
                 samples_size=samples_size,
-                save_datasets=False,
+                save_datasets=SIMULATION_COMMANDS["SAVE_DATASET"],
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_train"],
                 true_range=TRAINING_PARAMS["true_range_train"],
                 phase="train",
             )
+            print(f"Create the data took {time.time() - start} sec")
         if evaluate_mode:
             # Generate test dataset
             generic_test_dataset, _ = create_dataset(
-                system_model_params=system_model_params,
+                samples_model=samples_model,
                 samples_size=int(train_test_ratio * samples_size),
-                save_datasets=False,
+                save_datasets=SIMULATION_COMMANDS["SAVE_DATASET"],
                 datasets_path=datasets_path,
                 true_doa=TRAINING_PARAMS["true_doa_test"],
                 true_range=TRAINING_PARAMS["true_range_test"],
@@ -161,7 +164,7 @@ def __run_simulation(**kwargs):
         model_config = (
             ModelGenerator()
             .set_model_type(MODEL_CONFIG.get("model_type"))
-            .set_system_model(system_model)
+            .set_system_model(system_model_params)
             .set_model_params(MODEL_CONFIG.get("model_params"))
             .set_model()
         )
@@ -188,9 +191,13 @@ def __run_simulation(**kwargs):
         if not train_model:
             model = None
         # Define loss measure for evaluation
-
-        batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=100)
-        generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
+        if isinstance(system_model_params.M, int):
+            generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
+                                                                batch_size=100,
+                                                                shuffle=False)
+        else:
+            batch_sampler_test = SameLengthBatchSampler(generic_test_dataset, batch_size=100)
+            generic_test_dataset = torch.utils.data.DataLoader(generic_test_dataset,
                                                            collate_fn=collate_fn,
                                                            batch_sampler=batch_sampler_test,
                                                            shuffle=False)
@@ -198,7 +205,7 @@ def __run_simulation(**kwargs):
         # Evaluate DNN models, augmented and subspace methods
         loss = evaluate(
             generic_test_dataset=generic_test_dataset,
-            system_model=system_model,
+            system_model_params=system_model_params,
             models=EVALUATION_PARAMS["models"],
             augmented_methods=EVALUATION_PARAMS["augmented_methods"],
             subspace_methods=EVALUATION_PARAMS["subspace_methods"],

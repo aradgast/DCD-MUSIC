@@ -1,6 +1,6 @@
 """
 SubspaceNet: model-based deep learning algorithm as described in:
-        [2] "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
+        "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
 """
 import torch
 import torch.nn as nn
@@ -281,6 +281,7 @@ class SubspaceNet(ParentModel):
     def __setup_norm_layer(self, norm_layer: bool):
         if norm_layer:
             self.norm_layer = L2NormLayer()
+            # self.norm_layer = TraceNorm()
         else:
             self.norm_layer = nn.Identity()
 
@@ -324,20 +325,6 @@ class SubspaceNet(ParentModel):
             self.reshaper = nn.Identity()
         return self.reshaper
 
-    def adjust_diff_method_temperature(self, epoch):
-        if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
-            if epoch % 20 == 0 and epoch != 0:
-                self.diff_method.adjust_cell_size()
-                print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
-
-    def get_diff_method_temperature(self):
-        if isinstance(self.diff_method, MUSIC):
-            if self.diff_method.estimation_params in ["angle", "range"]:
-                return self.diff_method.cell_size
-            elif self.diff_method.estimation_params == "angle, range":
-                return {"angle_cell_size": self.diff_method.cell_size_angle,
-                        "distance_cell_size": self.diff_method.cell_size_range}
-
     def print_model_params(self):
         tau = self.tau
         diff_method = self.diff_method
@@ -355,7 +342,7 @@ class SubspaceNet(ParentModel):
         self.__set_criterion()
         self.set_eigenregularization_schedular(init_value=init_eigenregularization_weight)
         if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
-            self.diff_method.init_cells(0.2)
+            self.diff_method.init_cells(0.1)
 
     def training_step(self, batch, batch_idx):
         if self.field_type == "far":
@@ -381,10 +368,8 @@ class SubspaceNet(ParentModel):
         elif self.field_type == "near":
             return self.__prediction_step_near_field(batch, batch_idx)
 
-
-
     def __training_step_far_field(self, batch, batch_idx):
-        x, sources_num, angles, masks = batch
+        x, sources_num, angles = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         x = x.requires_grad_(True).to(device)
@@ -408,7 +393,7 @@ class SubspaceNet(ParentModel):
         return loss, acc, eigen_regularization
 
     def __validation_step_far_field(self, batch, batch_idx):
-        x, sources_num, angles, masks = batch
+        x, sources_num, angles = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         x = x.to(device)
@@ -436,7 +421,7 @@ class SubspaceNet(ParentModel):
         return angles_pred, source_estimation
 
     def __training_step_near_field(self, batch, batch_idx):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -444,7 +429,6 @@ class SubspaceNet(ParentModel):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        masks, _ = torch.split(masks, sources_num, dim=1)
 
         x = x.requires_grad_(True).to(device)
         angles = angles.requires_grad_(True).to(device)
@@ -460,7 +444,7 @@ class SubspaceNet(ParentModel):
         return loss, acc, eigen_regularization
 
     def __validation_step_near_field(self, batch, batch_idx, is_test :bool=False):
-        x, sources_num, labels, masks = batch
+        x, sources_num, labels = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -468,7 +452,6 @@ class SubspaceNet(ParentModel):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num.item(), dim=1)
-        masks, _ = torch.split(masks, sources_num.item(), dim=1)
 
         x = x.to(device)
         angles = angles.to(device)
@@ -568,69 +551,12 @@ class L2NormLayer(nn.Module):
     def forward(self, x):
         return torch.nn.functional.normalize(x, p=2, dim=self.dim, eps=self.eps)
 
+class TraceNorm(nn.Module):
+    def __init__(self, eps=1e-8):
+        super().__init__()
+        self.eps = eps
 
-    # def loss(self, loss_type:str="orthogonality", **kwargs):
-    #     if self.loss_type == "orthogonality":
-    #         return self.orthogonality_loss(**kwargs)
-    #     elif self.loss_type == "rmspe":
-    #         return self.rmspe_loss(**kwargs)
-    #     else:
-    #         raise ValueError(f"SubspaceNet.loss: Unrecognized loss type: {loss_type}")
-    #
-    # def orthogonality_loss(self, **kwargs):
-    #     if self.system_model.params.field_type.startswith("Far"):
-    #         loss = self.__orthogonality_loss_far_field(noise_subspace=kwargs["noise_subspace"],angles=kwargs["angles"])
-    #     elif self.system_model.params.field_type.startswith("Near"):
-    #         loss = self.__orthogonality_loss_near_field(noise_subspace=kwargs["noise_subspace"],
-    #                                                     angles=kwargs["angles"], ranges=kwargs["ranges"])
-    #     else:
-    #         raise ValueError(f"MUSIC.orthogonality_loss: Unrecognized field type: "
-    #                          f"{self.system_model.params.field_type}")
-    #     return loss
-    #
-    # def __orthogonality_loss_far_field(self, noise_subspace, angles):
-    #     # compute the spectrum in the angles points using the noise subspace, sum the values and return the loss.
-    #     array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-    #     theta = angles.unsqueeze(-1)
-    #     time_delay = torch.einsum("nm, ban -> ban",
-    #                               array,
-    #                               torch.sin(theta).repeat(1, 1, self.system_model.params.N) *
-    #                               self.system_model.dist_array_elems["NarrowBand"])
-    #     search_grid = torch.exp(-2 * 1j * torch.pi * time_delay)
-    #     var1 = torch.bmm(search_grid.conj(), noise_subspace.to(torch.complex128))
-    #     inverse_spectrum = torch.norm(var1, dim=-1)
-    #     spectrum = 1 / inverse_spectrum
-    #     loss = -torch.sum(spectrum, dim=1).sum()
-    #     return loss
-    #
-    # def __orthogonality_loss_near_field(self, noise_subspace, angles, ranges):
-    #     dist_array_elems = self.system_model.dist_array_elems["NarrowBand"]
-    #     theta = angles[:, :, None]
-    #     distances = ranges[:, :, None].to(torch.float64)
-    #     array = torch.Tensor(self.system_model.array[:, None]).to(torch.float64).to(device)
-    #     array_square = torch.pow(array, 2).to(torch.float64)
-    #
-    #     first_order = torch.einsum("nm, bna -> bna",
-    #                                array,
-    #                                torch.sin(theta).repeat(1, 1, self.system_model.params.N).transpose(1,
-    #                                                                                                    2) * dist_array_elems)
-    #
-    #     second_order = -0.5 * torch.div(torch.pow(torch.cos(theta) * dist_array_elems, 2), distances.transpose(1, 2))
-    #     second_order = second_order[:, :, :, None].repeat(1, 1, 1, self.system_model.params.N)
-    #     second_order = torch.einsum("nm, bnda -> bnda",
-    #                                 array_square,
-    #                                 second_order.transpose(3, 1).transpose(2, 3))
-    #
-    #     first_order = first_order[:, :, :, None].repeat(1, 1, 1, second_order.shape[-1])
-    #
-    #     time_delay = first_order + second_order
-    #
-    #     search_grid = torch.exp(2 * -1j * torch.pi * time_delay)
-    #     var1 = torch.einsum("badk, bkl -> badl",
-    #                         search_grid.conj().transpose(1, 3).transpose(1, 2)[:, :, :, :noise_subspace.shape[1]],
-    #                         noise_subspace.to(torch.complex128))
-    #     # get the norm value for each element in the batch.
-    #     inverse_spectrum = torch.linalg.diagonal(torch.norm(var1, dim=-1)) ** 2
-    #     # spectrum = 1 / inverse_spectrum
-    #     loss = torch.sum(inverse_spectrum, dim=-1).sum()
-    #     return loss
+    def forward(self, Rz):
+        trace = torch.real(Rz.diagonal(dim1=-2, dim2=-1).sum(-1)).clamp(min=self.eps)  # shape [B]
+        trace = trace.view(-1, 1, 1)
+        return Rz / trace

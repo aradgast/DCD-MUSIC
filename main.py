@@ -34,38 +34,39 @@ plt.close("all")
 scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 30, 50, 70, 100],
-    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04, 0.05],
+    #  "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
     # "M": [2, 3, 4, 5, 6, 7],
 }
 
 simulation_commands = {
     "SAVE_TO_FILE": False,
-    "CREATE_DATA": True,
+    "CREATE_DATA": False,
+    "SAVE_DATASET": False,
     "LOAD_MODEL": False,
-    "TRAIN_MODEL": True,
-    "SAVE_MODEL": True,
+    "TRAIN_MODEL": False,
+    "SAVE_MODEL": False,
     "EVALUATE_MODE": True,
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
-    "SAVE_PLOTS": False,  # if True, the plots will be saved to the results folder
+    "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
-    "N": 127,  # number of antennas
-    "M": 2,  # number of sources
+    "N": 64,  # number of antennas
+    "M": 5,  # number of sources
     "T": 100,  # number of snapshots
     "snr": 10,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
     "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
-    "eta": 0.0,  # steering vector uniform error variance
+    "eta": 0.0,  # steering vector uniform error variance with respect to the wavelength.
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
     "doa_range": 60, # The range of the DOA values [-doa_range, doa_range]
-    "doa_resolution": 1, # The resolution of the DOA values in degrees
+    "doa_resolution": .5, # The resolution of the DOA values in degrees
     "max_range_ratio_to_limit": 0.5, # The ratio of the maximum range in respect to the Fraunhofer distance
-    "range_resolution": 1, # The resolution of the range values in meters
+    "range_resolution": 4, # The resolution of the range values in meters
     "wavelength": 0.06, # The carrier wavelength of the signal in meters
 }
 model_config = {
@@ -87,16 +88,19 @@ elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["diff_method"] = ("esprit", "music_1D")  # ("esprit", "music_1D")
     model_config["model_params"]["train_loss_type"] = ("rmspe", "rmspe")  # ("rmspe", "rmspe"), ("rmspe",
     # "music_spectrum"), ("music_spectrum", "rmspe")
+    model_config["model_params"]["regularization"] = None # aic, mdl, threshold, None
+    model_config["model_params"]["variant"] = "small"  # big, small
+    model_config["model_params"]["norm_layer"] = True
 
 elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 4096,
-    "train_test_ratio": .1,
+    "samples_size": 10000,
+    "train_test_ratio": 1/10,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 64,
-    "epochs": 100,
+    "batch_size": 32,
+    "epochs": 0,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -112,15 +116,15 @@ training_params = {
 }
 evaluation_params = {
     "models": {
-        # "TransMUSIC": {
-        #                 "model_name": "TransMUSIC",
-        #             },
-        # "DCD-MUSIC": {
+         #"TransMUSIC": {
+          #               "model_name": "TransMUSIC",
+           #          },
+        #  "DCD-MUSIC": {
         #             "model_name": "DCD-MUSIC",
         #             "tau": 8,
         #             "diff_method": ("esprit", "music_1d"),
         #             "train_loss_type": ("rmspe", "rmspe"),
-        #             "regularization": "aic",
+        #             "regularization": None,
         #               },
         #  "DCD-MUSIC_V2": {
         #             "model_name": "DCD-MUSIC",
@@ -130,14 +134,14 @@ evaluation_params = {
         #             "regularization": "aic",
         #             "variant": "big"
         #               },
-        # "NFSubspaceNet": {
-                        # "model_name": "SubspaceNet",
-                        # "tau": 8,
-                        # "diff_method": "music_2D",
-                        # "train_loss_type": "music_spectrum",
-                        # "field_type": "near",
-                        # "regularization": "aic",
-                        # },
+        #  "NFSubspaceNet": {
+        #                  "model_name": "SubspaceNet",
+        #                  "tau": 8,
+        #                  "diff_method": "music_2D",
+        #                  "train_loss_type": "music_spectrum",
+        #                  "field_type": "near",
+        #                  "regularization": None,
+        #                  },
         # "NFSubspaceNet_V2": {
         #                 "model_name": "SubspaceNet",
         #                 "tau": 8,
@@ -155,8 +159,8 @@ evaluation_params = {
     ],
     "subspace_methods": [
         # "CCRB",
-        "2D-MUSIC",
-        # "Beamformer",
+         "2D-MUSIC",
+         "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",
         # "1D-MUSIC",
@@ -199,6 +203,9 @@ def parse_arguments():
     parser.add_argument('-t', '--train', action="store_true", help='Train model', default=simulation_commands["TRAIN_MODEL"])
     parser.add_argument('-no_t', "--no_train", action="store_false", help='Do not train model', dest='train')
     parser.add_argument('-e', '--eval', action="store_true", help='Evaluate model', default=simulation_commands["EVALUATE_MODE"])
+
+    parser.add_argument('-c', '--create', action="store_true", help='create a new dataset', default=simulation_commands["CREATE_DATA"])
+    parser.add_argument('-sv', '--save', action='store_true', help="save dataset", default=simulation_commands["SAVE_DATASET"])
 
     return parser.parse_args()
 
@@ -267,6 +274,9 @@ if __name__ == "__main__":
 
     simulation_commands["TRAIN_MODEL"] = args.train
     simulation_commands["EVALUATE_MODE"] = args.eval
+
+    simulation_commands["CREATE_DATA"] = args.create
+    simulation_commands["SAVE_DATASET"] = args.save
 
     start = time.time()
     loss = run_simulation(simulation_commands=simulation_commands,

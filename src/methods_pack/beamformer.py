@@ -219,7 +219,7 @@ class Beamformer(Module):
         return cov
 
     def test_step(self, batch, batch_idx: int, model: Module=None):
-        x, sources_num, label, masks = batch
+        x, sources_num, label = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
@@ -228,7 +228,6 @@ class Beamformer(Module):
             angles, ranges = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(device)
             ranges = ranges.to(device)
-            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
             angles = label.to(device)  # only angles
 
