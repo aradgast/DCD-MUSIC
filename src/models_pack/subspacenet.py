@@ -8,7 +8,7 @@ import torch.nn as nn
 from src.metrics import RMSPELoss, CartesianLoss, MusicSpectrumLoss
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
-from src.utils import gram_diagonal_overload
+from src.utils import gram_diagonal_overload, validate_constant_sources_number, L2NormLayer, AntiRectifier
 
 from src.methods_pack.music import MUSIC
 from src.methods_pack.esprit import ESPRIT
@@ -38,9 +38,9 @@ class SubspaceNet(ParentModel):
         """
         super(SubspaceNet, self).__init__(system_model)
         # set model parameters
+        self.field_type = system_model.params.field_type.lower()
         self.tau = tau
         self.diff_method = None # Holder for the differentiable subspace method
-        self.field_type = field_type.lower()
         # set model architecture
         self.p = 0.2
         self.regularization = regularization
@@ -118,9 +118,7 @@ class SubspaceNet(ParentModel):
         Rz = self.norm_layer(Rz)
         return Rz
 
-
-
-    def forward(self, x: torch.Tensor, sources_num: torch.tensor = None, known_angles: torch.tensor = None):
+    def forward(self, x: torch.Tensor, sources_num: torch.tensor = None):
         """
         Performs the forward pass of the SubspaceNet.
 
@@ -132,63 +130,98 @@ class SubspaceNet(ParentModel):
 
         Returns:
         --------
-            doa_prediction (torch.Tensor): The predicted direction-of-arrival (DOA) for each batch sample.
-            doa_all_predictions (torch.Tensor): All DOA predictions for each root, over all batches.
-            roots_to_return (torch.Tensor): The unsorted roots.
-            Rz (torch.Tensor): Surrogate covariance matrix.
-
+            The output of the forward pass.
+        ------
         """
         Rz = self.get_surrogate_covariance(x)
 
-        if self.field_type.lower().startswith("far"):
-            if isinstance(self.train_loss, MusicSpectrumLoss) and self.training:
-                _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
-                return noise_subspace, source_estimation, eigen_regularization
-            else:
-                method_output = self.diff_method(Rz, sources_num)
-                if isinstance(self.diff_method, RootMusic):
-                    doa_prediction, doa_all_predictions, roots = method_output
-                    return doa_prediction, doa_all_predictions, roots
-                elif isinstance(self.diff_method, ESPRIT):
-                    # Esprit output
-                    doa_prediction, sources_estimation, eigen_regularization = method_output
-                    return doa_prediction, sources_estimation, eigen_regularization
-                elif isinstance(self.diff_method, MUSIC):
-                    doa_prediction, sources_estimation, eigen_regularization = method_output
-                    return doa_prediction, sources_estimation, eigen_regularization
-
-                else:
-                    raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
+        if self.field_type.startswith("far"):
+            return self.__forward_far_field(Rz, sources_num)
 
         elif self.field_type == "near":
-            if self.training and isinstance(self.train_loss, MusicSpectrumLoss):
-                _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz, sources_num)
-                return noise_subspace, source_estimation, eigen_regularization
+            return self.__forward_near_field(Rz, sources_num)
 
-            if known_angles is None:
-                if isinstance(self.diff_method, MUSIC):
-                    predictions, sources_estimation, eigen_regularization = self.diff_method(
-                        Rz, number_of_sources=sources_num)
-                    doa_prediction, distance_prediction = predictions
-                    return doa_prediction, distance_prediction, sources_estimation, eigen_regularization
-                elif isinstance(self.diff_method, Beamformer):
-                    predictions = self.diff_method(
-                        Rz, sources_num=sources_num)
-                    doa_prediction, distance_prediction = predictions
-                    return doa_prediction, distance_prediction, None, None
-                else:
-                    raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
-            else:  # the angles are known
-                distance_prediction = self.diff_method(
-                    cov=Rz, number_of_sources=sources_num, known_angles=known_angles)
-                if isinstance(distance_prediction, tuple):
-                    distance_prediction, _, _ = distance_prediction
-                return known_angles, distance_prediction, Rz
+    def __forward_far_field(self, cov: torch.Tensor, sources_num: torch.tensor = None):
+        """
+        Forward pass for the far-field scenario.
+
+        Args:
+        -----
+            cov (torch.Tensor): The surrogate covariance matrix.
+            sources_num (torch.Tensor): The number of sources in the signal.
+
+        Returns:
+        --------
+            noise_subspace (torch.Tensor): The noise subspace.
+            source_estimation (torch.Tensor): The sources estimation.
+            eigen_regularization (torch.Tensor): The eigen regularization.
+            angles_pred (torch.Tensor): The predicted angles.
+        --------
+        """
+        if isinstance(self.train_loss, MusicSpectrumLoss) and self.training:
+            _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(cov,
+                                                                                                              sources_num)
+            return noise_subspace, source_estimation, eigen_regularization
+        else:
+            method_output = self.diff_method(cov, sources_num)
+            if isinstance(self.diff_method, RootMusic):
+                pred_angles, pred_all_angles, roots = method_output
+                return pred_angles, pred_all_angles, roots
+            elif isinstance(self.diff_method, ESPRIT):
+                # Esprit output
+                pred_angles, sources_estimation, eigen_regularization = method_output
+                return pred_angles, sources_estimation, eigen_regularization
+            elif isinstance(self.diff_method, MUSIC):
+                pred_angles, sources_estimation, eigen_regularization = method_output
+                return pred_angles, sources_estimation, eigen_regularization
+
+            else:
+                raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
+
+    def __forward_near_field(self, cov: torch.Tensor, sources_num: torch.tensor = None):
+        """
+        Forward pass for the near-field scenario.
+        Args:
+            cov (torch.Tensor): The surrogate covariance matrix.
+            sources_num (torch.Tensor): The number of sources in the signal.
+
+        Returns:
+            angles_pred (torch.Tensor): The predicted angles.
+            distance_pred (torch.Tensor): The predicted distances.
+            sources_estimation (torch.Tensor): The sources estimation.
+            eigen_regularization (torch.Tensor): The eigen regularization.
+
+        """
+        if self.training and isinstance(self.train_loss, MusicSpectrumLoss):
+            _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(cov,
+                                                                                                              sources_num)
+            return noise_subspace, source_estimation, eigen_regularization
+
+        if isinstance(self.diff_method, MUSIC):
+            predictions, sources_estimation, eigen_regularization = self.diff_method(
+                cov, number_of_sources=sources_num)
+            pred_angles, pred_ranges = predictions
+            return pred_angles, pred_ranges, sources_estimation, eigen_regularization
+        elif isinstance(self.diff_method, Beamformer):
+            predictions = self.diff_method(
+                cov, sources_num=sources_num)
+            pred_angles, pred_ranges = predictions
+            return pred_angles, pred_ranges, None, None
+        else:
+            raise Exception(f"SubspaceNet.forward: Method {self.diff_method} is not defined for SubspaceNet")
 
     def pre_processing(self, x):
         """
         The input data is a complex signal of size [batch, N, T] and the input to the model supposed to be real tensors
         of size [batch, tau, 2N, N].
+
+        Args:
+        -----
+            x (torch.Tensor): The complex input tensor of size [batch, N, T].
+
+        Returns:
+        --------
+            Rx_tau (torch.Tensor): The pre-processed real tensor of size [batch, tau, 2N, N].
         """
         batch_size, N, T = x.shape
         Rx_tau = torch.zeros(batch_size, self.tau, 2 * N, N, device=self.device)
@@ -329,19 +362,9 @@ class SubspaceNet(ParentModel):
             return self.__prediction_step_near_field(batch, batch_idx)
 
     def __training_step_far_field(self, batch, batch_idx):
-        x, sources_num, angles = batch
-        if x.dim() == 2:
-            x = x.unsqueeze(0)
-        x = x.requires_grad_(True).to(self.device)
-
-        angles = angles.requires_grad_(True).to(self.device)
-
-        if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__training_step_far_field: "
-                             f"Number of sources in the batch is not equal for all samples.")
-        sources_num = sources_num[0]
-        if self.field_type != self.system_model.params.field_type:
-            angles, _ = torch.split(angles, sources_num, dim=1)
+        x, sources_num, angles = self.__prepare_batch_far_field(batch)
+        # if self.field_type != self.system_model.params.field_type:
+        #     angles, _ = torch.split(angles, sources_num, dim=1)
         if isinstance(self.train_loss, MusicSpectrumLoss):
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles)
@@ -353,17 +376,9 @@ class SubspaceNet(ParentModel):
         return loss, acc, eigen_regularization
 
     def __validation_step_far_field(self, batch, batch_idx):
-        x, sources_num, angles = batch
-        if x.dim() == 2:
-            x = x.unsqueeze(0)
-        x = x.to(self.device)
-        angles = angles.to(self.device)
-        if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__validation_step_far_field: "
-                             f"Number of sources in the batch is not equal for all samples.")
-        sources_num = sources_num[0]
-        if self.field_type != self.system_model.params.field_type:
-            angles, _ = torch.split(angles, sources_num, dim=1)
+        x, sources_num, angles = self.__prepare_batch_far_field(batch)
+        # if self.field_type != self.system_model.params.field_type:
+        #     angles, _ = torch.split(angles, sources_num, dim=1)
         angles_pred, source_estimation, eigen_regularization = self(x, sources_num)
         loss = self.validation_loss(angles_pred=angles_pred, angles=angles)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
@@ -371,6 +386,16 @@ class SubspaceNet(ParentModel):
 
     def __test_step_far_field(self, batch, batch_idx):
         return self.__validation_step_far_field(batch, batch_idx)
+
+    def __prepare_batch_far_field(self, batch):
+        x, sources_num, angles = batch
+        validate_constant_sources_number(sources_num)
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
+        sources_num = sources_num[0]
+        return x, sources_num, angles
 
     def __prediction_step_far_field(self, batch, batch_idx):
         x = batch
@@ -381,18 +406,7 @@ class SubspaceNet(ParentModel):
         return angles_pred, source_estimation
 
     def __training_step_near_field(self, batch, batch_idx):
-        x, sources_num, labels = batch
-        if x.dim() == 2:
-            x = x.unsqueeze(0)
-        if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__training_step_near_field: "
-                             f"Number of sources in the batch is not equal for all samples.")
-        sources_num = sources_num[0]
-        angles, ranges = torch.split(labels, sources_num, dim=1)
-
-        x = x.requires_grad_(True).to(self.device)
-        angles = angles.requires_grad_(True).to(self.device)
-        ranges = ranges.requires_grad_(True).to(self.device)
+        x, sources_num, angles, ranges = self.__prepare_batch_near_field(batch)
         if isinstance(self.train_loss, MusicSpectrumLoss):
             noise_subspace, source_estimation, eigen_regularization = self(x, sources_num, angles)
             loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
@@ -404,23 +418,10 @@ class SubspaceNet(ParentModel):
         return loss, acc, eigen_regularization
 
     def __validation_step_near_field(self, batch, batch_idx, is_test :bool=False):
-        x, sources_num, labels = batch
-        if x.dim() == 2:
-            x = x.unsqueeze(0)
-        if (sources_num != sources_num[0]).any():
-            raise ValueError(f"SubspaceNet.__validation_step_near_field: "
-                             f"Number of sources in the batch is not equal for all samples.")
-        sources_num = sources_num[0]
-        angles, ranges = torch.split(labels, sources_num.item(), dim=1)
-
-        x = x.to(self.device)
-        angles = angles.to(self.device)
-        ranges = ranges.to(self.device)
-
+        x, sources_num, angles, ranges = self.__prepare_batch_near_field(batch)
         angles_pred, ranges_pred, source_estimation, _ = self(x, sources_num)
         loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
-
         if is_test:
             _, loss_angle, loss_range = self.test_loss_separated(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
             loss = (loss, loss_angle, loss_range)
@@ -428,6 +429,18 @@ class SubspaceNet(ParentModel):
 
     def __test_step_near_field(self, batch, batch_idx):
         return self.__validation_step_near_field(batch, batch_idx, is_test=True)
+
+    def __prepare_batch_near_field(self, batch):
+        x, sources_num, labels = batch
+        validate_constant_sources_number(sources_num)
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        sources_num = sources_num[0]
+        angles, ranges = torch.split(labels, sources_num, dim=1)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
+        ranges = ranges.to(self.device)
+        return x, sources_num, angles, ranges
 
     def __prediction_step_near_field(self, batch, batch_idx):
         x = batch
@@ -522,20 +535,3 @@ class SubspaceNet(ParentModel):
             }
 
         return snr_mapping.get(snr, self.psd_epsilon / (2 if is_v2 else 10))
-
-class AntiRectifier(nn.Module):
-    def __init__(self, relu_inplace=False):
-        super(AntiRectifier, self).__init__()
-        self.relu = nn.ReLU(inplace=relu_inplace)
-
-    def forward(self, x):
-        return torch.cat((self.relu(x), self.relu(-x)), 1)
-
-class L2NormLayer(nn.Module):
-    def __init__(self, dim=(1, 2), eps=1e-6):
-        super(L2NormLayer, self).__init__()
-        self.dim = dim
-        self.eps = eps
-
-    def forward(self, x):
-        return torch.nn.functional.normalize(x, p=2, dim=self.dim, eps=self.eps) + self.eps * torch.diag(torch.ones(x.shape[-1], device=x.device))

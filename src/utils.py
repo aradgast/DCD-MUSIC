@@ -31,7 +31,8 @@ import warnings
 
 from pathlib import Path
 from src.config import device
-
+import matplotlib.pyplot as plt
+import torch.nn as nn
 
 # Constants
 R2D = 180 / np.pi
@@ -53,6 +54,22 @@ plot_styles = {
     'music(SPS)': {'color': 'y', 'linestyle': ':', 'marker': 's', "markersize": 8},
 }
 
+def validate_constant_sources_number(number_of_sources: torch.tensor):
+    """
+    Validate that the number of sources in the batch is equal for all samples.
+    Args:
+        number_of_sources: The number of sources in the batch.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If the number of sources in the batch is not equal for all samples
+
+    """
+    if (number_of_sources != number_of_sources[0]).any():
+        raise ValueError(f"validate_constant_sources_number: "
+                         f"Number of sources in the batch is not equal for all samples.")
 
 def initialize_data_paths(path: Path):
     datasets_path = path / "datasets"
@@ -496,6 +513,23 @@ def print_loss_results_from_simulation(loss_results: dict):
                 print(txt)
             print("\n")
         print("\n")
+
+class AntiRectifier(nn.Module):
+    def __init__(self, relu_inplace=False):
+        super(AntiRectifier, self).__init__()
+        self.relu = nn.ReLU(inplace=relu_inplace)
+
+    def forward(self, x):
+        return torch.cat((self.relu(x), self.relu(-x)), 1)
+
+class L2NormLayer(nn.Module):
+    def __init__(self, dim=(1, 2), eps=1e-6):
+        super(L2NormLayer, self).__init__()
+        self.dim = dim
+        self.eps = eps
+
+    def forward(self, x):
+        return torch.nn.functional.normalize(x, p=2, dim=self.dim, eps=self.eps) + self.eps * torch.diag(torch.ones(x.shape[-1], device=x.device))
 
 
 if __name__ == "__main__":
