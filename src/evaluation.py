@@ -37,11 +37,10 @@ from torch.utils.data.dataloader import DataLoader
 from pathlib import Path
 
 # Internal imports
-from src.utils import *
+from src.config import device
 from src.methods_pack.music import MUSIC
 from src.methods_pack.root_music import RootMusic, root_music
 from src.methods_pack.esprit import ESPRIT
-from src.methods_pack.mle import MLE
 from src.methods_pack.beamformer import Beamformer
 from src.methods_pack.music_tops import TOPS
 from src.methods_pack.csestimator import CsEstimator
@@ -145,7 +144,7 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
     # Gradients calculation isn't required for evaluation
     with (torch.no_grad()):
         for idx, data in enumerate(dataset):
-            if isinstance(model, (SubspaceNet, TransMUSIC)):
+            if isinstance(model, (SubspaceNet, TransMUSIC, DCDMUSIC)):
                 if mode == "valid":
                     eval_loss, acc = model.validation_step(data, idx)
                 else:
@@ -155,9 +154,9 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
                     if overall_loss_angle is None:
                         overall_loss_angle, overall_loss_distance = 0.0, 0.0
 
-                    overall_loss_angle += eval_loss_angle.item()
-                    overall_loss_distance += eval_loss_distance.item()
-                overall_loss += eval_loss.item()
+                    overall_loss_angle += torch.sum(eval_loss_angle).item()
+                    overall_loss_distance += torch.sum(eval_loss_distance).item()
+                overall_loss += torch.sum(eval_loss).item()
                 if acc is not None:
                     if overall_accuracy is None:
                         overall_accuracy = 0.0
@@ -382,35 +381,6 @@ def evaluate_crb(dataset: DataLoader,
     else:
         print("Unrecognized field type.")
     return
-
-
-def evaluate_mle(dataset: list, system_model: SystemModel, criterion):
-    """
-    Evaluate the Maximum Likelihood Estimation (MLE) algorithm on a given dataset.
-
-    Args:
-        dataset (list): The evaluation dataset.
-        system_model (SystemModel): The system model for the MLE algorithm.
-
-    Returns:
-        float: The average evaluation loss.
-    """
-    # initialize mle instance
-    mle = MLE(system_model)
-    # Initialize parameters for evaluation
-    loss_list = []
-    for i, data in enumerate(dataset):
-        X, labels = data
-        Rx = calculate_covariance_tensor(X, method="simple").to(device)
-        angles = labels[:, :labels.shape[-1] // 2].to(device)
-        distances = labels[:, labels.shape[-1] // 2:].to(device)
-        # Apply MLE algorithm
-        pred_angle, pred_distance = mle(Rx)
-        # Calculate loss criterion
-        loss = criterion(pred_angle.to(device), angles, pred_distance.to(device), distances)
-        loss_list.append(loss.item())
-    return {"Overall": np.mean(loss_list)}
-
 
 def evaluate(
         generic_test_dataset: DataLoader,

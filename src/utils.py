@@ -30,11 +30,12 @@ import scipy
 import warnings
 
 from pathlib import Path
+from src.config import device
+
 
 # Constants
 R2D = 180 / np.pi
 D2R = 1 / R2D
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 plot_styles = {
     'CCRB': {'color': 'r', 'linestyle': '-', 'marker': 'o', "markersize": 8},
     'Beamformer': {'color': 'r', 'linestyle': '--', 'marker': 's', "markersize": 8},
@@ -51,8 +52,6 @@ plot_styles = {
     'music': {'color': 'y', 'linestyle': '-.', 'marker': 's', "markersize": 8},
     'music(SPS)': {'color': 'y', 'linestyle': ':', 'marker': 's', "markersize": 8},
 }
-# device = "cpu"
-print("Running on device: ", device)
 
 
 def initialize_data_paths(path: Path):
@@ -423,52 +422,37 @@ def gram_diagonal_overload(Kx: torch.Tensor, eps: float):
     return Kx_Out
 
 
-def calculate_covariance_tensor(sampels: torch.Tensor, method: str = "simple"):
-    if method in ["simple", "sample"]:
-        if sampels.dim() == 2:
-            Rx = torch.cov(sampels)[None, :, :]
-        elif sampels.dim() == 3:
-            Rx = torch.stack([torch.cov(sampels[i, :, :]) for i in range(sampels.shape[0])])
-
-    elif method == "sps":
-        Rx = _spatial_smoothing_covariance(sampels)[None, :, :]
-    else:
-        raise ValueError(f"calculate_covariance_tensor: method {method} is not recognized for covariance calculation.")
-
-    return Rx
-
-
-def _spatial_smoothing_covariance(sampels: torch.Tensor):
-    """
-    Calculates the covariance matrix using spatial smoothing technique.
-
-    Args:
-    -----
-        X (np.ndarray): Input samples matrix.
-
-    Returns:
-    --------
-        covariance_mat (np.ndarray): Covariance matrix.
-    """
-
-    X = sampels.squeeze()
-    N = X.shape[0]
-    # Define the sub-arrays size
-    sub_array_size = int(N / 2) + 1
-    # Define the number of sub-arrays
-    number_of_sub_arrays = N - sub_array_size + 1
-    # Initialize covariance matrix
-    covariance_mat = torch.zeros((sub_array_size, sub_array_size), dtype=torch.complex128)
-
-    for j in range(number_of_sub_arrays):
-        # Run over all sub-arrays
-        x_sub = X[j: j + sub_array_size, :]
-        # Calculate sample covariance matrix for each sub-array
-        sub_covariance = torch.cov(x_sub)
-        # Aggregate sub-arrays covariances
-        covariance_mat += sub_covariance / number_of_sub_arrays
-    # Divide overall matrix by the number of sources
-    return covariance_mat
+# def _spatial_smoothing_covariance(sampels: torch.Tensor):
+#     """
+#     Calculates the covariance matrix using spatial smoothing technique.
+#
+#     Args:
+#     -----
+#         X (np.ndarray): Input samples matrix.
+#
+#     Returns:
+#     --------
+#         covariance_mat (np.ndarray): Covariance matrix.
+#     """
+#
+#     X = sampels.squeeze()
+#     N = X.shape[0]
+#     # Define the sub-arrays size
+#     sub_array_size = int(N / 2) + 1
+#     # Define the number of sub-arrays
+#     number_of_sub_arrays = N - sub_array_size + 1
+#     # Initialize covariance matrix
+#     covariance_mat = torch.zeros((sub_array_size, sub_array_size), dtype=torch.complex128)
+#
+#     for j in range(number_of_sub_arrays):
+#         # Run over all sub-arrays
+#         x_sub = X[j: j + sub_array_size, :]
+#         # Calculate sample covariance matrix for each sub-array
+#         sub_covariance = torch.cov(x_sub)
+#         # Aggregate sub-arrays covariances
+#         covariance_mat += sub_covariance / number_of_sub_arrays
+#     # Divide overall matrix by the number of sources
+#     return covariance_mat
 
 
 def parse_loss_results_for_plotting(loss_results: dict, tested_param: str):

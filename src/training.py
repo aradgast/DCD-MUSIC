@@ -36,11 +36,15 @@ from tqdm import tqdm
 from torch.optim import lr_scheduler
 import wandb
 import time
+import torch
 import torch.nn as nn
+import numpy as np
+from pathlib import Path
+from src.config import device
+
+
 # internal imports
-from src.utils import *
-from src.models import (SubspaceNet, DeepCNN, DeepAugmentedMUSIC,
-                        ModelGenerator, DCDMUSIC, TransMUSIC, DeepRootMUSIC)
+from src.models import (SubspaceNet, DCDMUSIC, TransMUSIC)
 from src.evaluation import evaluate_dnn_model
 
 
@@ -89,10 +93,11 @@ class Trainer:
         self.is_wandb = False
         self.__init_paths()
         self.show_plots = show_plots
+        self.device = device
 
     def train(self, train_dataloader, valid_dataloader, use_wandb:bool=False, save_final:bool=False,
               load_model:bool=False):
-        self.model = self.model.to(device)
+        self.model = self.model.to(self.device)
         self.__init_metrics()
         self.__configure_model()
         self.__init_wandb(use_wandb)
@@ -102,7 +107,7 @@ class Trainer:
         print("\n---Start Training Stage ---\n")
         print(f"Training Objective: {self.training_objective}")
         print(f"Model: {self.model.get_model_name()}")
-        print(f"Device: {device}")
+        print(f"Device: {self.device}")
         print(f"Optimizer: {self.training_params.get('optimizer')}")
         print(f"Scheduler: {self.training_params.get('scheduler')}")
         print(f"Learning Rate: {self.training_params['learning_rate']}")
@@ -131,7 +136,7 @@ class Trainer:
 
 
             for idx, data in tqdm(enumerate(train_dataloader), desc=f"Training {epoch + 1}/{epochs}"):
-                if isinstance(self.model, (SubspaceNet, TransMUSIC)):
+                if isinstance(self.model, (SubspaceNet, TransMUSIC, DCDMUSIC)):
                     train_loss, acc, eigen_regularization = self.model.training_step(data, idx)
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss
@@ -142,7 +147,7 @@ class Trainer:
                     train_length += data[0].shape[0]
                     epoch_train_acc += acc
                     if eigen_regularization is not None:
-                        epoch_eigenregularization += eigen_regularization.item()
+                        epoch_eigenregularization += torch.sum(eigen_regularization).item()
 
                 else:
                     raise NotImplementedError(
@@ -410,13 +415,6 @@ class Trainer:
             else:
                 transmusic_mode = "subspace_train"
             self.model.update_train_mode(transmusic_mode)
-        if isinstance(self.model, DCDMUSIC):
-            if self.training_objective == "angle, range":
-                self.model.update_angle_extractor_training(True)
-            elif self.training_objective == "range":
-                self.model.update_angle_extractor_training(False)
-
-            self.model.update_criterion()
 
 
 def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model_name: str = None):
@@ -492,6 +490,3 @@ def plot_learning_curve(epoch_list, train_loss: list, validation_loss: list, mod
         plt.legend(loc="best")
         plt.grid()
     return fig
-
-
-

@@ -1,15 +1,16 @@
 import os
 from pathlib import Path
-
-from sympy.physics.vector.printing import params
+import torch
+from torch import nn
 
 from src.metrics import CartesianLoss, RMSPELoss, MusicSpectrumLoss
+from src.models_pack.parent_model import ParentModel
 from src.models_pack.subspacenet import SubspaceNet
 from src.system_model import SystemModel
-from src.utils import *
+from src.methods_pack.music import MUSIC
 
 
-class DCDMUSIC(SubspaceNet):
+class DCDMUSIC(ParentModel):
     """
     The Deep-Cascadede-defferntiable MUSIC is a suggested solution for localization in near-field.
     It uses 2 SubspaceNet:
@@ -17,114 +18,49 @@ class DCDMUSIC(SubspaceNet):
     The second, uses the first to extract the angles, and then uses the angles to get the distance.
     """
 
-    def __init__(self, tau: int, system_model: SystemModel,diff_method: tuple = ("esprit", "music_1d"),
-                 train_loss_type: str=("rmspe", "rmspe"), regularization: str = None, variant: str = "small", norm_layer: bool = True,
-                 state_path: str = None, angle_extractor: SubspaceNet = None, train_angle_extractor: bool = False):
-        super(DCDMUSIC, self).__init__(tau, diff_method[1], train_loss_type[1],system_model, "near",
-                                       regularization=regularization, variant=variant, norm_layer=norm_layer)
-        self.angle_extractor = None
-        self.angle_extractor_diff_method = diff_method[0]
-        self.angle_extractor_train_loss_type = train_loss_type[0]
-        self.state_path = state_path
-        self.__init_angle_extractor(path=self.state_path, model=angle_extractor)
-        self.train_angle_extractor = train_angle_extractor
-        self.__set_criterion()
-        self.set_eigenregularization_schedular(init_value=0.0, step_size=10000, gamma=1.0)
-        self.schedular_min_weight = 0.0
+    def __init__(self, system_model: SystemModel, tau: int, diff_method: tuple = ("esprit", "music_1d"),
+                 regularization: str = None, variant: str = "small",
+                 norm_layer: bool = True, batch_norm: bool = False, psd_epsilon: float = 1e-6,
+                 load_angle_branch: bool = False, angle_extractor: SubspaceNet = None, load_range_branch: bool = False):
+        super(DCDMUSIC, self).__init__(system_model)
+        self.tau = tau
+        self.regularization = regularization
+        self.psd_epsilon = psd_epsilon
+        self.norm_layer = norm_layer
+        self.batch_norm = batch_norm
+        self.variant = variant
+        self.angle_branch, self.range_branch = None, None # Holders for the angle and range branches
+        self.__init_angle_branch(load_angle_branch, diff_method[0]) if angle_extractor is None else angle_extractor
+        self.__init_range_branch(load_range_branch, diff_method[1])
+        self.train_mode = None
+        # self.update_train_mode("angle") # "angle", "range" or "position"
+        self.train_loss, self.validation_loss = None, None
+        # self.__set_criterion()
 
     def forward(self, x: torch.Tensor, number_of_sources: int = None):
-        """
-        Performs the forward pass of the DCD-MUSIC. Using the subspaceNet forward but,
-        calling the angle extractor method first.
-
-        Args
-            x: The input signal.
-            number_of_sources: The number of sources in the signal.
-
-        Returns
-            The distance prediction.
-         """
-        if self.train_loss_type == "music_spectrum" and self.training:
-            angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
-            Rz = self.get_surrogate_covariance(x)
-            _, noise_subspace, source_estimation, eigen_regularization = self.diff_method.subspace_separation(Rz,
-                                                                                                              number_of_sources)
-            return angles, noise_subspace, source_estimation, eigen_regularization
-
-        else:
-            angles, sources_estimation, eigen_regularization = self.extract_angles(x, number_of_sources)
-
-            _, distances, _ = super().forward(x, sources_num=number_of_sources, known_angles=angles)
+        if self.train_mode == "angle":
+            angles, sources_estimation, eigen_regularization = self.angle_branch_forward(x, number_of_sources)
+            return angles, sources_estimation, eigen_regularization
+        elif self.train_mode == "range":
+            with torch.no_grad():
+                self.angle_branch.eval()
+                angles, sources_estimation, _ = self.angle_branch_forward(x, number_of_sources)
+            distances = self.range_branch_forward(x, number_of_sources=number_of_sources, known_angles=angles)
+            return angles, distances, sources_estimation, None
+        elif self.train_mode == "position":
+            angles, sources_estimation, eigen_regularization = self.angle_branch_forward(x, number_of_sources)
+            distances = self.range_branch_forward(x, number_of_sources, known_angles=angles)
             return angles, distances, sources_estimation, eigen_regularization
 
-    def __init_angle_extractor(self, path: str = None, model: SubspaceNet = None):
-        if model is not None:
-            self.angle_extractor = model
-        else:
-            self.angle_extractor = SubspaceNet(tau=self.tau,
-                                               diff_method=self.angle_extractor_diff_method,
-                                               train_loss_type=self.angle_extractor_train_loss_type,
-                                               system_model=self.system_model,
-                                               field_type="far",
-                                               regularization=self.regularization,
-                                               variant=self.variant,
-                                               norm_layer=self.norm_layer)
-            if path is None:
-                path = self.angle_extractor.get_model_file_name()
-            self._load_state_for_angle_extractor(path)
+    def angle_branch_forward(self, x: torch.Tensor, number_of_sources: int = None):
+        Rz = self.angle_branch.get_surrogate_covariance(x)
+        angles_predictions, sources_estimation, eigen_regularization = self.angle_branch.diff_method(Rz, number_of_sources)
+        return angles_predictions, sources_estimation, eigen_regularization
 
-    def _load_state_for_angle_extractor(self, path: str = None):
-        cwd = Path(__file__).parent.parent.parent
-        if path is None or path == "":
-            path = self.angle_extractor.get_model_file_name()
-        ref_path = os.path.join(cwd, "data", "weights", self.angle_extractor._get_name(), "final_models", path)
-        try:
-            self.angle_extractor.load_state_dict(torch.load(ref_path, map_location=device))
-        except FileNotFoundError as e:
-            # raise FileNotFoundError(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
-            print(f"DCDMUSIC._load_state_for_angle_extractor: Model state not found in {ref_path}")
-        print(f"DCDMUSIC._load_state_for_angle_extractor: Model state loaded from {ref_path}")
-
-    def extract_angles(self, Rx_tau: torch.Tensor, number_of_sources: int):
-        """
-
-        Args:
-            Rx_tau: The input tensor.
-            number_of_sources: The number of sources in the signal.
-            train_angle_extractor: Determines if the model is training the angle branch.
-
-        Returns:
-                The angles from the first SubspaceNet model.
-        """
-        eigen_regularization = None
-        if not self.train_angle_extractor:
-            if self.angle_extractor.training:
-                self.angle_extractor.eval()
-            with torch.no_grad():
-                angles, sources_estimation, _ = self.angle_extractor(Rx_tau, number_of_sources)
-        else:
-            if not self.angle_extractor.training:
-                self.angle_extractor.train()
-            angles, sources_estimation, eigen_regularization = self.angle_extractor(Rx_tau, number_of_sources)
-        return angles, sources_estimation, eigen_regularization
-
-    def print_model_params(self):
-        params = self.get_model_params()
-        name = f"tau={params.get('tau')}_diff_methods={params.get('diff_methods')[0]}_{params.get('diff_methods')[1]}"
-        if self.regularization is not None:
-            name += f"_reg={self.regularization}"
-        return name
-
-    def get_model_params(self):
-        if str(self.angle_extractor.diff_method).startswith("music"):
-            angle_extractor_diff_method = str(self.angle_extractor.diff_method) + "_" + self.angle_extractor.train_loss_type
-        else:
-            angle_extractor_diff_method = str(self.angle_extractor_diff_method)
-        if str(self.diff_method).startswith("music"):
-            diff_method = str(self.diff_method) + "_" + self.train_loss_type
-        else:
-            diff_method = str(self.diff_method)
-        return {"tau": self.tau, "diff_methods": (angle_extractor_diff_method ,diff_method)}
+    def range_branch_forward(self, x: torch.Tensor, number_of_sources: int = None, known_angles: torch.Tensor = None):
+        Rz = self.range_branch.get_surrogate_covariance(x)
+        ranges_predictions = self.range_branch.diff_method(Rz, number_of_sources, known_angles)
+        return ranges_predictions
 
     def training_step(self, batch, batch_idx):
         x, sources_num, labels = batch
@@ -135,30 +71,24 @@ class DCDMUSIC(SubspaceNet):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        x = x.requires_grad_(True).to(device)
-        angles = angles.requires_grad_(True).to(device)
-        ranges = ranges.requires_grad_(True).to(device)
-        if self.train_loss_type == "music_spectrum":
-            if self.diff_method.estimation_params == "angle, range":
-                noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
-                loss = self.train_loss(noise_subspace=noise_subspace, angles=angles, ranges=ranges)
-            else:
-                angles_pred, noise_subspace, sources_estimation, eigen_regularization = self(x, sources_num)
-                loss = self.train_loss(noise_subspace=noise_subspace, angles=angles_pred, ranges=ranges)
-        else:
-            angles_pred, distances_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss = self.train_loss(angles, angles_pred, ranges, distances_pred)
-        if isinstance(loss, tuple):
-            loss = loss[0]
+        x = x.requires_grad_(True).to(self.device)
+        angles = angles.requires_grad_(True).to(self.device)
+        ranges = ranges.requires_grad_(True).to(self.device)
+        eigen_regularization, sources_estimation = None, None
+        if self.train_mode == "angle":
+            angles_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+            loss = self.train_loss(angles, angles_pred)
+        elif self.train_mode == "range":
+            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+            loss, loss_angles, loss_ranges = self.train_loss(angles, angles_pred, ranges, ranges_pred)
+        else: # self.train_mode == "position":
+            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+            loss = self.train_loss(angles, angles_pred, ranges, ranges_pred)
+
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
         loss = self.get_regularized_loss(loss, eigen_regularization)
+
         return loss, acc, eigen_regularization
-        # if eigen_regularization is None:
-        #     return loss, acc
-        # else:
-        #     if self.diff_method.estimation_params == "range":
-        #         eigen_regularization = 0
-        #     return loss + eigen_regularization * self.eigenregularization_weight, acc
 
 
     def validation_step(self, batch, batch_idx, is_test: bool=False):
@@ -170,16 +100,19 @@ class DCDMUSIC(SubspaceNet):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        x = x.to(device)
-        angles = angles.to(device)
-        ranges = ranges.to(device)
-
-        angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-        loss = self.validation_loss(angles_pred, angles, ranges_pred, ranges)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
+        ranges = ranges.to(self.device)
+        if self.train_mode == "angle":
+            angles_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+            loss = self.validation_loss(angles_pred, angles)
+        else:
+            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
+            loss = self.validation_loss(angles_pred, angles, ranges_pred, ranges)
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
 
-        if is_test:
-            _, loss_angle, loss_range = self.test_loss_separated(angles_pred, angles, ranges_pred, ranges)
+        if is_test and self.train_mode == "position":
+            _, loss_angle, loss_range = self.test_loss(angles_pred, angles, ranges_pred, ranges)
             return (loss, loss_angle, loss_range), acc
 
         return loss, acc
@@ -194,31 +127,148 @@ class DCDMUSIC(SubspaceNet):
         angles, distances, sources_estimation, eigen_regularization = self.forward(x, self.system_model.params.M)
         return angles, distances, sources_estimation
 
-    def __set_criterion(self):
-        if self.train_loss_type == "music_spectrum":
-            self.train_loss = MusicSpectrumLoss(system_model=self.system_model)
+    def init_model_train_params(self, init_eigenregularization_weight: float = 0.001, init_cell_size: float = 0.2):
+        self.__init_angle_branch_train_params(init_eigenregularization_weight)
+        self.__init_range_branch_train_params(init_cell_size)
+        self.__set_criterion()
+
+    def __init_angle_branch_train_params(self, init_eigenregularization_weight: float):
+        self.angle_branch.set_eigenregularization_schedular(init_value=init_eigenregularization_weight)
+
+    def __init_range_branch_train_params(self, init_cell_size: float):
+        if isinstance(self.range_branch.diff_method, MUSIC) and isinstance(self.train_loss, RMSPELoss):
+            self.range_branch.diff_method.init_cells(init_cell_size)
+
+    def __init_angle_branch(self, load_state: bool, diff_method: str):
+        self.angle_branch = SubspaceNet(tau=self.tau, diff_method=diff_method, train_loss_type="rmspe",
+                            system_model=self.system_model, field_type="far", regularization=self.regularization,
+                            variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
+                            psd_epsilon=self.psd_epsilon)
+        self.load_angle_branch(load_state)
+
+    def __init_range_branch(self, load_state: bool, diff_method: str):
+        self.range_branch = SubspaceNet(tau=self.tau, diff_method=diff_method, train_loss_type="rmspe",
+                            system_model=self.system_model, field_type="near", regularization=None,
+                            variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
+                            psd_epsilon=self.psd_epsilon)
+        self.load_range_branch(load_state)
+
+    def load_angle_branch(self, load_state: bool):
+        self.angle_branch = self.__load_branch(load_state, "angle")
+
+    def load_range_branch(self, load_state: bool):
+        self.range_branch = self.__load_branch(load_state, "range")
+
+    def __load_branch(self, load_state: bool, branch: str):
+        model = self.angle_branch if branch == "angle" else self.range_branch
+
+        if load_state:
+            path = os.path.join(Path(__file__).parent.parent.parent, "data", "weights", model._get_name(), "final_models",
+                                model.get_model_file_name())
+            try:
+                model.load_state_dict(torch.load(path + ".pt", map_location=self.device, weights_only=True))
+            except FileNotFoundError as e:
+                raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path}")
+            print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from {path}")
+        return model
+
+
+    def print_model_params(self):
+        params = self.get_model_params()
+        name = f"tau={params.get('tau')}_diff_methods={params.get('diff_methods')[0]}_{params.get('diff_methods')[1]}"
+        if self.regularization is not None:
+            name += f"_reg={self.regularization}"
+        return name
+
+    def get_model_params(self):
+        if str(self.angle_branch.diff_method).startswith("music"):
+            angle_extractor_diff_method = str(self.angle_branch.diff_method) + "_" + str(self.angle_branch.train_loss)
         else:
-            if self.train_angle_extractor:
-                self.train_loss = CartesianLoss()
-            else:
-                self.train_loss = RMSPELoss(balance_factor=0.0)
-        self.validation_loss = CartesianLoss()
-        self.test_loss = CartesianLoss()
-        self.test_loss_separated = RMSPELoss(1.0)
+            angle_extractor_diff_method = str(self.angle_branch.diff_method)
+        if str(self.range_branch.diff_method).startswith("music"):
+            diff_method = str(self.range_branch.diff_method) + "_" + str(self.range_branch.train_loss)
+        else:
+            diff_method = str(self.range_branch.diff_method)
+        return {"tau": self.tau, "diff_methods": (angle_extractor_diff_method ,diff_method)}
+
+
+
+    def __set_criterion(self):
+        if self.train_mode == "angle":
+            self.train_loss = RMSPELoss(balance_factor=1.0)
+            self.validation_loss = RMSPELoss(balance_factor=1.0)
+        elif self.train_mode == "range":
+            self.train_loss = RMSPELoss(balance_factor=0.0)
+            self.validation_loss = RMSPELoss(balance_factor=0.0)
+        elif self.train_mode == "position":
+            self.train_loss = CartesianLoss()
+            self.validation_loss = CartesianLoss()
+            self.test_loss = RMSPELoss(balance_factor=1.0)
+        else:
+            raise ValueError(f"DCDMUSIC.__set_criterion: Unknown train mode {self.train_mode}")
 
     def update_criterion(self):
         self.__set_criterion()
 
-    def update_angle_extractor_training(self, train_angle_extractor: bool):
-        self.train_angle_extractor = train_angle_extractor
-        self.__set_angle_extractor_requires_grad(train_angle_extractor)
+    def update_train_mode(self, mode: str):
+        mode = mode.lower()
+        if mode not in ["angle", "range", "position"]:
+            raise ValueError(f"DCDMUSIC.update_train_mode: Unknown mode {mode}")
+        self.train_mode = mode
+        print(f"DCDMUSIC.update_train_mode: Train mode updated to {mode}")
+        if mode == "angle":
+            self.__set_branch_requires_grad(True, branch="angle")
+            self.__set_branch_requires_grad(False, branch="range")
+        elif mode == "range":
+            self.__set_branch_requires_grad(False, branch="angle")
+            self.__set_branch_requires_grad(True, branch="range")
+        else:
+            self.__set_branch_requires_grad(True, branch="angle")
+            self.__set_branch_requires_grad(True, branch="range")
+        self.update_criterion()
 
-    def __set_angle_extractor_requires_grad(self, requires_grad: bool):
-        for param in self.angle_extractor.parameters():
-            param.requires_grad = requires_grad
+    def switch_train_mode(self):
+        if self.train_mode == "angle":
+            self.update_train_mode("range")
+        elif self.train_mode == "range":
+            self.update_train_mode("position")
+        else:
+            self.update_train_mode("angle")
+
+    def __set_branch_requires_grad(self, requires_grad: bool, branch: str):
+        if branch == "angle":
+            for param in self.angle_branch.parameters():
+                param.requires_grad = requires_grad
+        elif branch == "range":
+            for param in self.range_branch.parameters():
+                param.requires_grad = requires_grad
 
     def _get_name(self):
         name = "DCDMUSIC"
         if self.variant == "V2":
             name += f"_V2"
         return name
+
+    def train(self, T: bool = True):
+        if self.train_mode == "angle":
+            self.angle_branch.train(T)
+            self.range_branch.eval()
+        elif self.train_mode == "range":
+            self.range_branch.train(T)
+            self.angle_branch.eval()
+        else:
+            self.angle_branch.train(T)
+            self.range_branch.train(T)
+
+    def get_regularized_loss(self, loss, l_eig=None):
+        if l_eig is not None:
+            loss_r = loss + self.angle_branch.eigenregularization_weight * l_eig
+        else:
+            loss_r = loss
+        return torch.sum(loss_r)
+
+    def get_eigenregularization_weight(self):
+        if self.train_mode in ["angle", "position"]:
+            return self.angle_branch.eigenregularization_weight
+        else:
+            return None

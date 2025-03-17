@@ -5,15 +5,20 @@ import torch
 from torch.nn import Module
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
+import numpy as np
+import warnings
+
 
 from src.system_model import SystemModel
-from src.utils import *
+from src.utils import sample_covariance, keep_far_enough_points
 from src.metrics import CartesianLoss, RMSPELoss
+from src.config import device
 
 
 class Beamformer(Module):
     def __init__(self, system_model: SystemModel):
         super(Beamformer, self).__init__()
+        self.device = device
         self.system_model = system_model
         self.angles_dict = None
         self.ranges_dict = None
@@ -223,13 +228,13 @@ class Beamformer(Module):
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
-        x = x.to(device)
+        x = x.to(self.device)
         if max(sources_num) * 2 == label.shape[1]:
             angles, ranges = torch.split(label, max(sources_num), dim=1)
-            angles = angles.to(device)
-            ranges = ranges.to(device)
+            angles = angles.to(self.device)
+            ranges = ranges.to(self.device)
         else:
-            angles = label.to(device)  # only angles
+            angles = label.to(self.device)  # only angles
 
         # Check if the sources number is the same for all samples in the batch
         if (sources_num != sources_num[0]).any():
@@ -260,7 +265,7 @@ class Beamformer(Module):
             source_number = known_number_of_sources
         batch_size = spectrum.shape[0]
 
-        peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=device)
+        peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=self.device)
         for batch in range(batch_size):
             elem_spectrum = spectrum[batch].cpu().detach().numpy().squeeze()
             # Find spectrum peaks
@@ -273,7 +278,7 @@ class Beamformer(Module):
                 peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
             # Sort the peak by their amplitude
             sorted_peaks = peaks_tmp[np.argsort(elem_spectrum[peaks_tmp])[::-1]]
-            peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(device)
+            peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(self.device)
         # if the model is not in training mode, return the peaks
         return peaks
 
@@ -281,9 +286,9 @@ class Beamformer(Module):
         batch_size = spectrum.shape[0]
 
         max_row = torch.zeros((batch_size, known_number_of_sources)
-                              , dtype=torch.int64, device=device)
+                              , dtype=torch.int64, device=self.device)
         max_col = torch.zeros((batch_size, known_number_of_sources)
-                              , dtype=torch.int64, device=device)
+                              , dtype=torch.int64, device=self.device)
         for batch in range(batch_size):
             elem_spectrum = spectrum[batch].detach().cpu().numpy().squeeze()
             # Flatten the spectrum
@@ -313,7 +318,7 @@ class Beamformer(Module):
         angle_range = np.deg2rad(self.system_model.params.doa_range)
         angle_resolution = np.deg2rad(self.system_model.params.doa_resolution / 2)
         # if it's the Far field case, need to init angles range.
-        self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution, device=device,
+        self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution, device=self.device,
                                         dtype=torch.float64).requires_grad_(False)
         if self.system_model.params.field_type.startswith("near"):
             # if it's the Near field, there are 3 possabilities.
@@ -324,7 +329,7 @@ class Beamformer(Module):
             self.ranges_dict = torch.arange(np.ceil(fresnel),
                                             fraunhofer * fraunhofer_ratio + distance_resolution,
                                             distance_resolution,
-                                            device=device, dtype=torch.float64).requires_grad_(False)
+                                            device=self.device, dtype=torch.float64).requires_grad_(False)
 
     def __init_steering_dict(self):
         """

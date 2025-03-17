@@ -4,10 +4,10 @@ import torch.nn as nn
 from src.metrics import RMSPELoss
 from src.methods_pack.subspace_method import SubspaceMethod
 from src.system_model import SystemModel
-from src.utils import device
+
 
 class ESPRIT(SubspaceMethod):
-    def __init__(self, system_model: SystemModel, model_order_estimation: str = "threshold"):
+    def __init__(self, system_model: SystemModel, model_order_estimation: str = None):
         super().__init__(system_model, model_order_estimation)
         self.__init_criteria()
 
@@ -36,13 +36,13 @@ class ESPRIT(SubspaceMethod):
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
-        x = x.to(device)
+        x = x.to(self.device)
         if max(sources_num) * 2 == label.shape[1]:
             angles, _ = torch.split(label, max(sources_num), dim=1)
-            angles = angles.to(device)
+            angles = angles.to(self.device)
             masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
-            angles = label.to(device)  # only angles
+            angles = label.to(self.device)  # only angles
         # Check if the sources number is the same for all samples in the batch
         if (sources_num != sources_num[0]).any():
             # in this case, the sources number is not the same for all samples in the batch

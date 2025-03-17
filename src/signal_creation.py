@@ -15,7 +15,9 @@ This class is used for defining the samples model.
 # Imports
 from random import sample
 from src.system_model import SystemModel, SystemModelParams
-from src.utils import *
+# from src.utils import *
+import numpy as np
+import torch
 
 class Samples(SystemModel):
     """
@@ -145,7 +147,7 @@ class Samples(SystemModel):
 
         if doa == None:
             # Generate angels with gap greater than 0.2 rad (nominal case)
-            self.angles = np.array(create_doa_with_gap(gap=10, M=M)) * D2R
+            self.angles = np.deg2rad(np.array(create_doa_with_gap(gap=10, M=M)))
         else:
             # Generate
             self.angles = np.deg2rad(doa)

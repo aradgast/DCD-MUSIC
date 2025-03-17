@@ -17,9 +17,8 @@ import numpy as np
 from dataclasses import dataclass
 
 import torch
-from torch.cuda import device
-from src.utils import *
 import matplotlib.pyplot as plt
+from src.config import device
 
 
 @dataclass
@@ -112,6 +111,7 @@ class SystemModel(object):
                 eta: float = 0, geo_noise_var: float = 0) -> np.ndarray: Computes the steering vector.
 
         """
+        self.device = device
         self.array = None
         self.dist_array_elems = None
         self.time_axis = None
@@ -283,7 +283,7 @@ class SystemModel(object):
             angles = torch.from_numpy(angles)
             local_device = "cpu" # when creating the data, it's done element-wise, better not to use GPU
         else:
-            local_device = device
+            local_device = self.device
 
         array = torch.Tensor(self.array[:, None]).to(torch.float64).to(local_device)
 
@@ -341,7 +341,7 @@ class SystemModel(object):
         else:
             if angles.dim() == 1:
                 angles = angles[:, None]
-            local_device = device
+            local_device = self.device
         theta = angles.to(torch.float64).to(local_device)
 
         if isinstance(ranges, np.ndarray):

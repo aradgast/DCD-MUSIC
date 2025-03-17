@@ -68,7 +68,7 @@ class MUSIC(SubspaceMethod):
     For Near field - "angle", "range" and "angle, range" are the possible options.
     """
 
-    def __init__(self, system_model: SystemModel, estimation_parameter: str, model_order_estimation: str = "threshold"):
+    def __init__(self, system_model: SystemModel, estimation_parameter: str, model_order_estimation: str = None):
         """
 
         Args:
@@ -110,14 +110,14 @@ class MUSIC(SubspaceMethod):
             if known_angles.shape[-1] == 1:
                 self.set_search_grid(known_angles=known_angles, known_distances=known_distances)
             else:
-                params = torch.zeros((cov.shape[0], number_of_sources), dtype=torch.float64, device=device)
+                params = torch.zeros((cov.shape[0], number_of_sources), dtype=torch.float64, device=self.device)
                 for source in range(number_of_sources):
                     params_source, _, _ = self.forward(cov, number_of_sources=number_of_sources,
                                                        known_angles=known_angles[:, source][:, None])
                     params[:, source] = params_source.squeeze()
                 return params
         _, noise_subspace, source_estimation, eigen_regularization = self.subspace_separation(cov.to(torch.complex128), number_of_sources)
-        inverse_spectrum = self.get_inverse_spectrum(noise_subspace.to(device)).to(device)
+        inverse_spectrum = self.get_inverse_spectrum(noise_subspace.to(self.device)).to(self.device)
         if self._get_name() == "TOPS":
             self.music_spectrum = torch.sum(1 / (inverse_spectrum + 1e-10), dim=-1)
         else:
@@ -171,13 +171,13 @@ class MUSIC(SubspaceMethod):
         """
         # steering_dict = self.steering_dict.to(device)
         if self.system_model.params.field_type.startswith("far"):
-            steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
+            steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(self.device)
             var1 = torch.einsum("an, bnm -> bam", steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
                                 noise_subspace)
             inverse_spectrum = torch.norm(var1, dim=2)
         else:
             if self.estimation_params.startswith("angle, range"):
-                steering_dict = self.steering_dict[:noise_subspace.shape[1]].conj().transpose(0, 2).transpose(0, 1).to(device)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].conj().transpose(0, 2).transpose(0, 1).to(self.device)
                 try:
                     var1 = torch.einsum("adk, bkl -> badl",
                                         steering_dict,
@@ -187,7 +187,7 @@ class MUSIC(SubspaceMethod):
                 except RuntimeError:
                     warnings.warn("MUSIC.get_inverse_spectrum: Out of memory error, trying to free some memory and convert the batch operation to for loop.")
                     torch.cuda.empty_cache()
-                    inverse_spectrum = torch.zeros((noise_subspace.shape[0], self.angles_dict.shape[0], self.ranges_dict.shape[0]), dtype=torch.float64, device=device)
+                    inverse_spectrum = torch.zeros((noise_subspace.shape[0], self.angles_dict.shape[0], self.ranges_dict.shape[0]), dtype=torch.float64, device=self.device)
                     for batch in range(noise_subspace.shape[0]):
                         var1 = torch.einsum("adk, kl -> adl",
                                         steering_dict,
@@ -197,12 +197,12 @@ class MUSIC(SubspaceMethod):
                         del var1
                 
             elif self.estimation_params.endswith("angle"):
-                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(self.device)
                 var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1).T
             elif self.estimation_params.startswith("range"):
-                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(self.device)
                 var1 = torch.einsum("dbn, nbm -> bdm", steering_dict.conj().transpose(0, 2),
                                     noise_subspace.transpose(0, 1))
                 inverse_spectrum = torch.norm(var1, dim=-1)
@@ -260,13 +260,13 @@ class MUSIC(SubspaceMethod):
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
-        x = x.to(device)
+        x = x.to(self.device)
         if self.estimation_params == "angle, range":
             angles, ranges = torch.split(label, max(sources_num), dim=1)
-            angles = angles.to(device)
-            ranges = ranges.to(device)
+            angles = angles.to(self.device)
+            ranges = ranges.to(self.device)
         else:
-            angles = label.to(device)  # only angles
+            angles = label.to(self.device)  # only angles
         # Check if the sources number is the same for all samples in the batch
         if (sources_num != sources_num[0]).any():
             # in this case, the sources number is not the same for all samples in the batch
@@ -304,7 +304,7 @@ class MUSIC(SubspaceMethod):
 
         batch_size = self.music_spectrum.shape[0]
 
-        peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=device)
+        peaks = torch.zeros(batch_size, source_number, dtype=torch.int64, device=self.device)
         for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
             # Find spectrum peaks
@@ -317,13 +317,13 @@ class MUSIC(SubspaceMethod):
                 peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
             # Sort the peak by their amplitude
             sorted_peaks = peaks_tmp[np.argsort(music_spectrum[peaks_tmp])[::-1]]
-            peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(device)
+            peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(self.device)
         if not self.training:
             # if the model is not in training mode, return the peaks
             if peaks.dim() == 1:
                 return search_space[peaks]
             else:
-                labels = torch.gather(search_space.unsqueeze(1).repeat(1, source_number).to(device), 0, peaks)
+                labels = torch.gather(search_space.unsqueeze(1).repeat(1, source_number).to(self.device), 0, peaks)
                 return labels
         else:
             return self.__maskpeak_1d(peaks, search_space, source_number)
@@ -332,9 +332,9 @@ class MUSIC(SubspaceMethod):
         batch_size = self.music_spectrum.shape[0]
 
         max_row = torch.zeros((batch_size, source_number)
-                              , dtype=torch.int64, device=device)
+                              , dtype=torch.int64, device=self.device)
         max_col = torch.zeros((batch_size, source_number)
-                              , dtype=torch.int64, device=device)
+                              , dtype=torch.int64, device=self.device)
         for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].detach().cpu().numpy().squeeze()
             # # Flatten the spectrum
@@ -359,8 +359,8 @@ class MUSIC(SubspaceMethod):
             max_col[batch] = original_idx[1][0: source_number]
         if not self.training:
             # if the model is not in training mode, return the peaks.
-            angle_dict = self.angles_dict.to(device)
-            range_dict = self.ranges_dict.to(device)
+            angle_dict = self.angles_dict.to(self.device)
+            range_dict = self.ranges_dict.to(self.device)
             angles_pred = angle_dict[max_row]
             distances_pred = range_dict[max_col]
             del angle_dict, range_dict
@@ -375,38 +375,38 @@ class MUSIC(SubspaceMethod):
     def __maskpeak_1d(self, peaks, search_space, source_number: int = None):
 
         batch_size = self.music_spectrum.shape[0]
-        soft_decision = torch.zeros(batch_size, source_number, dtype=torch.float64, device=device)
-        top_indxs = peaks.to(device)
+        soft_decision = torch.zeros(batch_size, source_number, dtype=torch.float64, device=self.device)
+        top_indxs = peaks.to(self.device)
 
         for source in range(source_number):
             cell_idx = (top_indxs[:, source][:, None]
                         - self.cell_size
-                        + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=device))
+                        + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=self.device))
             cell_idx %= self.music_spectrum.shape[1]
             cell_idx = cell_idx.reshape(batch_size, -1, 1)
             metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1,
                                       cell_idx).requires_grad_(True)
             soft_max = torch.softmax(metrix_thr, dim=1)
-            soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx.cpu()].to(device), soft_max).to(
-                device)
+            soft_decision[:, source][:, None] = torch.einsum("bms, bms -> bs", search_space[cell_idx.cpu()].to(self.device), soft_max).to(
+                self.device)
 
         return soft_decision
 
     def __maskpeak_2d(self, peaks_r, peaks_c, source_number):
         batch_size = self.music_spectrum.shape[0]
-        soft_row = torch.zeros((batch_size, source_number), device=device)
-        soft_col = torch.zeros((batch_size, source_number), device=device)
+        soft_row = torch.zeros((batch_size, source_number), device=self.device)
+        soft_col = torch.zeros((batch_size, source_number), device=self.device)
 
         for source in range(source_number):
             max_row_cell_idx = (peaks_r[:, source][:, None]
                                 - self.cell_size_angle
-                                + torch.arange(2 * self.cell_size_angle + 1, dtype=torch.int32, device=device))
+                                + torch.arange(2 * self.cell_size_angle + 1, dtype=torch.int32, device=self.device))
             max_row_cell_idx %= self.music_spectrum.shape[1]
             max_row_cell_idx = max_row_cell_idx.reshape(batch_size, -1, 1)
 
             max_col_cell_idx = (peaks_c[:, source][:, None]
                                 - self.cell_size_range
-                                + torch.arange(2 * self.cell_size_range + 1, dtype=torch.int32, device=device))
+                                + torch.arange(2 * self.cell_size_range + 1, dtype=torch.int32, device=self.device))
             max_col_cell_idx %= self.music_spectrum.shape[2]
             max_col_cell_idx = max_col_cell_idx.reshape(batch_size, 1, -1)
 
@@ -666,11 +666,11 @@ class Filter(nn.Module):
     def __init__(self, min_cell_size, max_cell_size, number_of_filter=10):
         super(Filter, self).__init__()
         self.number_of_filters = number_of_filter
-        self.cell_sizes = torch.linspace(min_cell_size, max_cell_size, number_of_filter).to(torch.int32).to(device)
+        self.cell_sizes = torch.linspace(min_cell_size, max_cell_size, number_of_filter).to(torch.int32).to(self.device)
         self.cell_bank = {}
         for cell_size in enumerate(self.cell_sizes.data):
             cell_size = cell_size[1]
-            self.cell_bank[cell_size] = torch.arange(-cell_size, cell_size, 1, dtype=torch.long, device=device)
+            self.cell_bank[cell_size] = torch.arange(-cell_size, cell_size, 1, dtype=torch.long, device=self.device)
         self.fc = nn.Linear(self.number_of_filters, 1)
         self.fc.weight.data = torch.randn(1, number_of_filter) / 100 + (1 / number_of_filter)
         self.fc.weight.data = self.fc.weight.data.to(torch.float64)
@@ -693,7 +693,7 @@ class Filter(nn.Module):
                 peaks_tmp = peaks_tmp[0]
             peaks[batch] = peaks_tmp
         top_1 = peaks
-        output = torch.zeros(input.shape[0], self.number_of_filters).to(device).to(torch.float64)
+        output = torch.zeros(input.shape[0], self.number_of_filters).to(self.device).to(torch.float64)
         for idx, cell in enumerate(self.cell_bank.values()):
             tmp_cell = top_1 + cell
             tmp_cell %= input.shape[1]

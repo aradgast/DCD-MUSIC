@@ -29,19 +29,20 @@ Attributes:
 """
 
 # Imports
-import itertools
 from tqdm import tqdm
 from torch.utils.data import Dataset, Sampler
+from sklearn.model_selection import train_test_split
+import h5py
+from torch.utils.data import Dataset, Subset
+from collections import defaultdict
+import os
+import torch
+import numpy as np
+import random
 from pathlib import Path
 
 from src.signal_creation import Samples
 from src.system_model import SystemModelParams
-from src.utils import *
-from sklearn.model_selection import train_test_split
-import h5py
-from torch.utils.data import Dataset, DataLoader, Subset
-from collections import defaultdict
-import os
 
 def create_dataset(
         samples_model: Samples,
@@ -210,7 +211,10 @@ class TimeSeriesDataset(Dataset):
 
         print("Training DataSet size", len(train_dataset))
         print("Validation DataSet size", len(valid_dataset))
-        num_workers = min(4, os.cpu_count() // 8)
+        if os.cpu_count() > 16:
+            num_workers = min(4, os.cpu_count() // 8)
+        else:
+            num_workers = 1
         num_workers = num_workers if num_workers > 1 else 1
         print(f"Avialble CPU cores: {os.cpu_count()}, using {num_workers}")
         

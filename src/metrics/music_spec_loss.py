@@ -1,14 +1,15 @@
 import torch
 import torch.nn as nn
-from src.utils import device
 from src.system_model import SystemModel
+from src.config import device
 
 class MusicSpectrumLoss(nn.Module):
     def __init__(self, system_model: SystemModel, mode:str = "inverse_spectrum",
                  aggregate: str = "sum"):
         super(MusicSpectrumLoss, self).__init__()
+        self.device = device
         self.system_model = system_model
-        self.array = torch.from_numpy(system_model.array).to(torch.float32).to(device).unsqueeze(-1)
+        self.array = torch.from_numpy(system_model.array).to(torch.float32).to(self.device).unsqueeze(-1)
         self.number_sensors = system_model.params.N
         self.sensors_distance = system_model.params.wavelength / 2
         if mode not in ["spectrum", "inverse_spectrum"]:
@@ -72,3 +73,6 @@ class MusicSpectrumLoss(nn.Module):
             return torch.mean(loss)
         else:
             return loss
+
+    def __str__(self):
+        return "music_spectrum"

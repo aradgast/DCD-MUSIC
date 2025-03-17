@@ -1,7 +1,8 @@
 import torch.nn as nn
 import torch
 from itertools import permutations
-from src.utils import device
+from src.config import device
+
 import numpy as np
 
 BALANCE_FACTOR = 1.0
@@ -32,10 +33,11 @@ class RMSPELoss(nn.Module):
 
     def __init__(self, balance_factor=None):
         super(RMSPELoss, self).__init__()
+        self.device = device
         if balance_factor is None:
-            self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(device).to(torch.float64)
+            self.balance_factor = nn.Parameter(torch.Tensor([BALANCE_FACTOR])).to(self.device).to(torch.float64)
         else:
-            self.balance_factor = nn.Parameter(torch.Tensor([balance_factor])).to(device).to(torch.float64)
+            self.balance_factor = nn.Parameter(torch.Tensor([balance_factor])).to(self.device).to(torch.float64)
 
     def forward(self, angles_pred: torch.Tensor, angles: torch.Tensor,
                 ranges_pred: torch.Tensor = None, ranges: torch.Tensor = None):
@@ -81,20 +83,23 @@ class RMSPELoss(nn.Module):
         else:
             rmspe_angle, min_idx = torch.min(rmspe_angle_all_permutations, dim=-1)
             # create the projected permutation using the min_idx
-            projected_permutations = torch.tensor(perm, dtype=torch.long, device=device)[min_idx]
+            projected_permutations = torch.tensor(perm, dtype=torch.long, device=self.device)[min_idx]
             projected_ranges_pred = torch.gather(ranges_pred, 1, projected_permutations)
             projected_err_ranges = projected_ranges_pred - ranges
             projected_rmse_ranges = np.sqrt(1 / num_sources) * torch.linalg.norm(projected_err_ranges, dim=-1)
 
 
             rmspe = self.balance_factor * rmspe_angle + (1 - self.balance_factor) * projected_rmse_ranges
-        result = torch.sum(rmspe)
+        # result = torch.sum(rmspe)
         if ranges is None:
-            return result
+            return rmspe
         else:
-            result_angle = torch.sum(rmspe_angle)
-            result_distance = torch.sum(projected_rmse_ranges)
-            return result, result_angle, result_distance
+            # result_angle = torch.sum(rmspe_angle)
+            # result_distance = torch.sum(projected_rmse_ranges)
+            return rmspe, rmspe_angle, projected_rmse_ranges
 
     def adjust_balance_factor(self, loss=None):
         self.balance_factor = 0.1
+
+    def __str__(self):
+        return "rmspe"

@@ -59,8 +59,8 @@ system_model_params = {
     "snr": 10,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
-    "eta": 0.0,  # steering vector uniform error variance with respect to the wavelength.
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
+    "eta": 0.0,  # steering vector uniform error variance
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
     "doa_range": 60, # The range of the DOA values [-doa_range, doa_range]
@@ -80,7 +80,7 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["field_type"] = "Near"  # Far, Near
     model_config["model_params"]["regularization"] = None # aic, mdl, threshold, None
     model_config["model_params"]["variant"] = "small"  # big, small
-    model_config["model_params"]["norm_layer"] = False
+    model_config["model_params"]["norm_layer"] = True
     model_config["model_params"]["batch_norm"] = False
 
 elif model_config.get("model_type") == "DCD-MUSIC":
@@ -93,11 +93,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 40000,
-    "train_test_ratio": 1/40,
+    "samples_size": 4096,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
-    "batch_size": 32,
-    "epochs": 0,
+    "batch_size": 64,
+    "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -113,16 +113,16 @@ training_params = {
 }
 evaluation_params = {
     "models": {
-        #  "TransMUSIC": {
-                        #  "model_name": "TransMUSIC",
-                    #  },
-        #  "DCD-MUSIC": {
-                    #  "model_name": "DCD-MUSIC",
-                    #  "tau": 8,
-                    #  "diff_method": ("esprit", "music_1d"),
-                    #  "train_loss_type": ("rmspe", "rmspe"),
-                    #  "regularization": None,
-                    #    },
+        # "TransMUSIC": {
+        #                 "model_name": "TransMUSIC",
+        #             },
+        # "DCD-MUSIC": {
+        #             "model_name": "DCD-MUSIC",
+        #             "tau": 8,
+        #             "diff_method": ("esprit", "music_1d"),
+        #             "train_loss_type": ("rmspe", "rmspe"),
+        #             "regularization": "aic",
+        #               },
         #  "DCD-MUSIC_V2": {
         #             "model_name": "DCD-MUSIC",
         #             "tau": 8,
@@ -131,14 +131,14 @@ evaluation_params = {
         #             "regularization": "aic",
         #             "variant": "big"
         #               },
-        #   "NFSubspaceNet": {
-                        #   "model_name": "SubspaceNet",
-                        #   "tau": 8,
-                        #   "diff_method": "music_2D",
-                        #   "train_loss_type": "music_spectrum",
-                        #   "field_type": "near",
-                        #   "regularization": None,
-                        #   },
+        # "NFSubspaceNet": {
+                        # "model_name": "SubspaceNet",
+                        # "tau": 8,
+                        # "diff_method": "music_2D",
+                        # "train_loss_type": "music_spectrum",
+                        # "field_type": "near",
+                        # "regularization": "aic",
+                        # },
         # "NFSubspaceNet_V2": {
         #                 "model_name": "SubspaceNet",
         #                 "tau": 8,
@@ -150,14 +150,14 @@ evaluation_params = {
         #                 },
     },
     "augmented_methods": [
-        # ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "music_2D", "train_loss_type": "music_spectrum", "field_type": "near"}),
+        ("SubspaceNet", "beamformer", {"model_name": "SubspaceNet", "tau": 8, "diff_method": "music_2D", "train_loss_type": "music_spectrum", "field_type": "near"}),
         # ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "esprit", "train_loss_type": "rmspe", "field_type": "far"}),
         # ("SubspaceNet", "esprit", {"tau": 8, "diff_method": "esprit", "train_loss_type": "rmspe", "field_type": "far"}),
     ],
     "subspace_methods": [
         # "CCRB",
-          "2D-MUSIC",
-          "Beamformer",
+        # "2D-MUSIC",
+        "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",
         # "1D-MUSIC",

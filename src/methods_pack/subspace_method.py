@@ -1,9 +1,15 @@
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
+import wandb
+import numpy as np
+import warnings
 
-from src.utils import *
+
+from src.utils import sample_covariance, spatial_smoothing_covariance
 from src.system_model import SystemModel
+from src.config import device
+
 
 
 class SubspaceMethod(nn.Module):
@@ -13,9 +19,11 @@ class SubspaceMethod(nn.Module):
 
     def __init__(self, system_model: SystemModel, model_order_estimation: str = None):
         super(SubspaceMethod, self).__init__()
+        self.device = device
         self.system_model = system_model
         self.eigen_threshold = nn.Parameter(torch.tensor(.5, requires_grad=False))
         self.normalized_eigenvals = None
+        self.normalized_eigenvals_mean = None
         self.model_order_estimation = model_order_estimation
 
     def subspace_separation(self,
@@ -48,7 +56,7 @@ class SubspaceMethod(nn.Module):
             signal_subspace = sorted_eigvectors[:, :, :number_of_sources]
             noise_subspace = sorted_eigvectors[:, :, number_of_sources:]
 
-        return signal_subspace.to(device), noise_subspace.to(device), source_estimation, l_eig
+        return signal_subspace.to(self.device), noise_subspace.to(self.device), source_estimation, l_eig
 
     def estimate_number_of_sources(self, eigenvalues, number_of_sources: int = None):
         """
@@ -60,6 +68,14 @@ class SubspaceMethod(nn.Module):
 
         """
         sorted_eigenvals = torch.sort(torch.real(eigenvalues), descending=True, dim=1).values
+        # try:
+        #     if self.normalized_eigenvals_mean is None:
+        #         self.normalized_eigenvals_mean = torch.mean(sorted_eigenvals, dim=0)
+        #     else:
+        #         self.normalized_eigenvals_mean = 0.9 * self.normalized_eigenvals_mean + 0.1 * torch.mean(sorted_eigenvals, dim=0)
+        #     wandb.config.update({"eigenvalues": wandb.Histogram(self.normalized_eigenvals_mean.cpu().detach().numpy())})
+        # except Exception:
+        #     pass
         l_eig = None
         if self.model_order_estimation is None:
             return None, None
@@ -75,10 +91,10 @@ class SubspaceMethod(nn.Module):
         elif self.model_order_estimation.lower() in ["mdl", "aic"]:
             # mdl -> calculate the value of the mdl test for each number of sources
             # and choose the number of sources that minimizes the mdl test
-            optimal_test = torch.ones(eigenvalues.shape[0], device=device) * float("inf")
-            optimal_m = torch.zeros(eigenvalues.shape[0], device=device)
+            optimal_test = torch.ones(eigenvalues.shape[0], device=self.device) * float("inf")
+            optimal_m = torch.zeros(eigenvalues.shape[0], device=self.device)
             for m in range(1, eigenvalues.shape[1]):
-                m = torch.tensor(m, device=device)
+                m = torch.tensor(m, device=self.device)
                 # calculate the test
                 test = self.hypothesis_testing(sorted_eigenvals, m)
                 # update the optimal number of sources by masking the current number of sources
@@ -86,7 +102,8 @@ class SubspaceMethod(nn.Module):
                 # update the optimal mdl value
                 optimal_test = torch.where(test < optimal_test, test, optimal_test)
                 if self.training and m == number_of_sources:
-                    l_eig = torch.sum(test)
+                    # l_eig = torch.sum(test)
+                    l_eig = test
 
             source_estimation = optimal_m
 
@@ -107,12 +124,6 @@ class SubspaceMethod(nn.Module):
             # penalty = dof * np.log(T)
         else: # self.model_order_estimation.lower().startswith("aic"):
             penalty = dof * 2
-        # if method.lower().endswith("snr"):
-        #     snr = self.snr_estimation(eigenvalues, M)
-        #     # snr = self.system_model.params.snr
-        #     penalty = penalty * (1 + 0.1 * torch.exp(-snr))
-        #     # penalty = penalty*(1 + 2*np.exp(-snr))
-        # calculate the ll
         ll = self.get_ll(eigenvalues, M)
         mdl = ll + penalty
         return mdl
@@ -167,7 +178,7 @@ class SubspaceMethod(nn.Module):
                 (self.normalized_eigenvals[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
         # l_eig = -(self.normalized_eigen[:, number_of_sources - 1] - self.__get_eigen_threshold(level="high")) + \
                 # (self.normalized_eigen[:, number_of_sources] - self.__get_eigen_threshold(level="low"))
-        l_eig = torch.sum(l_eig)
+        # l_eig = torch.sum(l_eig)
         # eigen_regularization = nn.functional.elu(eigen_regularization, alpha=1.0)
         return l_eig
 

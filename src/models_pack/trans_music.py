@@ -16,11 +16,10 @@ import math
 
 # Internal imports
 from src.system_model import SystemModel
-from src.utils import *
 from src.methods_pack.music import MUSIC
 from src.models_pack.parent_model import ParentModel
 from src.metrics import RMSPELoss, CartesianLoss
-
+from src.config import device
 
 class ShiftedReLU(nn.ReLU):
     def __init__(self, shift=0.5):
@@ -35,6 +34,7 @@ class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model: int, max_len: int = 5000):
         super().__init__()
+        self.device = device
 
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
@@ -44,7 +44,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x.to(device) + self.pe[:x.size(0)].to(device)
+        x = x.to(self.device) + self.pe[:x.size(0)].to(self.device)
 
         return x
 
@@ -73,9 +73,9 @@ class TransMUSIC(ParentModel):
         self.ce_loss = nn.CrossEntropyLoss(reduction="sum")
 
         if mode == "batch_norm":
-            self.norm = nn.BatchNorm1d(self.N * 2).to(device)
+            self.norm = nn.BatchNorm1d(self.N * 2).to(self.device)
         elif mode == "layer_norm":
-            self.norm = nn.LayerNorm(normalized_shape=[self.N * 2]).to(device)
+            self.norm = nn.LayerNorm(normalized_shape=[self.N * 2]).to(self.device)
         else:
             raise ValueError(f"TransMUSIC.__init__: unrecognized mode {mode}")
 
@@ -91,13 +91,13 @@ class TransMUSIC(ParentModel):
                                              batch_first=True,
                                              norm_first=False,
                                              device=None,
-                                             dtype=None).to(device)
+                                             dtype=None).to(self.device)
 
         self.encoder = nn.TransformerEncoder(e_layer,
                                              num_layers=3,
-                                             norm=None).to(device)
+                                             norm=None).to(self.device)
 
-        self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(device)
+        self.input_linear = nn.Linear(in_features=self.N * 2, out_features=2 * self.N ** 2).to(self.device)
         if self.estimation_params == "angle":
             self.input_dim = self.music.angles_dict.shape[0]
             if isinstance(self.music.system_model.params.M, tuple):
@@ -112,7 +112,7 @@ class TransMUSIC(ParentModel):
                 output_dim = self.music.system_model.params.M * 2
             # self.activation = ShiftedReLU(shift=np.floor(self.music.system_model.fresnel)).to(device)
             # self.activation = nn.ReLU().to(device)
-            self.activation = nn.LeakyReLU(negative_slope=0.0001).to(device)
+            self.activation = nn.LeakyReLU(negative_slope=0.0001).to(self.device)
         else:
             raise ValueError(f"TransMUSIC.__init__: unrecognized estimation parameter {self.estimation_params}")
         self.output = nn.Sequential(
@@ -124,7 +124,7 @@ class TransMUSIC(ParentModel):
             nn.Linear(in_features=self.N * 2, out_features=self.N * 2),
             nn.ReLU(inplace=False),
             nn.Linear(in_features=self.N * 2, out_features=output_dim)
-        ).to(device)
+        ).to(self.device)
 
         self.source_number_estimator = nn.Sequential(
             nn.Linear(in_features=2 * self.N ** 2, out_features=128),
@@ -137,7 +137,7 @@ class TransMUSIC(ParentModel):
             nn.ReLU(inplace=False),
             nn.Linear(in_features=32, out_features=self.params.N - 1),
             nn.Softmax(dim=1)
-        ).to(device)
+        ).to(self.device)
 
     def forward(self, x):
         N = self.N
@@ -148,48 +148,48 @@ class TransMUSIC(ParentModel):
 
         x3 = self._get_noise_subspace(x)
         if self.train_mode == "subspace_train":
-            x4 = x3.reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
+            x4 = x3.reshape(size, N * 2, N).to(self.device)  # Change its mapping covariance to [size, N * 2, N]
             Un = torch.complex(x4[:, :N, :], x4[:, N:, :]).to(torch.complex128)  # feature vector  [size, N, N]
             spectrum = self.music.get_music_spectrum_from_noise_subspace(Un)  # Calculate spectrum
-            x7 = spectrum.float().to(device)
-            x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
-            predictions = self.output(x7).to(device)
+            x7 = spectrum.float().to(self.device)
+            x7 = x7.view(size, -1).to(self.device)  # Change the shape of the spectrum to [size, N * 2]
+            predictions = self.output(x7).to(self.device)
             if self.estimation_params == "angle, range":
                 angles, distances = torch.split(predictions, predictions.shape[-1] // 2, dim=1)
-                distances = self.activation(distances).to(device)
-                predictions = torch.cat([angles, distances], dim=1).to(device)
+                distances = self.activation(distances).to(self.device)
+                predictions = torch.cat([angles, distances], dim=1).to(self.device)
             with torch.no_grad():
                 x9 = x3.detach()
                 prob_sources_est = self.source_number_estimator(x9)
         elif self.train_mode == "num_source_train":
             prob_sources_est = self.source_number_estimator(x3)
             with torch.no_grad():
-                x4 = x3.detach().reshape(size, N * 2, N).to(device)  # Change its mapping covariance to [size, N * 2, N]
+                x4 = x3.detach().reshape(size, N * 2, N).to(self.device)  # Change its mapping covariance to [size, N * 2, N]
                 Un = torch.complex(x4[:, :N, :], x4[:, N:, :]).to(torch.complex32)  # feature vector  [size, N, N]
                 spectrum = self.music.get_music_spectrum_from_noise_subspace(Un)  # Calculate spectrum
-                x7 = spectrum.float().to(device)
-                x7 = x7.view(size, -1).to(device)  # Change the shape of the spectrum to [size, N * 2]
-                predictions = self.output(x7).to(device)
+                x7 = spectrum.float().to(self.device)
+                x7 = x7.view(size, -1).to(self.device)  # Change the shape of the spectrum to [size, N * 2]
+                predictions = self.output(x7).to(self.device)
                 if self.estimation_params == "angle, range":
                     angles, distances = torch.split(predictions, predictions.shape[-1] // 2, dim=1)
-                    distances = self.activation(distances).to(device)
-                    predictions = torch.cat([angles, distances], dim=1).to(device)
+                    distances = self.activation(distances).to(self.device)
+                    predictions = torch.cat([angles, distances], dim=1).to(self.device)
         else:
             raise ValueError(f"TransMUSIC.forward: Unrecognized {self.train_mode}")
         return predictions, prob_sources_est
 
     def _get_noise_subspace(self, x):
-        x = self.norm(x.to(torch.float32)).to(device)  # Become [size, N * 2, T]
+        x = self.norm(x.to(torch.float32)).to(self.device)  # Become [size, N * 2, T]
 
-        x = x.permute(2, 0, 1).float().to(device)  # Exchange dimension becomes [T, size, N * 2]
+        x = x.permute(2, 0, 1).float().to(self.device)  # Exchange dimension becomes [T, size, N * 2]
 
         # Position embedding
-        x = self.pos_encoder(x.to(device)).to(device)  # x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        x = x.permute(1, 0, 2).float().to(device)  # Exchange dimension becomes [size, T, N * 2]
+        x = self.pos_encoder(x.to(self.device)).to(self.device)  # x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        x = x.permute(1, 0, 2).float().to(self.device)  # Exchange dimension becomes [size, T, N * 2]
 
-        x1 = self.encoder(x.to(device))  # Transformer_ Encoder network output becomes [size, T, N * 2]
+        x1 = self.encoder(x.to(self.device))  # Transformer_ Encoder network output becomes [size, T, N * 2]
         x2 = torch.mean(x1, dim=1)  # Output becomes [size, N * 2]
-        x3 = self.input_linear(x2).to(device)
+        x3 = self.input_linear(x2).to(self.device)
         return x3
 
     def pre_processing(self, x: torch.Tensor):
@@ -233,8 +233,8 @@ class TransMUSIC(ParentModel):
 
     def __training_step_far_field(self, batch, batch_idx):
         x, sources_num, angles = batch
-        x = x.to(device)
-        angles = angles.to(device)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
         if x.dim() == 2:
             x = x.unsqueeze(0)
         if (sources_num != sources_num[0]).any():
@@ -246,7 +246,7 @@ class TransMUSIC(ParentModel):
         if self.train_mode == "num_source_train":
             # calculate the cross entropy loss for the source number estimation
             one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                   .to(device).to(torch.float32))
+                                   .to(self.device).to(torch.float32))
             loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
                 prob_source_number.shape[0], 1)) * x.shape[0]
         else:
@@ -265,14 +265,14 @@ class TransMUSIC(ParentModel):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        x = x.requires_grad_(True).to(device)
-        angles = angles.requires_grad_(True).to(device)
-        ranges = ranges.requires_grad_(True).to(device)
+        x = x.requires_grad_(True).to(self.device)
+        angles = angles.requires_grad_(True).to(self.device)
+        ranges = ranges.requires_grad_(True).to(self.device)
         model_output, prob_source_number = self(x)
         if self.train_mode == "num_source_train":
             # calculate the cross entropy loss for the source number estimation
             one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                   .to(device).to(torch.float32))
+                                   .to(self.device).to(torch.float32))
             loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
                 prob_source_number.shape[0], 1)) * x.shape[0]
         else:
@@ -293,14 +293,14 @@ class TransMUSIC(ParentModel):
                              f"Number of sources in the batch is not equal for all samples.")
         sources_num = sources_num[0]
         angles, ranges = torch.split(labels, sources_num, dim=1)
-        x = x.to(device)
-        angles = angles.to(device)
-        ranges = ranges.to(device)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
+        ranges = ranges.to(self.device)
         model_output, prob_source_number = self(x)
         if self.train_mode == "num_source_train":
             # calculate the cross entropy loss for the source number estimation
             one_hot_sources_num = (nn.functional.one_hot(sources_num, num_classes=prob_source_number.shape[1])
-                                   .to(device).to(torch.float32))
+                                   .to(self.device).to(torch.float32))
             loss = self.ce_loss(prob_source_number, one_hot_sources_num.repeat(
                 prob_source_number.shape[0], 1)) * x.shape[0]
         else:

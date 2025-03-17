@@ -5,25 +5,30 @@ It is a simple script that create the data, the model and train it over all 3 st
 """
 
 import sys
-from src.training import *
-from src.data_handler import *
+from datetime import datetime
+from pathlib import Path
+from src.utils import set_unified_seed, initialize_data_paths
+from src.training import Trainer, TrainingParamsNew
+from src.data_handler import create_dataset, load_datasets
 import argparse
-from src.system_model import SystemModel, SystemModelParams
+from src.system_model import SystemModelParams
+from src.signal_creation import Samples
+from src.models import ModelGenerator
 
 # default values for the argparse
-number_sensors = 127
+number_sensors = 15
 number_sources = "2"
 number_snapshots = 100
 snr = 10
 field_type = "Near"
 signal_type = "narrowband"
-signal_nature = "non-coherent"
+signal_nature = "coherent"
 err_loc_sv = 0.0
-wavelength = 0.06
+wavelength = 1
 tau = 8
-sample_size = 4096
-batch_size = 64
-epochs = 50
+sample_size = 1028
+batch_size = 128
+epochs = 1
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
@@ -116,8 +121,9 @@ def train_dcd_music(*args, **kwargs):
         # Define which datasets to generate
         print("Creating Data...")
         # Generate training dataset
+        samples_model = Samples(system_model_params)
         train_dataset, _ = create_dataset(
-            system_model_params=system_model_params,
+            samples_model=samples_model,
             samples_size=samples_size,
             save_datasets=False,
             datasets_path=datasets_path,
@@ -126,16 +132,16 @@ def train_dcd_music(*args, **kwargs):
             phase="train",
         )
     # Generate model configuration
-    model_config = (
-        ModelGenerator()
-        .set_model_type("SubspaceNet")
-        .set_system_model(system_model_params)
-        .set_model_params({"diff_method": diff_method[0], "train_loss_type": train_loss_type[0],
-                           "tau": MODEL_PARAMS.get("tau"), "field_type": "far",
-                           "regularization": MODEL_PARAMS.get("regularization"),
-                           "variant": MODEL_PARAMS.get("variant")})
-        .set_model()
-    )
+    model_config = ModelGenerator()
+    model_config.set_model_type("DCD-MUSIC")
+    model_config.set_system_model(system_model_params)
+    model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
+                                   "diff_method": diff_method,
+                                   "regularization": MODEL_PARAMS.get("regularization"),
+                                   "variant": MODEL_PARAMS.get("variant")})
+    model_config.set_model()
+    model_config.model.switch_train_mode()
+    # model_config.model.update_train_mode("angle")
 
     trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
                                        weight_decay=TRAINING_PARAMS["weight_decay"],
@@ -156,18 +162,23 @@ def train_dcd_music(*args, **kwargs):
     print("END OF TRAINING - Step 1: angle branch training.")
 
     # Update model configuration
-    model_config = model_config.set_model_type("DCD-MUSIC")
-    model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
-                                   "diff_method": diff_method,
-                                   "train_loss_type": train_loss_type,
-                                   "angle_extractor": model,
-                                   "regularization": MODEL_PARAMS.get("regularization"),
-                                   "variant": MODEL_PARAMS.get("variant")})
-    model_config.set_model()
+    model.switch_train_mode()
+    # try:
+        # model.load_angle_branch(True)
+    # except Exception as e:
+    #     pass
+    # model_config = model_config.set_model_type("DCD-MUSIC")
+    # model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
+    #                                "diff_method": diff_method,
+    #                                "train_loss_type": train_loss_type,
+    #                                "angle_extractor": model,
+    #                                "regularization": MODEL_PARAMS.get("regularization"),
+    #                                "variant": MODEL_PARAMS.get("variant")})
+    # model_config.set_model()
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})
 
-    trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
+    trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                             use_wandb=TRAINING_PARAMS["use_wandb"],
                             save_final=save_model, load_model= load_model)
@@ -177,7 +188,8 @@ def train_dcd_music(*args, **kwargs):
     # Assign the training parameters object
     trainingparams.update({"training_objective": "angle, range",
                            "learning_rate": TRAINING_PARAMS["learning_rate"] / 10})
-    model.init_model_train_params(init_eigenregularization_weight=1e-3)
+    model.init_model_train_params(init_eigenregularization_weight=1e-3, init_cell_size=0.2)
+    model.switch_train_mode()
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                           use_wandb=TRAINING_PARAMS["use_wandb"],
@@ -243,7 +255,7 @@ if __name__ == "__main__":
     }
     training_params = {
         "samples_size": args.sample_size,
-        "train_test_ratio": args.ratio,
+        "train_test_ratio": 0.0,
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "optimizer": args.optimizer,  # Adam, SGD
@@ -261,8 +273,8 @@ if __name__ == "__main__":
     simulation_commands = {
         "SAVE_TO_FILE": False,
         "CREATE_DATA": False,
-        "LOAD_MODEL": False,
-        "SAVE_MODEL": True,
+        "LOAD_MODEL": True,
+        "SAVE_MODEL": False,
     }
     train_dcd_music(simulation_commands=simulation_commands,
                     system_model_params=system_model_params,

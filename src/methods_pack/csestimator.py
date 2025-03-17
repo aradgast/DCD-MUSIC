@@ -8,8 +8,8 @@ import torch.optim as optim
 import numpy as np
 
 from src.system_model import SystemModel
-from src.utils import device
 from src.metrics import CartesianLoss, RMSPELoss
+from src.config import device
 
 from sklearn.linear_model import Lasso
 from scipy.signal import find_peaks
@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 class CsEstimator(nn.Module):
     def __init__(self, system_model: SystemModel, solver_iter=5000, solver_mu=.01):
         super(CsEstimator, self).__init__()
+        self.device = device
         self.system_model = system_model
         self.angles_dict = None
         self.ranges_dict = None
@@ -35,7 +36,7 @@ class CsEstimator(nn.Module):
         estimated_signal = self.l1_regularized_least_squares(y, "sklearn")
         estimated_doa, estimated_range, estimated_signal = self.estimate_doa_range(estimated_signal)
 
-        return (estimated_doa.to(device), estimated_range.to(device)), estimated_signal
+        return (estimated_doa.to(self.device), estimated_range.to(self.device)), estimated_signal
 
     def estimate_doa_range(self, estimated_signal, aggregation: str="sparse"):
         """
@@ -52,12 +53,12 @@ class CsEstimator(nn.Module):
             estimated_signal_norm = torch.mean(estimated_signal_norm, dim=-1)
 
         if estimated_signal_norm.dim() == 2:
-            max_indices = torch.zeros(estimated_signal_norm.size(0), self.system_model.params.M, device=device)
+            max_indices = torch.zeros(estimated_signal_norm.size(0), self.system_model.params.M, device=self.device)
             for i in range(estimated_signal_norm.size(0)):
                 flatten_signal = estimated_signal_norm[i].cpu().numpy()
                 peaks = find_peaks(flatten_signal, distance=int(len(self.ranges_dict)*2))[0]
                 sorted_peaks = peaks[np.argsort(flatten_signal[peaks])[::-1]]
-                max_indices[i] = torch.tensor(sorted_peaks[:self.system_model.params.M], device=device)
+                max_indices[i] = torch.tensor(sorted_peaks[:self.system_model.params.M], device=self.device)
             # max_indices = torch.topk(estimated_signal_norm, self.system_model.params.M, dim=1).indices
         elif estimated_signal_norm.size(-1) > self.system_model.params.M:
             estimated_signal_norm = torch.mean(estimated_signal_norm, dim=-1)
@@ -80,11 +81,11 @@ class CsEstimator(nn.Module):
         """
         if mode == "torch":
             # Convert inputs to tensors if they aren't already
-            A = torch.as_tensor(self.steering_matrix_dict.view(y.size(1), -1), dtype=torch.complex128, device=device)
-            y = torch.as_tensor(y, dtype=torch.complex128, device=device)
+            A = torch.as_tensor(self.steering_matrix_dict.view(y.size(1), -1), dtype=torch.complex128, device=self.device)
+            y = torch.as_tensor(y, dtype=torch.complex128, device=self.device)
 
             # Initialize x
-            x = torch.randn(y.size(0), A.size(1), y.size(-1), dtype=torch.complex128, device=device)
+            x = torch.randn(y.size(0), A.size(1), y.size(-1), dtype=torch.complex128, device=self.device)
             x.requires_grad_(True)  # Enable gradient tracking
 
             # Define optimizer
@@ -122,15 +123,15 @@ class CsEstimator(nn.Module):
                     tmp_res.append(torch.from_numpy(x))
                 tmp_res = torch.stack(tmp_res, dim=1)
                 res.append(tmp_res)
-            est_x = torch.stack(res, dim=0).to(device)
+            est_x = torch.stack(res, dim=0).to(self.device)
             return est_x
 
     def l1_svd_regularized_least_squares(self, y):
         # get a compact form of the input matrix
         u, s, vh = torch.linalg.svd(y)
         # get the compact NxS matrix
-        d_k = torch.zeros(vh.shape[0], vh.shape[1], self.system_model.params.M, dtype=torch.complex128, device=device)
-        d_k[:, :self.system_model.params.M, :self.system_model.params.M] = torch.eye(self.system_model.params.M, dtype=torch.complex128, device=device)
+        d_k = torch.zeros(vh.shape[0], vh.shape[1], self.system_model.params.M, dtype=torch.complex128, device=self.device)
+        d_k[:, :self.system_model.params.M, :self.system_model.params.M] = torch.eye(self.system_model.params.M, dtype=torch.complex128, device=self.device)
         # get the compact form of the input matrix
         y_sv = torch.bmm(torch.bmm(y, torch.conj(vh).transpose(1,2)), d_k)
         # get the l1 regularized least squares
@@ -154,14 +155,14 @@ class CsEstimator(nn.Module):
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
-        x = x.to(device)
+        x = x.to(self.device)
         if max(sources_num) * 2 == label.shape[1]:
             angles, ranges = torch.split(label, max(sources_num), dim=1)
-            angles = angles.to(device)
-            ranges = ranges.to(device)
+            angles = angles.to(self.device)
+            ranges = ranges.to(self.device)
             masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
-            angles = label.to(device)  # only angles
+            angles = label.to(self.device)  # only angles
 
         # Check if the sources number is the same for all samples in the batch
         if (sources_num != sources_num[0]).any():

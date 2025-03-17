@@ -3,11 +3,14 @@ import warnings
 import torch.nn as nn
 import torch
 from src.system_model import SystemModel
+from src.config import device
+
 
 EIGEN_REGULARIZATION_WEIGHT = 1e-3
 class ParentModel(nn.Module):
     def __init__(self, system_model: SystemModel):
         super(ParentModel, self).__init__()
+        self.device = device
         self.system_model = system_model
         self.under_estimation_counter = 0
         self.over_estimation_counter = 0
@@ -37,7 +40,7 @@ class ParentModel(nn.Module):
         if field_type == "full":
             field_type = "near"
         return f"{self.get_model_name()}_" + \
-            f"N={self.N}_" + \
+            f"N={self.system_model.params.N}_" + \
             f"M={M}_" + \
             f"T={self.system_model.params.T}_" + \
             f"{self.system_model.params.signal_type}_" + \
@@ -67,9 +70,9 @@ class ParentModel(nn.Module):
         self.schedular_step_size = step_size
         self.schedular_gamma = gamma
         self.eigenregularization_weight = init_value
-        if self.field_type == "far":
-            self.eigenregularization_weight /= 50
-            self.schedular_gamma = 0.5
+        # if self.field_type == "far":
+        #     self.eigenregularization_weight /= 50
+        #     self.schedular_gamma = 0.5
         # if self.system_model.params.M is not None:
         #     self.eigenregularization_weight /= 2
         # if self.system_model.params.snr is not None:
