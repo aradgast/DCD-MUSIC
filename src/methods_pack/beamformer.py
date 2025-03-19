@@ -251,9 +251,9 @@ class Beamformer(Module):
         # self.plot_beam_pattern(self.beam_pattern(Rx)[0], angles[0], ranges[0])
         if isinstance(predictions, tuple):
             angles_prediction, ranges_prediction = predictions
-            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
+            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).sum(-1).item()
             _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
-            rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
+            rmspe = (rmspe, rmspe_angle.sum(-1).item(), rmspe_range.sum(-1).item())
         else:
             rmspe = self.criterion(predictions, angles).item()
 

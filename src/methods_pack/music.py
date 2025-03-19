@@ -288,9 +288,9 @@ class MUSIC(SubspaceMethod):
         predictions, sources_num_estimation, _ = self(Rx, number_of_sources=sources_num)
         if self.estimation_params == "angle, range":
             angles_prediction, ranges_prediction = predictions
-            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).item()
+            rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).sum(-1).item()
             _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
-            rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
+            rmspe = (rmspe, rmspe_angle.sum(-1).item(), rmspe_range.sum(-1).item())
         else:
             rmspe = self.criterion(predictions, angles).sum().item()
 

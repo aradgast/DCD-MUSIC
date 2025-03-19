@@ -38,7 +38,7 @@ class SubspaceNet(ParentModel):
         """
         super(SubspaceNet, self).__init__(system_model)
         # set model parameters
-        self.field_type = system_model.params.field_type.lower()
+        self.field_type = field_type.lower()
         self.tau = tau
         self.diff_method = None # Holder for the differentiable subspace method
         # set model architecture
