@@ -33,6 +33,7 @@ import time
 import numpy as np
 import torch.linalg
 import torch.nn as nn
+from sympy.vector.implicitregion import conic_coeff
 from torch.utils.data.dataloader import DataLoader
 from pathlib import Path
 
@@ -329,58 +330,98 @@ def add_random_predictions(M: int, predictions: np.ndarray, algorithm: str):
         )
     return predictions
 
-
 def evaluate_crb(dataset: DataLoader,
                  params: SystemModelParams,
                  mode: str="separate"):
-    u_snr = 10 ** (params.snr / 10)
+    linear_snr = 10 ** (params.snr / 10)
     if params.field_type.lower() == "far":
-        print("CRB calculation is not supported for Far Field yet.")
-        return None
-    elif params.field_type.lower() == "near":
+        """
+        Taken directly from the paper:
+        MUSIC, Maximum Likelihood, and Cramer-Rao Bound 
+        """
+        ccrb = 0.0
+        system_model = SystemModel(params, nominal=True)
         if params.signal_nature.lower() == "non-coherent":
-            angles = []
-            distances = []
-            ucrb_cartzien = None
             for i, data in enumerate(dataset):
-                _, _, labels, _ = data
-                angles.extend(*labels[:, :labels.shape[1] // 2][None, :].detach().numpy())
-                distances.extend(*labels[:, labels.shape[1] // 2:][None, :].detach().numpy())
-            angles = np.array(angles)
-            distances = np.array(distances)
-            snr_coeff = (1 + 1 / (u_snr * params.N))
-            ucrb_angle = (3 * 2 ** 2) / (2 * u_snr * params.T * (np.pi * np.cos(angles)) ** 2)
-            ucrb_angle *= (8 * params.N - 11) * (2 * params.N - 1)
-            ucrb_angle /= params.N * (params.N ** 2 - 1) * (params.N ** 2 - 4)
-            ucrb_angle *= snr_coeff
+                _, _, angles = data
+                angles = angles.to(device)
+                derivative_mat = system_model.steering_derivative(angles)
+                steering_mat = system_model.steering_vec_far_field(angles, nominal=True)
+                herm_steering = torch.conj(steering_mat).transpose(1, 2)
+                inv_AHA = torch.linalg.inv(torch.bmm(herm_steering, steering_mat))
+                projection_mat = (torch.eye(params.N, device=device).expand(angles.shape[0], params.N, params.N)
+                                  - torch.bmm(steering_mat, torch.bmm(inv_AHA, herm_steering)))
+                fim = (2 * params.T * linear_snr) * torch.real(torch.bmm(derivative_mat.conj().transpose(1, 2), torch.bmm(projection_mat, derivative_mat)))
+                tmp_ccrb = torch.linalg.inv(fim)
+                trace_ccrb = torch.sum(torch.diagonal(tmp_ccrb, dim1=1, dim2=2), dim=1)
+                ccrb += torch.mean(torch.sqrt(trace_ccrb))
+            ccrb /= len(dataset)
+            return {"Overall": ccrb.item()}
 
-            ucrb_distance = 6 * distances ** 2 * 2 ** 4 / (u_snr * params.T * np.pi ** 2)  # missing /wavelength
-            ucrb_distance *= snr_coeff
-            ucrb_distance /= params.N ** 2 * (params.N ** 2 - 1) * (params.N ** 2 - 4) * np.cos(angles) ** 4
-            num = 15 * distances ** 2
-            num += (30 / 2) * distances * (params.N - 1) * np.sin(angles)  # missing *wavelength
-            num += (1 / 2) ** 2 * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles) ** 2  # missing * wavelength ** 2
-            ucrb_distance *= num
-            if mode == "cartesian":
-                # Need to calculate the cross term as well, and change coordinates.
-                ucrb_cross = - snr_coeff * (3 * distances)
-                ucrb_cross /= u_snr * params.T * np.pi ** 2 * (1 / 2) ** 3
-                ucrb_cross *= 15 * distances*(params.N - 1) + (1 / 2) * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles)
-                ucrb_cross /= params.N * (params.N ** 2 - 1) * (params.N ** 2 - 4) * np.cos(angles) ** 3
+    elif params.field_type.lower() == "near":
+        """
+        Taken directly from the paper:
+        Conditional and Unconditional Cramér–Rao Bounds for Near-Field Source Localization
+        """
+        if params.signal_nature.lower() == "non-coherent":
+            ccrb_angle = 0.0
+            ccrb_distance = 0.0
+            ccrb_cartesian = 0.0
+            for i, data in enumerate(dataset):
+                _, _, labels = data
+                angles = labels[:, :labels.shape[1] // 2][None, :]
+                distances = labels[:, labels.shape[1] // 2:][None, :]
+                angles = angles.to(device)
+                distances = distances.to(device)
+                N = params.N
+                T = params.T
 
-                #change coordinates
-                ucrb_cartzien = distances ** 2 * ucrb_angle + ucrb_distance
-                ucrb_cartzien -= distances ** 2 * np.sin(2 * angles) * ucrb_angle
-                # ucrb_cartzien += np.sin(2 * angles) * ucrb_distance
-                # ucrb_cartzien += 2 * distances * np.cos(2 * angles) * ucrb_cross
-                ucrb_cartzien = np.mean(ucrb_cartzien)
+                # Calculate the CCRB for the angles
+                tmc_ccrb_angle = calc_angles_ccrb_near_field(angles, linear_snr, T, N, params.wavelength, params.wavelength / 2)
+                ccrb_angle += torch.mean(tmc_ccrb_angle)
+                # Calculate the CCRB for the distances
+                tmp_ccrb_distance = calc_distances_ccrb_near_field(distances, angles, linear_snr, T, N, params.wavelength, params.wavelength / 2)
+                ccrb_distance += torch.mean(tmp_ccrb_distance)
 
-            return {"Overall": ucrb_cartzien, "Angle": np.mean(ucrb_angle), "Distance": np.mean(ucrb_distance)}
+            # if mode == "cartesian":
+            #     # Need to calculate the cross term as well, and change coordinates.
+            #     ucrb_cross = - snr_coeff * (3 * distances)
+            #     ucrb_cross /= u_snr * params.T * np.pi ** 2 * (1 / 2) ** 3
+            #     ucrb_cross *= 15 * distances*(params.N - 1) + (1 / 2) * (8 * params.N - 11) * (2 * params.N - 1) * np.sin(angles)
+            #     ucrb_cross /= params.N * (params.N ** 2 - 1) * (params.N ** 2 - 4) * np.cos(angles) ** 3
+            #
+            #     #change coordinates
+            #     ucrb_cartzien = distances ** 2 * ucrb_angle + ucrb_distance
+            #     ucrb_cartzien -= distances ** 2 * np.sin(2 * angles) * ucrb_angle
+            #     # ucrb_cartzien += np.sin(2 * angles) * ucrb_distance
+            #     # ucrb_cartzien += 2 * distances * np.cos(2 * angles) * ucrb_cross
+            #     ucrb_cartzien = np.mean(ucrb_cartzien)
+            #
+            return {"Overall": torch.mean(ccrb_cartesian).item(),
+                    "Angle": torch.mean(ccrb_angle).item(),
+                    "Distance": torch.mean(ccrb_distance).item()}
         else:
             print("UCRB calculation for the coherent is not supported yet")
     else:
         print("Unrecognized field type.")
     return
+
+def calc_angles_ccrb_near_field(angles, snr, T, N, wavelength, sensor_distance):
+    res = 3 * wavelength ** 2
+    res /= 2 * snr * T * sensor_distance ** 2 * np.pi ** 2 * np.cos(angles) ** 2
+    res *= (8 * N - 11) * (2 * N - 1)
+    res /= N * (N ** 2 - 1) * (N ** 2 - 4)
+    return res
+
+def calc_distances_ccrb_near_field(distances, angles, snr, T, N, wavelength, sensor_distance):
+    res = 6 * distances ** 2 * wavelength ** 2
+    res /= snr * T * np.pi ** 2 * sensor_distance ** 4
+    num = 15 * distances ** 2
+    num += 30 * sensor_distance * distances * (N - 1) * np.sin(angles)
+    num += sensor_distance ** 2 * (8 * N - 11) * (2 * N - 1) * np.sin(angles) ** 2
+    res *= num
+    res /= N ** 2 * (N ** 2 - 1) * (N ** 2 - 4) * np.cos(angles) ** 4
+    return res
 
 def evaluate(
         generic_test_dataset: DataLoader,

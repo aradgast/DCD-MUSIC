@@ -48,9 +48,9 @@ plot_styles = {
     'SubspaceNet': {'color': 'k', 'linestyle': '-', 'marker': 'X', "markersize": 8},
     'NFSubspaceNet': {'color': 'k', 'linestyle': '--', 'marker': 'p', "markersize": 8},
     'NFSubspaceNet_V2': {'color': 'b', 'linestyle': '-.', 'marker': 'h', "markersize": 8},
-    'esprit': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 8},
+    'ESPRIT': {'color': 'r', 'linestyle': '-', 'marker': 'v', "markersize": 8},
     'esprit(SPS)': {'color': 'r', 'linestyle': '--', 'marker': 'v', "markersize": 8},
-    'music': {'color': 'y', 'linestyle': '-.', 'marker': 's', "markersize": 8},
+    '1D-MUSIC': {'color': 'y', 'linestyle': '-.', 'marker': 's', "markersize": 8},
     'music(SPS)': {'color': 'y', 'linestyle': ':', 'marker': 's', "markersize": 8},
 }
 

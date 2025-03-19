@@ -32,7 +32,7 @@ class ESPRIT(SubspaceMethod):
         return prediction, sources_estimation, regularization
 
     def test_step(self, batch, batch_idx, model: nn.Module=None):
-        x, sources_num, label, masks = batch
+        x, sources_num, label = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
@@ -40,7 +40,6 @@ class ESPRIT(SubspaceMethod):
         if max(sources_num) * 2 == label.shape[1]:
             angles, _ = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(self.device)
-            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
             angles = label.to(self.device)  # only angles
         # Check if the sources number is the same for all samples in the batch
@@ -60,7 +59,7 @@ class ESPRIT(SubspaceMethod):
                 # Conventional
                 Rx = self.pre_processing(x, mode="sample")
         angles_prediction, sources_num_estimation, _ = self(Rx, sources_num=sources_num)
-        rmspe = self.criterion(angles_prediction, angles).item()
+        rmspe = self.criterion(angles_prediction, angles).sum().item()
         acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
 
         return rmspe, acc, test_length

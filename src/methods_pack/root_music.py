@@ -32,7 +32,7 @@ class RootMusic(SubspaceMethod):
     def get_doa_from_roots(self, roots):
         roots_phase = torch.angle(roots)
         angle_predicted = torch.arcsin(
-            (1 / (2 * np.pi * self.system_model.dist_array_elems["NarrowBand"])) * roots_phase)
+            (1 / (2 * np.pi * self.system_model.dist_array_elems["narrowband"]) * self.system_model.params.wavelength) * roots_phase)
         return angle_predicted
 
     def extract_roots_closest_unit_circle(self, roots, k: int):
@@ -59,12 +59,12 @@ class RootMusic(SubspaceMethod):
     def find_roots(self, coeffs: torch.Tensor):
         A = torch.diag(torch.ones(coeffs.shape[-1] - 2, dtype=coeffs.dtype), -1)
         A = A.repeat(coeffs.shape[0], 1, 1)  # repeat for all elements in the batch
-        A[:, 0, :] = -coeffs[:, 1:] / coeffs[:, 0]
+        A[:, 0, :] = -torch.div(coeffs[:, 1:], coeffs[:, 0][:, None])
         roots = torch.linalg.eigvals(A)
         return roots
 
     def test_step(self, batch, batch_idx):
-        x, sources_num, label, masks = batch
+        x, sources_num, label = batch
         if x.dim() == 2:
             x = x.unsqueeze(0)
         test_length = x.shape[0]
@@ -72,7 +72,6 @@ class RootMusic(SubspaceMethod):
         if max(sources_num) * 2 == label.shape[1]:
             angles, _ = torch.split(label, max(sources_num), dim=1)
             angles = angles.to(self.device)
-            masks, _ = torch.split(masks, max(sources_num), dim=1)  # TODO
         else:
             angles = label.to(self.device)  # only angles
         # Check if the sources number is the same for all samples in the batch
@@ -90,7 +89,7 @@ class RootMusic(SubspaceMethod):
             # Conventional
             Rx = self.pre_processing(x, mode="sample")
         angles_prediction, sources_num_estimation = self(Rx, sources_num=sources_num)
-        rmspe = self.criterion(angles_prediction, angles).item()
+        rmspe = self.criterion(angles_prediction, angles).sum().item()
         acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
 
         return rmspe, acc, test_length

@@ -292,7 +292,7 @@ class MUSIC(SubspaceMethod):
             _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
             rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
         else:
-            rmspe = self.criterion(predictions, angles).item()
+            rmspe = self.criterion(predictions, angles).sum().item()
 
         acc = self.source_estimation_accuracy(sources_num, sources_num_estimation)
 
@@ -621,7 +621,7 @@ class MUSIC(SubspaceMethod):
             plt.show()
 
     def __set_search_grid_far_field(self):
-        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict, f_c=None).squeeze(-1)
+        self.steering_dict = self.system_model.steering_vec_far_field(self.angles_dict, f_c=None, nominal=True, fix_sv_noise=True).squeeze(-1)
 
     def __set_search_grid_near_field(self, known_angles: torch.Tensor = None, known_distances: torch.Tensor = None):
         """

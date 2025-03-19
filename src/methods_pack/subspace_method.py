@@ -237,4 +237,6 @@ class SubspaceMethod(nn.Module):
         plt.show()
 
     def source_estimation_accuracy(self, sources_num, source_estimation):
+        if sources_num is None or source_estimation is None:
+            return 0
         return torch.sum(source_estimation == sources_num * torch.ones_like(source_estimation).float()).item()

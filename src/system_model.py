@@ -18,6 +18,8 @@ from dataclasses import dataclass
 
 import torch
 import matplotlib.pyplot as plt
+from scipy.misc import derivative
+
 from src.config import device
 
 
@@ -128,8 +130,7 @@ class SystemModel(object):
         # Calculation for the Fraunhofer and Fresnel
         self.fraunhofer, self.fresnel = self.calc_fresnel_fraunhofer_distance()
         self.eta = self.__set_eta()
-        if not nominal:
-            self.location_noise = self.get_distance_noise(True)
+        self.location_noise = self.get_distance_noise(True)
     
     def __set_eta(self):
         """
@@ -286,8 +287,11 @@ class SystemModel(object):
             local_device = self.device
 
         array = torch.Tensor(self.array[:, None]).to(torch.float64).to(local_device)
-
-        theta = (angles[:, None]).to(torch.float64).to(local_device)
+        if angles.dim() == 1:
+            angles = angles[None, :, None]
+        elif angles.dim() == 2:
+            angles = angles.unsqueeze(-1)
+        theta = angles.to(torch.float64).to(local_device)
         dist_array_elems = self.dist_array_elems["narrowband"]
 
         if not nominal:
@@ -297,9 +301,10 @@ class SystemModel(object):
 
         # calculate the time delay for each frequency bin
         if self.params.signal_type.startswith("narrowband"):
-            time_delay = torch.einsum("nm, na -> na",
+            theta = theta.transpose(1, 2)
+            time_delay = torch.einsum("nm, bna -> bna",
                                       array * dist_array_elems,
-                                      torch.sin(theta).repeat(1, self.params.N).T)
+                                      torch.sin(theta).repeat(1, self.params.N, 1))
         elif self.params.signal_type.startswith("broadband"):
             f_c = torch.from_numpy(f_c).to(torch.float64).to(local_device)
             time_delay = torch.einsum("nk, na -> nak",
@@ -313,7 +318,8 @@ class SystemModel(object):
             mis_geometry_noise = torch.from_numpy(mis_geometry_noise).to(local_device)
         else:
             mis_geometry_noise = 0.0
-
+        if time_delay.shape[0] == 1:
+            time_delay = time_delay.squeeze(0)
         steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay / self.params.wavelength) + mis_geometry_noise
 
         return steering_matrix
@@ -456,6 +462,21 @@ class SystemModel(object):
 
         steering_matrix = torch.exp(-2 * 1j * torch.pi * time_delay / self.params.wavelength)
         return steering_matrix
+
+    def steering_derivative(self, angles):
+        """
+        Compute the derivative of the steering vector with respect to the angles.
+        Args:
+            angles:
+
+        Returns:
+
+        """
+        steering_matrix = self.steering_vec(angles)
+        dist_array_elems = self.dist_array_elems["narrowband"]
+        array = torch.from_numpy(self.array[:, None]).to(torch.float64).to(self.device)
+        derivative_steering = 1j * (2 * torch.pi / self.params.wavelength) * dist_array_elems * torch.cos(angles)[:, None, :] * array * steering_matrix
+        return derivative_steering
 
     def plot_system(self):
         """
