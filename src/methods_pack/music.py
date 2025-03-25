@@ -174,7 +174,7 @@ class MUSIC(SubspaceMethod):
             steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(self.device)
             var1 = torch.einsum("an, bnm -> bam", steering_dict.conj().transpose(0, 1)[:, :noise_subspace.shape[1]],
                                 noise_subspace)
-            inverse_spectrum = torch.norm(var1, dim=2)
+            inverse_spectrum = torch.norm(var1, dim=2) ** 2
         else:
             if self.estimation_params.startswith("angle, range"):
                 steering_dict = self.steering_dict[:noise_subspace.shape[1]].conj().transpose(0, 2).transpose(0, 1).to(self.device)
@@ -200,12 +200,11 @@ class MUSIC(SubspaceMethod):
                 steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(self.device)
                 var1 = torch.einsum("an, nbm -> abm", steering_dict.conj().transpose(0, 1),
                                     noise_subspace.transpose(0, 1))
-                inverse_spectrum = torch.norm(var1, dim=-1).T
+                inverse_spectrum = torch.norm(var1, dim=-1).T ** 2
             elif self.estimation_params.startswith("range"):
-                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(self.device)
-                var1 = torch.einsum("dbn, nbm -> bdm", steering_dict.conj().transpose(0, 2),
-                                    noise_subspace.transpose(0, 1))
-                inverse_spectrum = torch.norm(var1, dim=-1)
+                steering_dict = self.steering_dict[:noise_subspace.shape[1]].to(device)
+                var1 = torch.bmm(steering_dict.conj().transpose(0, 2).transpose(0, 1), noise_subspace)
+                inverse_spectrum = torch.norm(var1, dim=-1) ** 2
                 if torch.isnan(inverse_spectrum).any():
                     raise ValueError("Nan values in inverse spectrum")
             else:
@@ -382,7 +381,9 @@ class MUSIC(SubspaceMethod):
             cell_idx = (top_indxs[:, source][:, None]
                         - self.cell_size
                         + torch.arange(2 * self.cell_size + 1, dtype=torch.long, device=self.device))
-            cell_idx %= self.music_spectrum.shape[1]
+            # cell_idx %= self.music_spectrum.shape[1]
+            out_of_bounds_mask = (cell_idx < 0) | (cell_idx >= self.music_spectrum.shape[1])
+            cell_idx[out_of_bounds_mask] = top_indxs[:, source].unsqueeze(1).expand_as(cell_idx)[out_of_bounds_mask]
             cell_idx = cell_idx.reshape(batch_size, -1, 1)
             metrix_thr = torch.gather(self.music_spectrum.unsqueeze(-1).expand(-1, -1, cell_idx.size(-1)), 1,
                                       cell_idx).requires_grad_(True)

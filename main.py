@@ -22,8 +22,8 @@ The script can be run with the following command line arguments:
 # Imports
 import os
 import warnings
-
-from src.training import *
+import time
+import matplotlib.pyplot as plt
 from run_simulation import run_simulation
 import argparse
 
@@ -34,7 +34,7 @@ plt.close("all")
 scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
     # "T": [10, 20, 30, 50, 70, 100],
-      "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
     # "M": [2, 3, 4, 5, 6, 7],
 }
 

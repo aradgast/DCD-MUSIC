@@ -37,7 +37,7 @@ class DCDMUSIC(ParentModel):
         self.train_loss, self.validation_loss = None, None
         # self.__set_criterion()
 
-    def forward(self, x: torch.Tensor, number_of_sources: int = None):
+    def forward(self, x: torch.Tensor, number_of_sources: int = None, ground_truth_angles: torch.Tensor = None):
         if self.train_mode == "angle":
             angles, sources_estimation, eigen_regularization = self.angle_branch_forward(x, number_of_sources)
             return angles, sources_estimation, eigen_regularization
@@ -45,8 +45,9 @@ class DCDMUSIC(ParentModel):
             with torch.no_grad():
                 self.angle_branch.eval()
                 angles, sources_estimation, _ = self.angle_branch_forward(x, number_of_sources)
-            distances = self.range_branch_forward(x, number_of_sources=number_of_sources, known_angles=angles)
-            return angles, distances, sources_estimation, None
+            known_angles = ground_truth_angles if ground_truth_angles is not None else angles
+            distances = self.range_branch_forward(x, number_of_sources=number_of_sources, known_angles=known_angles)
+            return known_angles, distances, None, None
         elif self.train_mode == "position":
             angles, sources_estimation, eigen_regularization = self.angle_branch_forward(x, number_of_sources)
             distances = self.range_branch_forward(x, number_of_sources, known_angles=angles)
@@ -77,13 +78,15 @@ class DCDMUSIC(ParentModel):
         eigen_regularization, sources_estimation = None, None
         if self.train_mode == "angle":
             angles_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss = self.train_loss(angles, angles_pred)
+            loss = self.train_loss(angles_pred=angles_pred, angles=angles)
         elif self.train_mode == "range":
-            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss, loss_angles, loss_ranges = self.train_loss(angles, angles_pred, ranges, ranges_pred)
+            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num,
+                                                                                      ground_truth_angles=angles)
+            loss, loss_angles, loss_ranges = self.train_loss(angles_pred=angles_pred, angles=angles,
+                                                             ranges_pred=ranges_pred, ranges=ranges)
         else: # self.train_mode == "position":
             angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss = self.train_loss(angles, angles_pred, ranges, ranges_pred)
+            loss = self.train_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
 
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
         loss = self.get_regularized_loss(loss, eigen_regularization)
@@ -107,12 +110,15 @@ class DCDMUSIC(ParentModel):
             angles_pred, sources_estimation, eigen_regularization = self(x, sources_num)
             loss = self.validation_loss(angles_pred, angles)
         else:
-            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num)
-            loss = self.validation_loss(angles_pred, angles, ranges_pred, ranges)
+            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num, ground_truth_angles=angles)
+            loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+        if isinstance(loss, tuple):
+            loss = loss[0]
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
 
         if is_test and self.train_mode == "position":
-            _, loss_angle, loss_range = self.test_loss(angles_pred, angles, ranges_pred, ranges)
+            _, loss_angle, loss_range = self.test_loss(angles_pred=angles_pred, angles=angles,
+                                                       ranges_pred=ranges_pred, ranges=ranges)
             return (loss, loss_angle, loss_range), acc
 
         return loss, acc
