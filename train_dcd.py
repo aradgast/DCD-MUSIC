@@ -16,7 +16,7 @@ from src.signal_creation import Samples
 from src.models import ModelGenerator
 
 # default values for the argparse
-number_sensors = 15
+number_sensors = 64
 number_sources = "2"
 number_snapshots = 100
 snr = 10
@@ -33,14 +33,15 @@ optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
 weight_decay = 1e-9
-step_size = 50
+step_size = 10
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
 regularization = None
 variant = "small"
 wandb_flag = False
-
+skip_first_step = True
+skip_second_step = False
 
 def train_dcd_music(*args, **kwargs):
     SIMULATION_COMMANDS = kwargs["simulation_commands"]
@@ -53,7 +54,7 @@ def train_dcd_music(*args, **kwargs):
     save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Save model after training
     load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
-    print("Training model - DCD-MUSIC, all training steps.")
+    print(f"Training model - DCD-MUSIC, {'all training steps' if not skip_first_step and not skip_second_step else 'partly training'}")
 
     now = datetime.now()
     plot_path = Path(__file__).parent / "plots"
@@ -120,12 +121,12 @@ def train_dcd_music(*args, **kwargs):
     if create_data and not load_data:
         # Define which datasets to generate
         print("Creating Data...")
-        # Generate training dataset
         samples_model = Samples(system_model_params)
+        # Generate training dataset
         train_dataset, _ = create_dataset(
             samples_model=samples_model,
             samples_size=samples_size,
-            save_datasets=False,
+            save_datasets=True,
             datasets_path=datasets_path,
             true_doa=TRAINING_PARAMS["true_doa_train"],
             true_range=TRAINING_PARAMS["true_range_train"],
@@ -145,7 +146,7 @@ def train_dcd_music(*args, **kwargs):
 
     trainingparams = TrainingParamsNew(learning_rate=TRAINING_PARAMS["learning_rate"],
                                        weight_decay=TRAINING_PARAMS["weight_decay"],
-                                       epochs=TRAINING_PARAMS["epochs"],
+                                       epochs= 0 if skip_first_step else TRAINING_PARAMS["epochs"],
                                        optimizer=TRAINING_PARAMS["optimizer"],
                                        step_size=TRAINING_PARAMS["step_size"],
                                        gamma=TRAINING_PARAMS["gamma"],
@@ -163,21 +164,9 @@ def train_dcd_music(*args, **kwargs):
 
     # Update model configuration
     model.switch_train_mode()
-    # try:
-        # model.load_angle_branch(True)
-    # except Exception as e:
-    #     pass
-    # model_config = model_config.set_model_type("DCD-MUSIC")
-    # model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
-    #                                "diff_method": diff_method,
-    #                                "train_loss_type": train_loss_type,
-    #                                "angle_extractor": model,
-    #                                "regularization": MODEL_PARAMS.get("regularization"),
-    #                                "variant": MODEL_PARAMS.get("variant")})
-    # model_config.set_model()
     # Assign the training parameters object
     trainingparams.update({"training_objective": "range"})
-
+    trainingparams.update({"epochs": 0 if skip_second_step else TRAINING_PARAMS["epochs"]})
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                             use_wandb=TRAINING_PARAMS["use_wandb"],
@@ -187,7 +176,8 @@ def train_dcd_music(*args, **kwargs):
 
     # Assign the training parameters object
     trainingparams.update({"training_objective": "angle, range",
-                           "learning_rate": TRAINING_PARAMS["learning_rate"] / 10})
+                           "learning_rate": TRAINING_PARAMS["learning_rate"]})
+    trainingparams.update({"epochs": TRAINING_PARAMS["epochs"]})
     model.init_model_train_params(init_eigenregularization_weight=1e-3, init_cell_size=0.2)
     model.switch_train_mode()
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)

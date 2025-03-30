@@ -1,6 +1,6 @@
 """
 SubspaceNet: model-based deep learning algorithm as described in:
-        [2] "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
+        "SubspaceNet: Deep Learning-Aided Subspace methods for DoA Estimation".
 """
 import torch
 import torch.nn as nn
@@ -8,7 +8,7 @@ import torch.nn as nn
 from src.metrics import RMSPELoss, CartesianLoss, MusicSpectrumLoss
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
-from src.utils import gram_diagonal_overload, validate_constant_sources_number, L2NormLayer, AntiRectifier
+from src.utils import gram_diagonal_overload, validate_constant_sources_number, L2NormLayer, AntiRectifier, TraceNorm
 
 from src.methods_pack.music import MUSIC
 from src.methods_pack.esprit import ESPRIT
@@ -255,6 +255,7 @@ class SubspaceNet(ParentModel):
     def __setup_norm_layer(self, norm_layer: bool):
         if norm_layer:
             self.norm_layer = L2NormLayer()
+            # self.norm_layer = TraceNorm()
         else:
             self.norm_layer = nn.Identity()
 
@@ -336,6 +337,12 @@ class SubspaceNet(ParentModel):
     def get_model_params(self):
         return {"tau": self.tau, "diff_method": str(self.diff_method), "field_type": self.field_type.lower(),
                 "train_loss_type": str(self.train_loss), "regularization": self.regularization, "variant": self.variant}
+
+    def init_model_train_params(self, init_eigenregularization_weight: float = 50):
+        self.__set_criterion()
+        self.set_eigenregularization_schedular(init_value=init_eigenregularization_weight)
+        if isinstance(self.diff_method, MUSIC) and self.train_loss_type == "rmspe":
+            self.diff_method.init_cells(0.1)
 
     def training_step(self, batch, batch_idx):
         if self.field_type == "far":

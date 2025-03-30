@@ -253,7 +253,7 @@ class Beamformer(Module):
             angles_prediction, ranges_prediction = predictions
             rmspe = self.criterion(angles_prediction, angles, ranges_prediction, ranges).sum(-1).item()
             _, rmspe_angle, rmspe_range = self.separated_criterion(angles_prediction, angles, ranges_prediction, ranges)
-            rmspe = (rmspe, rmspe_angle.sum(-1).item(), rmspe_range.sum(-1).item())
+            rmspe = (rmspe, rmspe_angle.item(), rmspe_range.item())
         else:
             rmspe = self.criterion(predictions, angles).item()
 

@@ -29,6 +29,7 @@ Attributes:
 """
 
 # Imports
+import itertools
 from tqdm import tqdm
 from torch.utils.data import Dataset, Sampler
 from sklearn.model_selection import train_test_split
@@ -217,7 +218,7 @@ class TimeSeriesDataset(Dataset):
             num_workers = 1
         num_workers = num_workers if num_workers > 1 else 1
         print(f"Avialble CPU cores: {os.cpu_count()}, using {num_workers}")
-        
+
 
         if not self.is_constant_M:
             # init sampler
@@ -238,13 +239,13 @@ class TimeSeriesDataset(Dataset):
                 valid_dataset, shuffle=False, batch_size=32, num_workers=max(num_workers // 2, 1)
             )
         return train_dataloader, valid_dataloader
-    
+
     def save(self, path):
         with h5py.File(path, 'w') as h5f:
             X_grp = h5f.create_group('X')  # Create a group for X
             for i, x in enumerate(self.X):
                 X_grp.create_dataset(f"tensor_{i}", data=x.numpy())  # Save each tensor separately
-            
+
             Y_grp = h5f.create_group('Y')
             for i, y in enumerate(self.Y):
                 Y_grp.create_dataset(f"label_{i}", data=np.array(y))
@@ -257,9 +258,9 @@ class TimeSeriesDataset(Dataset):
         M = self.h5f['M']
         self.len = len(M)
         self.is_constant_M = len(set(M)) == 1
-        
+
         return self
-    
+
     def close(self):
         """ Close the HDF5 file if it was opened """
         if self.h5f is not None:
@@ -333,7 +334,7 @@ class SameLengthBatchSampler(Sampler):
         # **Preload M values efficiently**
         self.indices = np.arange(len(dataset))
         self.source_nums = np.array([dataset[i][1] for i in self.indices], dtype=int)  # Extract M values **once**
-        
+
         # **Group by M values**
         self.batches = self._create_batches()
 
@@ -349,7 +350,7 @@ class SameLengthBatchSampler(Sampler):
             # Split indices for each source_num into batches
             for i in range(0, len(indices), self.batch_size):
                 batches.append(indices[i:i + self.batch_size])
-        
+
         # **Shuffle batches (not individual samples)**
         if self.shuffle:
             np.random.shuffle(batches)

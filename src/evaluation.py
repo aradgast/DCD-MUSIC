@@ -100,6 +100,9 @@ def get_model(params: dict, system_model_params: SystemModelParams, model_name: 
     path = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name())
     try:
         model.load_state_dict(torch.load(path+".pt", map_location=device, weights_only=True))
+        print(f"get_model: {model._get_name()}'s weights loaded succesfully from {path}")
+        if isinstance(model, DCDMUSIC):
+            model._load_state_for_angle_extractor()
     except FileNotFoundError as e:
         print("####################################")
         raise e

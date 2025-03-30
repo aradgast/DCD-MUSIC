@@ -89,7 +89,7 @@ class MUSIC(SubspaceMethod):
         self.separated_criterion = None
 
         self.__init_grid_params()
-        self.__init_cells()
+        self.__init_cells(0.2)
         self.__init_criteria()
         self.__init_search_grid()
 
@@ -136,16 +136,16 @@ class MUSIC(SubspaceMethod):
 
     def adjust_cell_size(self):
         if self.estimation_params == "range":
-            if self.cell_size > 1 and self.cell_size > int(self.ranges_dict.shape[0] * 0.02):
-                self.cell_size = int(0.95 * self.cell_size)
+            if self.cell_size > 1:
+                self.cell_size = int(0.8 * self.cell_size)
                 if self.cell_size % 2 == 0:
                     self.cell_size -= 1
         elif self.estimation_params == "angle, range":
-            if self.cell_size_angle > 3:
+            if self.cell_size_angle > 1:
                 self.cell_size_angle = int(0.95 * self.cell_size_angle)
                 if self.cell_size_angle % 2 == 0:
                     self.cell_size_angle -= 1
-            if self.cell_size_range > 3:
+            if self.cell_size_range > 1:
                 self.cell_size_range = int(0.95 * self.cell_size_range)
                 if self.cell_size_range % 2 == 0:
                     self.cell_size_range -= 1
@@ -443,7 +443,7 @@ class MUSIC(SubspaceMethod):
         if self.system_model.params.field_type.startswith("far"):
             # if it's the Far field case, need to init angles range.
             self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
-                                            dtype=torch.float64).to(torch.float64).requires_grad_(False)
+                                            dtype=torch.float64).to(torch.float64)
             self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
         elif self.system_model.params.field_type in ["near", "full"]:
             # if it's the Near field, there are 3 possabilities.
@@ -451,7 +451,7 @@ class MUSIC(SubspaceMethod):
             fraunhofer = self.system_model.fraunhofer
             if self.estimation_params.startswith("angle"):
                 self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
-                                                dtype=torch.float64).to(torch.float64).requires_grad_(False)
+                                                dtype=torch.float64).to(torch.float64)
                 # self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
 
 
@@ -461,7 +461,7 @@ class MUSIC(SubspaceMethod):
                 max_distance = min(self.system_model.fraunhofer, fraunhofer * fraunhofer_ratio + distance_resolution)
                 self.ranges_dict = torch.arange(np.ceil(fresnel),
                                                 max_distance,
-                                                distance_resolution, dtype=torch.float64).requires_grad_(False)
+                                                distance_resolution, dtype=torch.float64)
         else:
             raise ValueError(f"MUSIC.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
@@ -476,7 +476,7 @@ class MUSIC(SubspaceMethod):
         else:
             self.set_search_grid()
 
-    def __init_cells(self, coeff: float = 0.2):
+    def __init_cells(self, coeff: float = 0.1):
 
         if self.estimation_params == "range":
             self.cell_size = int(self.ranges_dict.shape[0] * coeff)
@@ -496,7 +496,7 @@ class MUSIC(SubspaceMethod):
             if self.cell_size_range % 2 == 0:
                 self.cell_size_range += 1
 
-    def init_cells(self, coeff: float = 0.3):
+    def init_cells(self, coeff: float = 0.2):
         self.__init_cells(coeff)
 
     def _plot_1d_spectrum(self, highlight_corrdinates, batch, add_title: bool = False, save: bool = False):

@@ -41,6 +41,7 @@ import torch.nn as nn
 import numpy as np
 from pathlib import Path
 from src.config import device
+import warnings
 
 
 # internal imports
@@ -98,10 +99,10 @@ class Trainer:
     def train(self, train_dataloader, valid_dataloader, use_wandb:bool=False, save_final:bool=False,
               load_model:bool=False):
         self.model = self.model.to(self.device)
-        self.__init_metrics()
         self.__configure_model()
         self.__init_wandb(use_wandb)
         self.__load_model(load_model)
+        self.__init_metrics()
 
         epochs = self.training_params.get("epochs", 10)
         print("\n---Start Training Stage ---\n")
@@ -188,25 +189,16 @@ class Trainer:
             self.acc_valid_list.append(valid_loss.get('Accuracy') * 100)
 
             # Update schedular
-            if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
-                self.scheduler.step(self.loss_valid_list[-1])
-            else:
-                self.scheduler.step()
+            self.__schedualr_step()
 
             # Update eigenregularization weight
-            try:
-                self.model.update_eigenregularization_weight(self.acc_valid_list[-1])
-            except AttributeError:
-                pass
+            self.__eigenregularization_step()
 
-            try:
-                self.model.adjust_diff_method_temperature(epoch)
-            except AttributeError:
-                pass
 
             self.__report_results(epoch, epoch_train_loss, epoch_train_acc, valid_loss, epoch_eigenregularization)
             self.__save_model(epoch, valid_loss)
-
+            # Adjust the temperature of the model-based method - decrease the size of the search space.
+            self.__adjust_diff_method_temperature(epoch)
 
         # Training complete
         time_elapsed = time.time() - since
@@ -214,8 +206,7 @@ class Trainer:
         print(f"Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
         print(f"Minimal Validation loss: {self.min_valid_loss:4f} at epoch {self.best_epoch}")
         self.__plot_res()
-        if save_final:
-            self.__save_final_model()
+        self.__save_final_model(save_final)
         # close wandb connection
         self.__finish_wandb()
         return self.model
@@ -263,14 +254,16 @@ class Trainer:
             self.best_model_wts = copy.deepcopy(self.model.state_dict())
             torch.save(self.model.state_dict(), str(self.checkpoint_path / self.model.get_model_file_name()) + ".pt")
 
-    def __save_final_model(self):
-        self.model.load_state_dict(self.best_model_wts)
-        torch.save(self.model.state_dict(), str(self.final_model_checkpoint) + ".pt")
+    def __save_final_model(self, save_final: bool=True):
+        if save_final:
+            self.model.load_state_dict(self.best_model_wts)
+            torch.save(self.model.state_dict(), str(self.final_model_checkpoint) + ".pt")
+            print("Trainer.__save_final_model: Final model saved.")
 
     def __load_model(self, load_model: bool):
         if load_model:
             try:
-                state_dict = torch.load(str(self.final_model_checkpoint) + ".pt")
+                state_dict = torch.load(str(self.final_model_checkpoint) + ".pt", weights_only=True)
             except FileNotFoundError:
                 print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
                 return None
@@ -415,6 +408,35 @@ class Trainer:
             else:
                 transmusic_mode = "subspace_train"
             self.model.update_train_mode(transmusic_mode)
+
+    def __schedualr_step(self):
+        if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
+            self.scheduler.step(self.loss_valid_list[-1])
+        elif isinstance(self.scheduler, lr_scheduler.LinearLR):
+            self.scheduler.step()
+        else:
+            warnings.warn(f"Trainer.__schedualr_step: Unknown step method for scheduler {self.scheduler}")
+            try:
+                self.scheduler.step()
+            except Exception as e:
+                print(f"Trainer.__schedualr_step: Error in scheduler step: {e}")
+                raise e
+
+    def __eigenregularization_step(self):
+        try:
+            self.model.update_eigenregularization_weight(self.acc_valid_list[-1])
+        except AttributeError:
+            pass
+
+    def __adjust_diff_method_temperature(self, epoch):
+        try:
+            reset = self.model.adjust_diff_method_temperature(epoch)
+            if reset:
+                self.min_valid_loss = np.inf
+                self.best_epoch = 0
+                self.best_model_wts = copy.deepcopy(self.model.state_dict())
+        except AttributeError:
+            pass
 
 
 def plot_accuracy_curve(epoch_list, train_acc: list, validation_acc: list, model_name: str = None):

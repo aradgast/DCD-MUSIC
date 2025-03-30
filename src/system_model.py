@@ -18,8 +18,6 @@ from dataclasses import dataclass
 
 import torch
 import matplotlib.pyplot as plt
-from scipy.misc import derivative
-
 from src.config import device
 
 
@@ -130,8 +128,9 @@ class SystemModel(object):
         # Calculation for the Fraunhofer and Fresnel
         self.fraunhofer, self.fresnel = self.calc_fresnel_fraunhofer_distance()
         self.eta = self.__set_eta()
-        self.location_noise = self.get_distance_noise(True)
-    
+        if not nominal:
+            self.location_noise = self.get_distance_noise(True)
+
     def __set_eta(self):
         """
         Set the eta value for the array of sensors.
@@ -142,7 +141,7 @@ class SystemModel(object):
             return 0
         else:
             return self.params.eta * self.params.wavelength
-    
+
     def get_distance_noise(self, initial: bool = False):
         """
         Get the distance noise for the array of sensors.
@@ -377,7 +376,7 @@ class SystemModel(object):
             first_order = torch.einsum("nm, na -> na",
                                       array * dist_array_elems,
                                       torch.sin(theta).repeat(1, N).T)
-        elif self.params.signal_type.startswith("broadband"):
+        else: # self.params.signal_type.startswith("broadband"):
             f_c = torch.from_numpy(f_c).to(torch.float64).to(local_device)
             first_order = torch.einsum("nk, na -> nak",
                                       array * (self.params.carrier_frequency / f_c),
@@ -398,7 +397,7 @@ class SystemModel(object):
             second_order = torch.einsum("nm, nar -> nar",
                                         array_square,
                                         torch.transpose(second_order, 2, 0)).transpose(1, 2)
-        elif self.params.signal_type.startswith("broadband"):
+        else: # self.params.signal_type.startswith("broadband"):
             second_order = -0.5 * torch.div(
                 torch.pow(torch.outer(torch.cos(theta), dist_array_elems), 2).unsqueeze(1), distances)
             second_order = torch.einsum("nk, nar -> nark",
@@ -408,7 +407,7 @@ class SystemModel(object):
         if not generate_search_grid:
             if self.params.signal_type.startswith("narrowband"):
                 time_delay = first_order + second_order.squeeze(-1)
-            elif self.params.signal_type.startswith("broadband"):
+            else: # self.params.signal_type.startswith("broadband"):
                 time_delay = first_order + second_order.squeeze(-2)
         else:
             time_delay = first_order + second_order

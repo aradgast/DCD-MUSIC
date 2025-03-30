@@ -36,6 +36,9 @@ class DCDMUSIC(ParentModel):
         # self.update_train_mode("angle") # "angle", "range" or "position"
         self.train_loss, self.validation_loss = None, None
         # self.__set_criterion()
+        self.use_gt = True
+        if self.use_gt:
+            self.range_branch.diff_method.init_cells(0.05)
 
     def forward(self, x: torch.Tensor, number_of_sources: int = None, ground_truth_angles: torch.Tensor = None):
         if self.train_mode == "angle":
@@ -45,7 +48,7 @@ class DCDMUSIC(ParentModel):
             with torch.no_grad():
                 self.angle_branch.eval()
                 angles, sources_estimation, _ = self.angle_branch_forward(x, number_of_sources)
-            known_angles = ground_truth_angles if ground_truth_angles is not None else angles
+            known_angles = ground_truth_angles if not self.train_angle_extractor and ground_truth_angles is not None and self.use_gt else angles
             distances = self.range_branch_forward(x, number_of_sources=number_of_sources, known_angles=known_angles)
             return known_angles, distances, None, None
         elif self.train_mode == "position":
@@ -110,8 +113,10 @@ class DCDMUSIC(ParentModel):
             angles_pred, sources_estimation, eigen_regularization = self(x, sources_num)
             loss = self.validation_loss(angles_pred, angles)
         else:
-            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num, ground_truth_angles=angles)
-            loss = self.validation_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+            angles_pred, ranges_pred, sources_estimation, eigen_regularization = self(x, sources_num,
+                                                                                      ground_truth_angles=angles if not is_test else None)
+            loss = self.validation_loss(angles_pred=angles_pred, angles=angles,
+                                        ranges_pred=ranges_pred, ranges=ranges)
         if isinstance(loss, tuple):
             loss = loss[0]
         acc = self.source_estimation_accuracy(sources_num, sources_estimation)
